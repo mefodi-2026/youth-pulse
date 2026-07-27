@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "sessions": {
+      "$roomId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (!data.exists() ? newData.child('hostUid').val() === auth.uid : data.child('hostUid').val() === auth.uid)",
+        "participants": {
+          ".write": "auth != null && (root.child('sessions').child($roomId).child('hostUid').val() === auth.uid || (data.child(auth.uid).exists() === false && newData.child(auth.uid).exists() && newData.child(auth.uid).child('id').val() === auth.uid))",
+          "$participantId": {
+            ".write": "auth != null && (auth.uid === $participantId || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)",
+            ".validate": "newData.child('id').val() === $participantId && newData.child('nickname').isString() && root.child('sessions').child($roomId).child('phase').val() !== 'closed'"
+          }
+        }
+      }
+    }
+  }
+}
