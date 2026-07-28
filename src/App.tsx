@@ -117,8 +117,11 @@ function Host() {
   const changePhase = async (next: SessionPhase) => {
     if (!session) return
     if (firebaseReady) {
-      if (next === 'closed') await archiveSession(session)
-      else await updatePhase(room, next)
+      if (next === 'closed') {
+        const archived = await archiveSession(session)
+        setSession(archived)
+        setArchives(prev => ({ ...prev, [room]: archived }))
+      } else await updatePhase(room, next)
     } else {
       const nextSession = { ...session, phase: next, ...(next === 'resultsIntro' ? { resultsIntroStartedAt: Date.now() } : {}), ...(next === 'closed' ? { closedAt: Date.now() } : {}) }
       setDemo(nextSession); setSession(nextSession)

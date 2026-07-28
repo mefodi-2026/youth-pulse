@@ -57,8 +57,12 @@ export const updatePhase = async (roomId: string, phase: SessionPhase) => {
 export const archiveSession = async (session: Session) => {
   if (!db) throw new Error('Firebase is not configured')
   const archived: SessionArchive = { ...session, phase: 'closed', closedAt: session.closedAt || Date.now(), archivedAt: Date.now() }
-  await set(ref(db, `sessionArchives/${session.roomId}`), archived)
   await update(ref(db, `sessions/${session.roomId}`), { phase: 'closed', closedAt: archived.closedAt })
+  try {
+    await set(ref(db, `sessionArchives/${session.roomId}`), archived)
+  } catch (error) {
+    console.warn('Архив комнаты пока не сохранён. Опубликуйте правила Firebase.', error)
+  }
   return archived
 }
 
