@@ -58,3 +58,5 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+# Trigger deployment after UTF-8 fix
