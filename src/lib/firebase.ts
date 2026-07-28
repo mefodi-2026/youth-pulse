@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 3.1 seconds
+Output:
 import { initializeApp } from 'firebase/app'
 import { getAuth, signInAnonymously } from 'firebase/auth'
 import { getDatabase, onValue, ref, runTransaction, set, update } from 'firebase/database'
@@ -56,6 +59,8 @@ export const updatePhase = async (roomId: string, phase: SessionPhase) => {
 
 export const archiveSession = async (session: Session) => {
   if (!db) throw new Error('Firebase is not configured')
+  const user = await ensureAuth()
+  if (!user) throw new Error('Не удалось войти в Firebase для завершения сессии')
   const archived: SessionArchive = { ...session, phase: 'closed', closedAt: session.closedAt || Date.now(), archivedAt: Date.now() }
   await update(ref(db, `sessions/${session.roomId}`), { phase: 'closed', closedAt: archived.closedAt })
   try {
@@ -78,6 +83,13 @@ export const saveQuestionBank = async (questionSet: Question[]) => {
   await set(ref(db, 'questionBank'), questionSet)
 }
 
+export const saveSessionQuestions = async (roomId: string, questionSet: Question[]) => {
+  if (!db) throw new Error('Firebase is not configured')
+  const user = await ensureAuth()
+  if (!user) throw new Error('Не удалось войти в Firebase для сохранения вопросов комнаты')
+  await update(ref(db, `sessions/${roomId}`), { questions: questionSet })
+}
+
 export const subscribeQuestionBank = (callback: (value: Question[] | null) => void, onError?: (error: Error) => void) => {
   if (!db) return () => undefined
   return onValue(ref(db, 'questionBank'), snapshot => callback((snapshot.val() || null) as Question[] | null), error => onError?.(error))
@@ -96,3 +108,4 @@ export const markPersonalViewed = async (roomId: string, participantId: string) 
   if (!db) throw new Error('Firebase не настроен')
   await update(ref(db, `sessions/${roomId}/participants/${participantId}`), { personalViewedAt: Date.now() })
 }
+
