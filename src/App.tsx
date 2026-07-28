@@ -67,6 +67,7 @@ function Host() {
   const [session, setSession] = useRoom(room)
   const [qr, setQr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState('')
   const [tab, setTab] = useState<HostTab>('overview')
   const [archives, setArchives] = useState<Record<string, SessionArchive>>({})
   const [questionBank, setQuestionBank] = useState<Question[]>(questions)
@@ -116,21 +117,26 @@ function Host() {
   }
   const changePhase = async (next: SessionPhase) => {
     if (!session) return
-    if (firebaseReady) {
-      if (next === 'closed') {
-        const archived = await archiveSession(session)
-        setSession(archived)
-        setArchives(prev => ({ ...prev, [room]: archived }))
-      } else await updatePhase(room, next)
-    } else {
-      const nextSession = { ...session, phase: next, ...(next === 'resultsIntro' ? { resultsIntroStartedAt: Date.now() } : {}), ...(next === 'closed' ? { closedAt: Date.now() } : {}) }
-      setDemo(nextSession); setSession(nextSession)
-      if (next === 'closed') {
-        const archived = { ...nextSession, archivedAt: Date.now() } as SessionArchive
-        const localArchives = JSON.parse(localStorage.getItem('atmosphere-archives') || '{}') as Record<string, SessionArchive>
-        localStorage.setItem('atmosphere-archives', JSON.stringify({ ...localArchives, [room]: archived }))
-        setArchives(prev => ({ ...prev, [room]: archived }))
+    setActionError('')
+    try {
+      if (firebaseReady) {
+        if (next === 'closed') {
+          const archived = await archiveSession(session)
+          setSession(archived)
+          setArchives(prev => ({ ...prev, [room]: archived }))
+        } else await updatePhase(room, next)
+      } else {
+        const nextSession = { ...session, phase: next, ...(next === 'resultsIntro' ? { resultsIntroStartedAt: Date.now() } : {}), ...(next === 'closed' ? { closedAt: Date.now() } : {}) }
+        setDemo(nextSession); setSession(nextSession)
+        if (next === 'closed') {
+          const archived = { ...nextSession, archivedAt: Date.now() } as SessionArchive
+          const localArchives = JSON.parse(localStorage.getItem('atmosphere-archives') || '{}') as Record<string, SessionArchive>
+          localStorage.setItem('atmosphere-archives', JSON.stringify({ ...localArchives, [room]: archived }))
+          setArchives(prev => ({ ...prev, [room]: archived }))
+        }
       }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Не удалось изменить состояние сессии')
     }
   }
   const start = () => {
@@ -161,7 +167,7 @@ function Host() {
     {tab === 'rooms' && <div className="stack"><Glass className="room-row"><div><p className="eyebrow">ТЕКУЩАЯ</p><h2>{room}</h2><p>{phaseText(session.phase)} · {participants.length} подключились · {finished} завершили</p></div><Button onClick={() => void create()}>Создать новую комнату</Button></Glass><div className="archive-list">{Object.values(archives).sort((a, b) => b.archivedAt - a.archivedAt).map(archived => <Glass className="archive-card" key={archived.roomId}><div><p className="eyebrow">АРХИВ · {new Date(archived.archivedAt).toLocaleDateString('ru-RU')}</p><h3>{archived.roomId}</h3><p>{Object.keys(archived.participants).length} участников · {Object.values(archived.participants).filter(person => person.status === 'finished').length} завершили</p></div><Button secondary onClick={() => exportCsv(archived)}>Скачать CSV</Button></Glass>)}</div>{!Object.keys(archives).length && <Glass className="empty-state"><h3>История комнат пока пуста</h3><p>После завершения комнаты она появится здесь вместе с ответами участников.</p></Glass>}</div>}
     {tab === 'questions' && <div className="question-admin"><Glass className="question-editor"><p className="eyebrow">НОВЫЙ ВОПРОС</p><h3>Добавить вопрос в банк</h3><select value={questionDraft.category} onChange={event => setQuestionDraft(prev => ({ ...prev, category: event.target.value as Question['category'] }))}>{Object.entries(categories).map(([id, title]) => <option value={id} key={id}>{title}</option>)}</select><input value={questionDraft.title} onChange={event => setQuestionDraft(prev => ({ ...prev, title: event.target.value }))} placeholder="Текст вопроса" />{questionDraft.options.map((option, index) => <input key={index} value={option} onChange={event => setQuestionDraft(prev => ({ ...prev, options: prev.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} placeholder={`Вариант ${String.fromCharCode(65 + index)}`} />)}<Button disabled={questionSaving} onClick={() => void addQuestion()}>{questionSaving ? 'Сохраняем…' : 'Добавить вопрос'}</Button></Glass><div className="question-admin-list">{Object.entries(categories).map(([id, title]) => <Glass key={id} className="question-group"><p className="eyebrow">{questionBank.filter(question => question.category === id).length} ВОПРОСОВ</p><h3>{title}</h3>{questionBank.filter(question => question.category === id).map((question, index) => <div className="question-row" key={question.id}><span>{index + 1}</span>{question.title}</div>)}</Glass>)}</div></div>}
     {tab === 'export' && <div className="stack"><Glass className="export-panel"><p className="eyebrow">ВЫГРУЗКА ДАННЫХ</p><h2>Результаты сессии {room}</h2><p>Файл открывается в Excel: никнейм, статус, полный текст каждого вопроса и выбранный текст ответа. Буквы A/B/C/D в выгрузку не попадут.</p><Button onClick={() => exportCsv(session)}>Скачать CSV</Button></Glass></div>}
-    {tab === 'settings' && <div className="stack"><Glass className="settings-panel"><p className="eyebrow">ПОДКЛЮЧЕНИЕ ПО QR</p><h2>Адрес для участников</h2><p>После публикации укажите здесь адрес сайта — он попадёт в QR-код. До публикации можно использовать адрес компьютера в одной Wi‑Fi сети.</p><input value={publicOrigin} onChange={event => setPublicOrigin(event.target.value)} placeholder="https://ваш-сайт.web.app" /><small>Firebase: {firebaseReady ? 'подключён' : 'не настроен'}</small></Glass><Glass className="settings-panel"><p className="eyebrow">СЕССИЯ</p><h2>Завершение</h2><p>После завершения к этой комнате больше нельзя будет присоединиться.</p><Button secondary onClick={() => void changePhase('closed')}>Завершить сессию</Button></Glass></div>}
+    {tab === 'settings' && <div className="stack"><Glass className="settings-panel"><p className="eyebrow">ПОДКЛЮЧЕНИЕ ПО QR</p><h2>Адрес для участников</h2><p>После публикации укажите здесь адрес сайта — он попадёт в QR-код. До публикации можно использовать адрес компьютера в одной Wi‑Fi сети.</p><input value={publicOrigin} onChange={event => setPublicOrigin(event.target.value)} placeholder="https://ваш-сайт.web.app" /><small>Firebase: {firebaseReady ? 'подключён' : 'не настроен'}</small></Glass><Glass className="settings-panel"><p className="eyebrow">СЕССИЯ</p><h2>Завершение</h2><p>После завершения к этой комнате больше нельзя будет присоединиться.</p><Button secondary onClick={() => void changePhase('closed')}>Завершить сессию</Button>{actionError && <p className="connection-warning">{actionError}</p>}</Glass></div>}
   </section></main>
 }
 
