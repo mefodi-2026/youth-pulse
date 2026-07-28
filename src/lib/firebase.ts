@@ -32,25 +32,25 @@ export const subscribeSession = (roomId: string, callback: (value: Session | nul
 }
 
 export const createSession = async (roomId: string, hostUid: string, questionSet?: Question[]) => {
-  if (!db) throw new Error('Firebase РЅРµ РЅР°СЃС‚СЂРѕРµРЅ')
+  if (!db) throw new Error('Firebase не настроен')
   const session: Session = { roomId, createdAt: Date.now(), phase: 'lobby', maxParticipants: 30, hostUid, questions: questionSet, participants: {} }
   await set(ref(db, `sessions/${roomId}`), session)
   return session
 }
 
 export const joinSession = async (roomId: string, participant: Participant) => {
-  if (!db) throw new Error('Firebase РЅРµ РЅР°СЃС‚СЂРѕРµРЅ')
+  if (!db) throw new Error('Firebase не настроен')
   const result = await runTransaction(ref(db, `sessions/${roomId}/participants`), current => {
     const participants = current ?? {}
     if (participants[participant.id]) return participants
     if (Object.keys(participants).length >= 30) return
     return { ...participants, [participant.id]: participant }
   })
-  if (!result.committed || !result.snapshot.child(participant.id).exists()) throw new Error('РљРѕРјРЅР°С‚Р° РЅРµРґРѕСЃС‚СѓРїРЅР° РёР»Рё СѓР¶Рµ Р·Р°РїРѕР»РЅРµРЅР°')
+  if (!result.committed || !result.snapshot.child(participant.id).exists()) throw new Error('Комната недоступна или уже заполнена')
 }
 
 export const updatePhase = async (roomId: string, phase: SessionPhase) => {
-  if (!db) throw new Error('Firebase РЅРµ РЅР°СЃС‚СЂРѕРµРЅ')
+  if (!db) throw new Error('Firebase не настроен')
   await update(ref(db, `sessions/${roomId}`), phase === 'resultsIntro' ? { phase, resultsIntroStartedAt: Date.now() } : phase === 'closed' ? { phase, closedAt: Date.now() } : { phase })
 }
 
@@ -78,7 +78,7 @@ export const subscribeQuestionBank = (callback: (value: Question[] | null) => vo
 }
 
 export const saveAnswer = async (roomId: string, participant: Participant, questionId: string, answer: Answer, nextIndex: number) => {
-  if (!db) throw new Error('Firebase РЅРµ РЅР°СЃС‚СЂРѕРµРЅ')
+  if (!db) throw new Error('Firebase не настроен')
   const finished = nextIndex >= 16
   await update(ref(db, `sessions/${roomId}/participants/${participant.id}`), {
     answers: { ...participant.answers, [questionId]: answer }, currentQuestionIndex: nextIndex,
@@ -87,6 +87,6 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
 }
 
 export const markPersonalViewed = async (roomId: string, participantId: string) => {
-  if (!db) throw new Error('Firebase РЅРµ РЅР°СЃС‚СЂРѕРµРЅ')
+  if (!db) throw new Error('Firebase не настроен')
   await update(ref(db, `sessions/${roomId}/participants/${participantId}`), { personalViewedAt: Date.now() })
 }
