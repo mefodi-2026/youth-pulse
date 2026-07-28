@@ -1,5 +1,15 @@
 {
   "rules": {
+    "sessionArchives": {
+      "$roomId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (!data.exists() ? newData.child('hostUid').val() === auth.uid : data.child('hostUid').val() === auth.uid)"
+      }
+    },
+    "questionBank": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
     "sessions": {
       "$roomId": {
         ".read": "auth != null",
