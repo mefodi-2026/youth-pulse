@@ -1,7 +1,10 @@
+Exit code: 0
+Wall time: 5.5 seconds
+Output:
 import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
-import { archiveSession, createSession, ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, saveQuestionBank, subscribeQuestionBank, subscribeSession, subscribeSessionArchives, updatePhase } from './lib/firebase'
+import { archiveSession, createSession, ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, saveQuestionBank, saveSessionQuestions, subscribeQuestionBank, subscribeSession, subscribeSessionArchives, updatePhase } from './lib/firebase'
 import { recommendation, scoreAnswers } from './lib/scoring'
 import { StageDashboard } from './StageDashboard'
 import { MobileParticipantFlow } from './MobileParticipantFlow'
@@ -162,8 +165,16 @@ function Host() {
   }
   const persistQuestionBank = async (nextBank: Question[]) => {
     setQuestionError('')
-    if (firebaseReady) await saveQuestionBank(nextBank)
-    else localStorage.setItem('atmosphere-question-bank', JSON.stringify(nextBank))
+    if (firebaseReady) {
+      try {
+        await saveQuestionBank(nextBank)
+        localStorage.removeItem('atmosphere-question-bank')
+      } catch (error) {
+        localStorage.setItem('atmosphere-question-bank', JSON.stringify(nextBank))
+        if (session) await saveSessionQuestions(room, nextBank).catch(() => undefined)
+        setQuestionError(`Сохранено в текущую комнату. Общий банк Firebase пока недоступен: ${error instanceof Error ? error.message : 'проверьте Rules'}`)
+      }
+    } else localStorage.setItem('atmosphere-question-bank', JSON.stringify(nextBank))
     setQuestionBank(nextBank)
   }
   const saveQuestion = async () => {
@@ -307,3 +318,4 @@ function Results({ room }: { room: string }) {
 }
 
 export default App
+
