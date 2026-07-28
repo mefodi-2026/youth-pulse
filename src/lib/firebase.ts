@@ -73,6 +73,8 @@ export const subscribeSessionArchives = (callback: (value: Record<string, Sessio
 
 export const saveQuestionBank = async (questionSet: Question[]) => {
   if (!db) throw new Error('Firebase is not configured')
+  const user = await ensureAuth()
+  if (!user) throw new Error('Не удалось войти в Firebase для сохранения вопросов')
   await set(ref(db, 'questionBank'), questionSet)
 }
 
