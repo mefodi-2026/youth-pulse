@@ -316,6 +316,14 @@ function downloadPoster(participant: Participant, scores: Scores) {
 }
 function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number) { let line = ''; let top = y; text.split(' ').forEach(word => { const next = `${line}${word} `; if (ctx.measureText(next).width > maxWidth && line) { ctx.fillText(line, x, top); line = `${word} `; top += lineHeight } else line = next }); ctx.fillText(line, x, top) }
 
+function ResultRing({ value }: { value: number }) {
+  const [draw, setDraw] = useState(false)
+  const circumference = 2 * Math.PI * 92
+  const ringValue = Math.max(0, Math.min(100, value))
+  useEffect(() => { const timer = window.setTimeout(() => setDraw(true), 180); return () => window.clearTimeout(timer) }, [])
+  return <div className="result-ring"><svg viewBox="0 0 220 220" aria-hidden="true"><circle className="result-ring-track" cx="110" cy="110" r="92" /><circle className="result-ring-progress" cx="110" cy="110" r="92" style={{ strokeDasharray: circumference, strokeDashoffset: draw ? circumference * (1 - ringValue / 100) : circumference }} /></svg><div><b>{value}%</b><span>общий ориентир</span></div></div>
+}
+
 function Stage({ room }: { room: string }) {
   const [session, , connection] = useRoom(room)
   if (!room) return <main className="stage"><p className="eyebrow">ЭКРАН ПРОГРЕССА</p><h1>Нужен код комнаты</h1><p className="stage-caption">Откройте этот экран из панели ведущего.</p></main>
@@ -337,7 +345,9 @@ function Results({ room }: { room: string }) {
   const people = Object.values(session?.participants || {})
   const real = useMemo(() => { if (!people.length) return { communication: 84, forgiveness: 71, service: 79, care: 68, honesty: 76 }; const values = people.map(person => scoreAnswers(person.answers || {}, session?.questions || questions).categories); return Object.fromEntries(Object.keys(categories).map(key => [key, Math.round(values.reduce((sum, item) => sum + item[key as keyof typeof item], 0) / values.length)])) as Record<keyof typeof categories, number> }, [people, session?.questions])
   const shown = showReal ? real : { communication: 96, forgiveness: 94, service: 97, care: 93, honesty: 95 }
+  const overall = Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)
   const countdown = Math.max(0, Math.ceil((20000 - elapsed) / 1000))
+  return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><ResultRing value={overall} /><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b className={value < 0 ? 'negative' : ''}>{value}%</b><i><em style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p><small className="privacy">Показаны только агрегированные результаты — без имён и личных ответов.</small></main>
   return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><div className="big-score"><b>{Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)}%</b><span>общий ориентир</span></div><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b>{value}%</b><i><em style={{ width: `${value}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p><small className="privacy">Показаны только агрегированные результаты — без имён и личных ответов.</small></main>
 }
 
