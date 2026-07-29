@@ -1,7 +1,3 @@
-Exit code: 0
-Wall time: 2.7 seconds
-Total output lines: 345
-Output:
 import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
