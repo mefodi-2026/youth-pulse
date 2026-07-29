@@ -18,7 +18,7 @@ const go = (path: string) => { window.history.pushState({}, '', `${appBasePath}$
 
 const Glass = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => <section className={`glass ${className}`}>{children}</section>
 const Button = ({ children, secondary = false, disabled, onClick, className = '' }: { children: React.ReactNode; secondary?: boolean; disabled?: boolean; onClick?: () => void; className?: string }) => <button className={`${secondary ? 'button secondary' : 'button'} ${className}`} disabled={disabled} onClick={onClick}>{children}</button>
-const phaseText = (phase: SessionPhase) => ({ lobby: 'Сбор участников', live: 'Диагностика идёт', personal: 'Личные результаты', resultsIntro: 'Готовим общий результат', resultsReal: 'Общий результат открыт', closed: 'Сессия завершена' })[phase]
+const phaseText = (phase: SessionPhase) => ({ lobby: 'РЎР±РѕСЂ СѓС‡Р°СЃС‚РЅРёРєРѕРІ', live: 'Р”РёР°РіРЅРѕСЃС‚РёРєР° РёРґС‘С‚', personal: 'Р›РёС‡РЅС‹Рµ СЂРµР·СѓР»СЊС‚Р°С‚С‹', resultsIntro: 'Р“РѕС‚РѕРІРёРј РѕР±С‰РёР№ СЂРµР·СѓР»СЊС‚Р°С‚', resultsReal: 'РћР±С‰РёР№ СЂРµР·СѓР»СЊС‚Р°С‚ РѕС‚РєСЂС‹С‚', closed: 'РЎРµСЃСЃРёСЏ Р·Р°РІРµСЂС€РµРЅР°' })[phase]
 
 function useRoute() {
   const [path, setPath] = useState(currentPath())
@@ -58,7 +58,7 @@ function App() {
 }
 
 function Landing() {
-  return <main className="landing"><div className="orb orb-a" /><div className="orb orb-b" /><Glass className="landing-card"><p className="eyebrow">ИНТЕРАКТИВНАЯ ДИАГНОСТИКА</p><h1>Атмосфера<br />нашей молодёжи</h1><p>Бережная встреча, которая помогает увидеть точки роста — без сравнений и осуждения.</p><div className="landing-actions"><Button onClick={() => go('/host')}>Открыть панель ведущего</Button><Button secondary onClick={() => go('/join?room=DEMO42')}>Открыть демо участника</Button></div><small>{questions.length} вопросов · {Object.keys(categories).length} тем · без оценок</small></Glass></main>
+  return <main className="landing"><div className="orb orb-a" /><div className="orb orb-b" /><Glass className="landing-card"><p className="eyebrow">РРќРўР•Р РђРљРўРР’РќРђРЇ Р”РРђР“РќРћРЎРўРРљРђ</p><h1>РђС‚РјРѕСЃС„РµСЂР°<br />РЅР°С€РµР№ РјРѕР»РѕРґС‘Р¶Рё</h1><p>Р‘РµСЂРµР¶РЅР°СЏ РІСЃС‚СЂРµС‡Р°, РєРѕС‚РѕСЂР°СЏ РїРѕРјРѕРіР°РµС‚ СѓРІРёРґРµС‚СЊ С‚РѕС‡РєРё СЂРѕСЃС‚Р° вЂ” Р±РµР· СЃСЂР°РІРЅРµРЅРёР№ Рё РѕСЃСѓР¶РґРµРЅРёСЏ.</p><div className="landing-actions"><Button onClick={() => go('/host')}>РћС‚РєСЂС‹С‚СЊ РїР°РЅРµР»СЊ РІРµРґСѓС‰РµРіРѕ</Button><Button secondary onClick={() => go('/join?room=DEMO42')}>РћС‚РєСЂС‹С‚СЊ РґРµРјРѕ СѓС‡Р°СЃС‚РЅРёРєР°</Button></div><small>{questions.length} РІРѕРїСЂРѕСЃРѕРІ В· {Object.keys(categories).length} С‚РµРј В· Р±РµР· РѕС†РµРЅРѕРє</small></Glass></main>
 }
 
 type HostTab = 'overview' | 'rooms' | 'questions' | 'export' | 'settings'
@@ -84,7 +84,7 @@ function Host() {
   const finished = participants.filter(p => p.status === 'finished').length
   const answering = participants.filter(p => p.status === 'answering').length
   const allFinished = participants.length > 0 && finished === participants.length
-  const menu: Array<[HostTab, string, string]> = [['overview', 'Обзор', '⌁'], ['rooms', 'Комнаты', '◫'], ['questions', 'Вопросы', '◌'], ['export', 'Экспорт', '↓'], ['settings', 'Настройки', '⚙']]
+  const menu: Array<[HostTab, string, string]> = [['overview', 'РћР±Р·РѕСЂ', 'вЊЃ'], ['rooms', 'РљРѕРјРЅР°С‚С‹', 'в—«'], ['questions', 'Р’РѕРїСЂРѕСЃС‹', 'в—Њ'], ['export', 'Р­РєСЃРїРѕСЂС‚', 'в†“'], ['settings', 'РќР°СЃС‚СЂРѕР№РєРё', 'вљ™']]
 
   useEffect(() => { if (joinUrl) QRCode.toDataURL(joinUrl, { margin: 0, width: 216, color: { dark: '#03120e', light: '#eef5ee' } }).then(setQr) }, [joinUrl])
   useEffect(() => { localStorage.setItem('atmosphere-public-origin', publicOrigin) }, [publicOrigin])
@@ -100,7 +100,7 @@ function Host() {
   }, [])
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem('atmosphere-question-bank') || 'null') as Question[] | null
-    // Старый браузерный кэш на 16 вопросов не должен перекрывать новый встроенный банк.
+    // РЎС‚Р°СЂС‹Р№ Р±СЂР°СѓР·РµСЂРЅС‹Р№ РєСЌС€ РЅР° 16 РІРѕРїСЂРѕСЃРѕРІ РЅРµ РґРѕР»Р¶РµРЅ РїРµСЂРµРєСЂС‹РІР°С‚СЊ РЅРѕРІС‹Р№ РІСЃС‚СЂРѕРµРЅРЅС‹Р№ Р±Р°РЅРє.
     const localQuestions = stored?.length && stored.length >= questions.length ? stored : null
     if (!firebaseReady) {
       setQuestionBank(localQuestions || questions)
@@ -113,7 +113,7 @@ function Host() {
         localStorage.setItem('atmosphere-question-bank', JSON.stringify(value))
         return
       }
-      // Если в Firebase осталась старая версия на 16 вопросов, один раз заменяем её актуальным банком.
+      // Р•СЃР»Рё РІ Firebase РѕСЃС‚Р°Р»Р°СЃСЊ СЃС‚Р°СЂР°СЏ РІРµСЂСЃРёСЏ РЅР° 16 РІРѕРїСЂРѕСЃРѕРІ, РѕРґРёРЅ СЂР°Р· Р·Р°РјРµРЅСЏРµРј РµС‘ Р°РєС‚СѓР°Р»СЊРЅС‹Рј Р±Р°РЅРєРѕРј.
       if (value?.length && value.length < questions.length) {
         setQuestionBank(questions)
         void saveQuestionBank(questions).catch(() => undefined)
@@ -128,7 +128,7 @@ function Host() {
     setBusy(true)
     const newRoom = makeRoom()
     try {
-      if (firebaseReady) { const user = await ensureAuth(); if (!user) throw new Error('Не удалось войти в Firebase'); await createSession(newRoom, user.uid, questionBank) }
+      if (firebaseReady) { const user = await ensureAuth(); if (!user) throw new Error('РќРµ СѓРґР°Р»РѕСЃСЊ РІРѕР№С‚Рё РІ Firebase'); await createSession(newRoom, user.uid, questionBank) }
       else setDemo({ roomId: newRoom, createdAt: Date.now(), phase: 'lobby', maxParticipants: 30, hostUid: 'demo-host', questions: questionBank, participants: {} })
       localStorage.setItem('atmosphere-host-room', newRoom); setRoom(newRoom); setTab('overview')
     } finally { setBusy(false) }
@@ -154,7 +154,7 @@ function Host() {
         }
       }
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Не удалось изменить состояние сессии')
+      setActionError(error instanceof Error ? error.message : 'РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РјРµРЅРёС‚СЊ СЃРѕСЃС‚РѕСЏРЅРёРµ СЃРµСЃСЃРёРё')
     }
   }
   const start = () => {
@@ -195,7 +195,7 @@ function Host() {
         }
       }
       if (globalError) {
-        setQuestionError(`Вопрос сохранён локально${session && session.phase !== 'closed' ? ' и в текущую комнату' : ''}. Firebase пока недоступен: ${globalError instanceof Error ? globalError.message : 'проверьте Rules'}`)
+        setQuestionError(`Р’РѕРїСЂРѕСЃ СЃРѕС…СЂР°РЅС‘РЅ Р»РѕРєР°Р»СЊРЅРѕ${session && session.phase !== 'closed' ? ' Рё РІ С‚РµРєСѓС‰СѓСЋ РєРѕРјРЅР°С‚Сѓ' : ''}. Firebase РїРѕРєР° РЅРµРґРѕСЃС‚СѓРїРµРЅ: ${globalError instanceof Error ? globalError.message : 'РїСЂРѕРІРµСЂСЊС‚Рµ Rules'}`)
       }
     } else localStorage.setItem('atmosphere-question-bank', JSON.stringify(nextBank))
     setQuestionBank(nextBank)
@@ -209,36 +209,23 @@ function Host() {
       await persistQuestionBank(nextBank)
       resetQuestionDraft()
     } catch (error) {
-      setQuestionError(error instanceof Error ? error.message : 'Не удалось сохранить вопрос')
+      setQuestionError(error instanceof Error ? error.message : 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РІРѕРїСЂРѕСЃ')
     } finally { setQuestionSaving(false) }
   }
   const deleteQuestion = async (question: Question) => {
-    if (!window.confirm(`Удалить вопрос «${question.title}»?`)) return
+    if (!window.confirm(`РЈРґР°Р»РёС‚СЊ РІРѕРїСЂРѕСЃ В«${question.title}В»?`)) return
     setQuestionSaving(true)
     try {
       await persistQuestionBank(questionBank.filter(item => item.id !== question.id))
       if (editingQuestionId === question.id) resetQuestionDraft()
     } catch (error) {
-      setQuestionError(error instanceof Error ? error.message : 'Не удалось удалить вопрос')
+      setQuestionError(error instanceof Error ? error.message : 'РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ РІРѕРїСЂРѕСЃ')
     } finally { setQuestionSaving(false) }
   }
-  const warning = !firebaseReady ? 'Для работы с несколькими устройствами подключите Firebase: демо-режим синхронизируется только в этом браузере.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Этот QR ведёт на адрес компьютера. После публикации сайта здесь будет общий интернет-адрес.' : ''
-  if (!session) return <main className="host-page"><header className="topbar"><div><p className="eyebrow">ВЕДУЩИЙ · ЖИВАЯ СЕССИЯ</p><h2>Диагностика атмосферы молодёжи</h2></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><Glass className="start-panel"><h1>Готовы начать?</h1><p>Создайте комнату, покажите QR-код участникам и начните, когда все подключатся.</p><Button disabled={busy} onClick={create}>{busy ? 'Создаём…' : 'Создать сессию'}</Button></Glass></main>
-  return <main className="host-shell"><aside className="host-menu"><div className="brand"><span>✦</span><b>Атмосфера</b><small>панель ведущего</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => setTab(id)}><span>{icon}</span>{label}</button>)}</nav><div className="menu-room"><small>АКТИВНАЯ КОМНАТА</small><b>{room}</b><span>{participants.length} из {session.maxParticipants} участников</span></div></aside><section className="host-content"><header className="host-header"><div><p className="eyebrow">СЕССИЯ · {room}</p><h1>{tab === 'overview' ? 'Управление сессией' : menu.find(item => item[0] === tab)?.[1]}</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
-    {tab === 'overview' && <><div className="metrics"><Metric label="Подключились" value={participants.length} note={`из ${session.maxParticipants} участников`} /><Metric label="Сейчас отвечают" value={answering} note="в своём темпе" /><Metric label="Завершили" value={finished} note={allFinished ? 'все готовы' : 'ждём завершения'} /></div><div className="overview-grid"><Glass className="control-panel"><p className="eyebrow">ТЕКУЩАЯ ФАЗА</p><h2>{phaseText(session.phase)}</h2><p>{session.phase === 'lobby' ? 'Покажите QR-код. После запуска у вас автоматически откроется отдельный экран с живым прогрессом.' : allFinished ? 'Все участники завершили ответы. Можно открыть общую визуализацию на большом экране.' : 'Экран прогресса обновляется в реальном времени — без личных ответов и имён.'}</p><div className="control-actions">{session.phase === 'lobby' && <Button disabled={!participants.length} onClick={start}>Запустить диагностику</Button>}{session.phase !== 'lobby' && <Button secondary onClick={() => window.open(hostUrl(`/stage?room=${room}`), 'atmosphere-stage')}>Открыть экран прогресса</Button>}<Button onClick={showResults} disabled={!allFinished || session.phase === 'resultsIntro' || session.phase === 'resultsReal'}>Показать общие результаты</Button></div><div className="results-lock"><span className={allFinished ? 'ready' : ''}>{allFinished ? '✓' : '⌕'}</span><div><b>{allFinished ? 'Общий результат готов' : 'Общий результат пока закрыт'}</b><small>{allFinished ? 'Нажмите кнопку выше, чтобы начать показ.' : `Завершили ${finished} из ${participants.length || '—'} участников.`}</small></div></div><div className="phase-track">{(['lobby', 'live', 'resultsIntro', 'resultsReal'] as SessionPhase[]).map(item => <span className={session.phase === item ? 'active' : ''} key={item}>{phaseText(item)}</span>)}</div></Glass><Glass className="qr-panel"><p className="eyebrow">ПОДКЛЮЧЕНИЕ УЧАСТНИКОВ</p>{qr && <img src={qr} alt="QR-код для подключения" className="qr" />}<code>{joinUrl}</code><Button secondary onClick={() => navigator.clipboard.writeText(joinUrl)}>Скопировать ссылку</Button>{warning && <p className="connection-warning">{warning}</p>}</Glass></div></>}
-    {tab === 'rooms' && <div className="stack"><Glass className="room-row"><div><p className="eyebrow">ТЕКУЩАЯ</p><h2>{room}</h2><p>{phaseText(session.phase)} · {participants.length} подключились · {finished} завершили</p></div><Button onClick={() => void create()}>Создать новую комнату</Button></Glass><div className="archive-list">{Object.values(archives).sort((a, b) => b.archivedAt - a.archivedAt).map(archived => <Glass className="archive-card" key={archived.roomId}><div><p className="eyebrow">АРХИВ · {new Date(archived.archivedAt).toLocaleDateString('ru-RU')}</p><h3>{archived.roomId}</h3><p>{Object.keys(archived.participants).length} участников · {Object.values(archived.participants).filter(person => person.status === 'finished').length} завершили</p></div><Button secondary onClick={() => exportCsv(archived)}>Скачать CSV</Button></Glass>)}</div>{!Object.keys(archives).length && <Glass className="empty-state"><h3>История комнат пока пуста</h3><p>После завершения комнаты …325 tokens truncated…' : editingQuestionId ? 'Сохранить изменения' : 'Добавить вопрос'}</Button>{editingQuestionId && <Button secondary onClick={() => resetQuestionDraft()}>Отмена</Button>}</div>{questionError && <p className="connection-warning">{questionError}</p>}</Glass><div className="question-admin-list">{Object.entries(categories).map(([id, title]) => { const categoryId = id as Question['category']; const categoryQuestions = questionBank.filter(question => question.category === categoryId); return <Glass key={id} className="question-group"><div className="question-group-header"><div><p className="eyebrow">{categoryQuestions.length} ВОПРОСОВ</p><h3>{title}</h3></div><Button secondary onClick={() => resetQuestionDraft(categoryId)}>Добавить</Button></div>{categoryQuestions.map((question, index) => <div className="question-row" key={question.id}><span>{index + 1}</span><div className="question-row-content"><b>{question.title}</b><small>{question.options.A} · {question.options.B} · {question.options.C} · {question.options.D}</small></div><div className="question-row-actions"><button type="button" onClick={() => editQuestion(question)}>Редактировать</button><button type="button" onClick={() => void deleteQuestion(question)}>Удалить</button></div></div>)}</Glass> })}</div></div>}
-    {tab === 'export' && <div className="stack"><Glass className="export-panel"><p className="eyebrow">ВЫГРУЗКА ДАННЫХ</p><h2>Результаты сессии {room}</h2><p>Файл открывается в Excel: никнейм, статус, полный текст каждого вопроса и выбранный текст ответа. Буквы A/B/C/D в выгрузку не попадут.</p><Button onClick={() => exportCsv(session)}>Скачать CSV</Button></Glass></div>}
-    {tab === 'settings' && <div className="stack"><Glass className="settings-panel"><p className="eyebrow">ПОДКЛЮЧЕНИЕ ПО QR</p><h2>Адрес для участников</h2><p>После публикации укажите здесь адрес сайта — он попадёт в QR-код. До публикации можно использовать адрес компьютера в одной Wi‑Fi сети.</p><input value={publicOrigin} onChange={event => setPublicOrigin(event.target.value)} placeholder="https://ваш-сайт.web.app" /><small>Firebase: {firebaseReady ? 'подключён' : 'не настроен'}</small></Glass><Glass className="settings-panel"><p className="eyebrow">СЕССИЯ</p><h2>Завершение</h2><p>После завершения к этой комнате больше нельзя будет присоединиться.</p><Button secondary onClick={() => void changePhase('closed')}>Завершить сессию</Button>{actionError && <p className="connection-warning">{actionError}</p>}</Glass></div>}
-  </section></main>
-}
-
-function exportCsv(session: Session) {
-  const questionSet = session.questions?.length ? session.questions : questions
-  const rows = Object.values(session.participants).map(participant => {
-    const scores = scoreAnswers(participant.answers, questionSet)
-    return [participant.id, participant.nickname, participant.status, ...questionSet.flatMap(question => [question.title, participant.answers[question.id] ? question.options[participant.answers[question.id]] : '']), scores.total, ...Object.values(scores.categories)]
-  })
-  const headers = ['participantId', 'nickname', 'status', ...questionSet.flatMap((_, index) => [`Вопрос ${index + 1}`, `Ответ ${index + 1}`]), 'total', ...Object.values(categories)]
+  const warning = !firebaseReady ? 'Р”Р»СЏ СЂР°Р±РѕС‚С‹ СЃ РЅРµСЃРєРѕР»СЊРєРёРјРё СѓСЃС‚СЂРѕР№СЃС‚РІР°РјРё РїРѕРґРєР»СЋС‡РёС‚Рµ Firebase: РґРµРјРѕ-СЂРµР¶РёРј СЃРёРЅС…СЂРѕРЅРёР·РёСЂСѓРµС‚СЃСЏ С‚РѕР»СЊРєРѕ РІ СЌС‚РѕРј Р±СЂР°СѓР·РµСЂРµ.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Р­С‚РѕС‚ QR РІРµРґС‘С‚ РЅР° Р°РґСЂРµСЃ РєРѕРјРїСЊСЋС‚РµСЂР°. РџРѕСЃР»Рµ РїСѓР±Р»РёРєР°С†РёРё СЃР°Р№С‚Р° Р·РґРµСЃСЊ Р±СѓРґРµС‚ РѕР±С‰РёР№ РёРЅС‚РµСЂРЅРµС‚-Р°РґСЂРµСЃ.' : ''
+  if (!session) return <main className="host-page"><header className="topbar"><div><p className="eyebrow">Р’Р•Р”РЈР©РР™ В· Р–РР’РђРЇ РЎР•РЎРЎРРЇ</p><h2>Р”РёР°РіРЅРѕСЃС‚РёРєР° Р°С‚РјРѕСЃС„РµСЂС‹ РјРѕР»РѕРґС‘Р¶Рё</h2></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'Р­Р¤РР  РђРљРўРР’Р•Рќ' : 'Р”Р•РњРћ-Р Р•Р–РРњ'}</span></header><Glass className="start-panel"><h1>Р“РѕС‚РѕРІС‹ РЅР°С‡Р°С‚СЊ?</h1><p>РЎРѕР·РґР°Р№С‚Рµ РєРѕРјРЅР°С‚Сѓ, РїРѕРєР°Р¶РёС‚Рµ QR-РєРѕРґ СѓС‡Р°СЃС‚РЅРёРєР°Рј Рё РЅР°С‡РЅРёС‚Рµ, РєРѕРіРґР° РІСЃРµ РїРѕРґРєР»СЋС‡Р°С‚СЃСЏ.</p><Button disabled={busy} onClick={create}>{busy ? 'РЎРѕР·РґР°С‘РјвЂ¦' : 'РЎРѕР·РґР°С‚СЊ СЃРµСЃСЃРёСЋ'}</Button></Glass></main>
+  return <main className="host-shell"><aside className="host-menu"><div className="brand"><span>вњ¦</span><b>РђС‚РјРѕСЃС„РµСЂР°</b><small>РїР°РЅРµР»СЊ РІРµРґСѓС‰РµРіРѕ</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => setTab(id)}><span>{icon}</span>{label}</button>)}</nav><div className="menu-room"><small>РђРљРўРР’РќРђРЇ РљРћРњРќРђРўРђ</small><b>{room}</b><span>{participants.length} РёР· {session.maxParticipants} СѓС‡Р°СЃС‚РЅРёРєРѕРІ</span></div></aside><section className="host-content"><header className="host-header"><div><p className="eyebrow">РЎР•РЎРЎРРЇ В· {room}</p><h1>{tab === 'overview' ? 'РЈРїСЂР°РІР»РµРЅРёРµ СЃРµСЃСЃРёРµР№' : menu.find(item => item[0] === tab)?.[1]}</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'Р­Р¤РР  РђРљРўРР’Р•Рќ' : 'Р”Р•РњРћ-Р Р•Р–РРњ'}</span></header>
+    {tab === 'overview' && <><div className="metrics"><Metric label="РџРѕРґРєР»СЋС‡РёР»РёСЃСЊ" value={participants.length} note={`РёР· ${session.maxParticipants} СѓС‡Р°СЃС‚РЅРёРєРѕРІ`} /><Metric label="РЎРµР№С‡Р°СЃ РѕС‚РІРµС‡Р°СЋС‚" value={answering} note="РІ СЃРІРѕС‘Рј С‚РµРјРїРµ" /><Metric label="Р—Р°РІРµСЂС€РёР»Рё" value={finished} note={allFinished ? 'РІСЃРµ РіРѕС‚РѕРІС‹' : 'Р¶РґС‘Рј Р·Р°РІРµСЂС€РµРЅРёСЏ'} /></div><div className="overview-grid"><Glass className="control-panel"><p className="eyebrow">РўР•РљРЈР©РђРЇ Р¤РђР—Рђ</p><h2>{phaseText(session.phase)}</h2><p>{session.phase === 'lobby' ? 'РџРѕРєР°Р¶РёС‚Рµ QR-РєРѕРґ. РџРѕСЃР»Рµ Р·Р°РїСѓСЃРєР° Сѓ РІР°СЃ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РѕС‚РєСЂРѕРµС‚СЃСЏ РѕС‚РґРµР»СЊРЅС‹Р№ СЌРєСЂР°РЅ СЃ Р¶РёРІС‹Рј РїСЂРѕРіСЂРµСЃСЃРѕРј.' : allFinished ? 'Р’СЃРµ СѓС‡Р°СЃС‚РЅРёРєРё Р·Р°РІРµСЂС€РёР»Рё РѕС‚РІРµС‚С‹. РњРѕР¶РЅРѕ РѕС‚РєСЂС‹С‚СЊ РѕР±С‰СѓСЋ РІРёР·СѓР°Р»РёР·Р°С†РёСЋ РЅР° Р±РѕР»СЊС€РѕРј СЌРєСЂР°РЅРµ.' : 'Р­РєСЂР°РЅ РїСЂРѕРіСЂРµСЃСЃР° РѕР±Р…2469 tokens truncated…> [`Р’РѕРїСЂРѕСЃ ${index + 1}`, `РћС‚РІРµС‚ ${index + 1}`]), 'total', ...Object.values(categories)]
   const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(';')).join('\n')
   const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }))
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = `diagnostika-${session.roomId}.csv`; anchor.click(); URL.revokeObjectURL(url)
@@ -256,14 +243,14 @@ function Join({ room }: { room: string }) {
   useEffect(() => { const stored = localStorage.getItem(`atmosphere-participant-${room}`); if (stored) setParticipant(JSON.parse(stored)) }, [room])
   useEffect(() => { if (participant && session?.participants[participant.id]) setParticipant(session.participants[participant.id]) }, [session, participant?.id])
   const join = async () => {
-    if (!room || name.trim().length < 2) return setNotice('Введите никнейм от 2 до 20 символов.')
+    if (!room || name.trim().length < 2) return setNotice('Р’РІРµРґРёС‚Рµ РЅРёРєРЅРµР№Рј РѕС‚ 2 РґРѕ 20 СЃРёРјРІРѕР»РѕРІ.')
     const user = firebaseReady ? await ensureAuth() : null
     const p: Participant = { id: user?.uid || crypto.randomUUID(), nickname: name.trim().slice(0, 20), joinedAt: Date.now(), status: 'waiting', currentQuestionIndex: 0, answers: {} }
     try {
       if (firebaseReady) await joinSession(room, p)
-      else { const demo = getDemo(room) || { roomId: room, createdAt: Date.now(), phase: 'lobby' as const, maxParticipants: 30, hostUid: 'demo-host', participants: {} }; if (Object.keys(demo.participants).length >= demo.maxParticipants) throw new Error('Комната уже заполнена'); setDemo({ ...demo, participants: { ...demo.participants, [p.id]: p } }) }
+      else { const demo = getDemo(room) || { roomId: room, createdAt: Date.now(), phase: 'lobby' as const, maxParticipants: 30, hostUid: 'demo-host', participants: {} }; if (Object.keys(demo.participants).length >= demo.maxParticipants) throw new Error('РљРѕРјРЅР°С‚Р° СѓР¶Рµ Р·Р°РїРѕР»РЅРµРЅР°'); setDemo({ ...demo, participants: { ...demo.participants, [p.id]: p } }) }
       localStorage.setItem(`atmosphere-participant-${room}`, JSON.stringify(p)); setParticipant(p)
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'Не удалось подключиться') }
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ') }
   }
   const answer = async (value: Answer) => {
     if (!session || !participant || saving) return
@@ -276,9 +263,9 @@ function Join({ room }: { room: string }) {
       else { const status: Participant['status'] = nextIndex >= activeQuestions.length ? 'finished' : 'answering'; const next: Participant = { ...participant, answers: { ...participant.answers, [question.id]: value }, currentQuestionIndex: nextIndex, status, ...(nextIndex >= activeQuestions.length ? { completedAt: Date.now() } : {}) }; const nextSession: Session = { ...session, participants: { ...session.participants, [participant.id]: next } }; setDemo(nextSession); setSession(nextSession); setParticipant(next) }
     } finally { setSaving(false) }
   }
-  if (!room) return <MobileShell><h1>Нужен код комнаты</h1><p>Отсканируйте QR-код ведущего, чтобы открыть личную ссылку.</p></MobileShell>
-  if (!participant) return <MobileShell><p className="eyebrow">ОНЛАЙН-ДИАГНОСТИКА</p><h1>Атмосфера<br />нашей молодёжи</h1><p>Никнейм нужен только для твоей личной карточки. Реальное имя указывать не обязательно.</p><input value={name} onChange={event => setName(event.target.value)} placeholder="Например, «Свет»" maxLength={20} /><Button onClick={() => void join()}>Продолжить</Button>{notice && <p className="notice">{notice}</p>}</MobileShell>
-  if (!session || session.phase === 'lobby') return <MobileShell><p className="eyebrow">ТЫ ПОДКЛЮЧЁН(А)</p><h1>Ждём ведущего</h1><p>Как только диагностика начнётся, первый вопрос появится здесь автоматически.</p><div className="waiting-dot" /></MobileShell>
+  if (!room) return <MobileShell><h1>РќСѓР¶РµРЅ РєРѕРґ РєРѕРјРЅР°С‚С‹</h1><p>РћС‚СЃРєР°РЅРёСЂСѓР№С‚Рµ QR-РєРѕРґ РІРµРґСѓС‰РµРіРѕ, С‡С‚РѕР±С‹ РѕС‚РєСЂС‹С‚СЊ Р»РёС‡РЅСѓСЋ СЃСЃС‹Р»РєСѓ.</p></MobileShell>
+  if (!participant) return <MobileShell><p className="eyebrow">РћРќР›РђР™Рќ-Р”РРђР“РќРћРЎРўРРљРђ</p><h1>РђС‚РјРѕСЃС„РµСЂР°<br />РЅР°С€РµР№ РјРѕР»РѕРґС‘Р¶Рё</h1><p>РќРёРєРЅРµР№Рј РЅСѓР¶РµРЅ С‚РѕР»СЊРєРѕ РґР»СЏ С‚РІРѕРµР№ Р»РёС‡РЅРѕР№ РєР°СЂС‚РѕС‡РєРё. Р РµР°Р»СЊРЅРѕРµ РёРјСЏ СѓРєР°Р·С‹РІР°С‚СЊ РЅРµ РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ.</p><input value={name} onChange={event => setName(event.target.value)} placeholder="РќР°РїСЂРёРјРµСЂ, В«РЎРІРµС‚В»" maxLength={20} /><Button onClick={() => void join()}>РџСЂРѕРґРѕР»Р¶РёС‚СЊ</Button>{notice && <p className="notice">{notice}</p>}</MobileShell>
+  if (!session || session.phase === 'lobby') return <MobileShell><p className="eyebrow">РўР« РџРћР”РљР›Р®Р§РЃРќ(Рђ)</p><h1>Р–РґС‘Рј РІРµРґСѓС‰РµРіРѕ</h1><p>РљР°Рє С‚РѕР»СЊРєРѕ РґРёР°РіРЅРѕСЃС‚РёРєР° РЅР°С‡РЅС‘С‚СЃСЏ, РїРµСЂРІС‹Р№ РІРѕРїСЂРѕСЃ РїРѕСЏРІРёС‚СЃСЏ Р·РґРµСЃСЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.</p><div className="waiting-dot" /></MobileShell>
   const openPersonal = async () => {
     if (!participant) return
     if (firebaseReady) await markPersonalViewed(room, participant.id)
@@ -288,15 +275,15 @@ function Join({ room }: { room: string }) {
   if (participant.status === 'finished' && showPersonal) return <PersonalResult participant={participant} scores={scoreAnswers(participant.answers || {})} onBack={() => setShowPersonal(false)} />
   if (participant.status === 'finished') return <Completion participant={participant} onPersonal={() => void openPersonal()} />
   const question = questions[participant.currentQuestionIndex]
-  return <MobileShell><div className="progress-label"><span>ВОПРОС {participant.currentQuestionIndex + 1} ИЗ {questions.length}</span><span>{Math.round((participant.currentQuestionIndex / questions.length) * 100)}%</span></div><div className="progress"><i style={{ width: `${participant.currentQuestionIndex / questions.length * 100}%` }} /></div><h1 className="question">{question.title}</h1><p>Выбери вариант, который ближе всего к тебе.</p><div className="options">{(['A', 'B', 'C', 'D'] as Answer[]).map(letter => <button key={letter} className="option" disabled={saving} onClick={() => void answer(letter)}><b>{letter}</b><span>{question.options[letter]}</span></button>)}</div></MobileShell>
+  return <MobileShell><div className="progress-label"><span>Р’РћРџР РћРЎ {participant.currentQuestionIndex + 1} РР— {questions.length}</span><span>{Math.round((participant.currentQuestionIndex / questions.length) * 100)}%</span></div><div className="progress"><i style={{ width: `${participant.currentQuestionIndex / questions.length * 100}%` }} /></div><h1 className="question">{question.title}</h1><p>Р’С‹Р±РµСЂРё РІР°СЂРёР°РЅС‚, РєРѕС‚РѕСЂС‹Р№ Р±Р»РёР¶Рµ РІСЃРµРіРѕ Рє С‚РµР±Рµ.</p><div className="options">{(['A', 'B', 'C', 'D'] as Answer[]).map(letter => <button key={letter} className="option" disabled={saving} onClick={() => void answer(letter)}><b>{letter}</b><span>{question.options[letter]}</span></button>)}</div></MobileShell>
 }
 
 function MobileShell({ children }: { children: React.ReactNode }) { return <main className="mobile-wrap"><div className="mobile-card">{children}</div></main> }
 function Completion({ participant, onPersonal }: { participant: Participant; onPersonal: () => void }) {
-  return <MobileShell><div className="completion-mark">✦</div><p className="eyebrow">ГОТОВО</p><h1>{participant.nickname}, спасибо!</h1><p>Ты ответил(а) на все вопросы и помог(ла) увидеть общую картину. Твоя личная карточка уже готова — её видишь только ты.</p><Button onClick={onPersonal}>Получить личный результат</Button><div className="finish-wait"><span className="waiting-dot" /><small>После этого можешь посмотреть на общий экран и дождаться остальных участников.</small></div></MobileShell>
+  return <MobileShell><div className="completion-mark">вњ¦</div><p className="eyebrow">Р“РћРўРћР’Рћ</p><h1>{participant.nickname}, СЃРїР°СЃРёР±Рѕ!</h1><p>РўС‹ РѕС‚РІРµС‚РёР»(Р°) РЅР° РІСЃРµ РІРѕРїСЂРѕСЃС‹ Рё РїРѕРјРѕРі(Р»Р°) СѓРІРёРґРµС‚СЊ РѕР±С‰СѓСЋ РєР°СЂС‚РёРЅСѓ. РўРІРѕСЏ Р»РёС‡РЅР°СЏ РєР°СЂС‚РѕС‡РєР° СѓР¶Рµ РіРѕС‚РѕРІР° вЂ” РµС‘ РІРёРґРёС€СЊ С‚РѕР»СЊРєРѕ С‚С‹.</p><Button onClick={onPersonal}>РџРѕР»СѓС‡РёС‚СЊ Р»РёС‡РЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚</Button><div className="finish-wait"><span className="waiting-dot" /><small>РџРѕСЃР»Рµ СЌС‚РѕРіРѕ РјРѕР¶РµС€СЊ РїРѕСЃРјРѕС‚СЂРµС‚СЊ РЅР° РѕР±С‰РёР№ СЌРєСЂР°РЅ Рё РґРѕР¶РґР°С‚СЊСЃСЏ РѕСЃС‚Р°Р»СЊРЅС‹С… СѓС‡Р°СЃС‚РЅРёРєРѕРІ.</small></div></MobileShell>
 }
 function PersonalResult({ participant, scores, onBack }: { participant: Participant; scores: Scores; onBack: () => void }) {
-  return <MobileShell><div className="personal-result" id="personal-result"><p className="eyebrow">ТВОЯ ЛИЧНАЯ КАРТОЧКА</p><h1>{participant.nickname}, спасибо</h1><p>Это не оценка тебя. Это бережная подсказка, где можно расти дальше.</p><div className="score-circle"><b>{scores.total}%</b><small>общий ориентир</small></div><div className="score-list">{Object.entries(scores.categories).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><strong>{value}%</strong><i><em style={{ width: `${value}%` }} /></i></div>)}</div><Glass className="tip"><b>Небольшой шаг</b><p>{recommendation(scores)}</p></Glass></div><div className="download-actions"><Button secondary onClick={() => printResult()}>Сохранить PDF</Button><Button secondary onClick={() => downloadPoster(participant, scores)}>Скачать PNG</Button></div><Button onClick={onBack}>Вернуться к ожиданию</Button><small>Твоя карточка не показывается на общем экране.</small></MobileShell>
+  return <MobileShell><div className="personal-result" id="personal-result"><p className="eyebrow">РўР’РћРЇ Р›РР§РќРђРЇ РљРђР РўРћР§РљРђ</p><h1>{participant.nickname}, СЃРїР°СЃРёР±Рѕ</h1><p>Р­С‚Рѕ РЅРµ РѕС†РµРЅРєР° С‚РµР±СЏ. Р­С‚Рѕ Р±РµСЂРµР¶РЅР°СЏ РїРѕРґСЃРєР°Р·РєР°, РіРґРµ РјРѕР¶РЅРѕ СЂР°СЃС‚Рё РґР°Р»СЊС€Рµ.</p><div className="score-circle"><b>{scores.total}%</b><small>РѕР±С‰РёР№ РѕСЂРёРµРЅС‚РёСЂ</small></div><div className="score-list">{Object.entries(scores.categories).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><strong>{value}%</strong><i><em style={{ width: `${value}%` }} /></i></div>)}</div><Glass className="tip"><b>РќРµР±РѕР»СЊС€РѕР№ С€Р°Рі</b><p>{recommendation(scores)}</p></Glass></div><div className="download-actions"><Button secondary onClick={() => printResult()}>РЎРѕС…СЂР°РЅРёС‚СЊ PDF</Button><Button secondary onClick={() => downloadPoster(participant, scores)}>РЎРєР°С‡Р°С‚СЊ PNG</Button></div><Button onClick={onBack}>Р’РµСЂРЅСѓС‚СЊСЃСЏ Рє РѕР¶РёРґР°РЅРёСЋ</Button><small>РўРІРѕСЏ РєР°СЂС‚РѕС‡РєР° РЅРµ РїРѕРєР°Р·С‹РІР°РµС‚СЃСЏ РЅР° РѕР±С‰РµРј СЌРєСЂР°РЅРµ.</small></MobileShell>
 }
 
 function printResult() { document.body.dataset.printPersonal = 'true'; window.print(); window.setTimeout(() => delete document.body.dataset.printPersonal, 500) }
@@ -305,26 +292,26 @@ function downloadPoster(participant: Participant, scores: Scores) {
   const ctx = canvas.getContext('2d'); if (!ctx) return
   ctx.fillStyle = '#03120e'; ctx.fillRect(0, 0, canvas.width, canvas.height)
   const glow = ctx.createRadialGradient(900, 80, 0, 900, 80, 600); glow.addColorStop(0, 'rgba(30, 119, 84, .85)'); glow.addColorStop(1, 'rgba(3, 18, 14, 0)'); ctx.fillStyle = glow; ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.fillStyle = '#32ce8b'; ctx.font = '700 30px Arial'; ctx.fillText('ДИАГНОСТИКА АТМОСФЕРЫ', 90, 110)
-  ctx.fillStyle = '#eef5ee'; ctx.font = '700 68px Arial'; ctx.fillText(`${participant.nickname}, твоя`, 90, 205); ctx.fillText('личная карточка', 90, 285)
+  ctx.fillStyle = '#32ce8b'; ctx.font = '700 30px Arial'; ctx.fillText('Р”РРђР“РќРћРЎРўРРљРђ РђРўРњРћРЎР¤Р•Р Р«', 90, 110)
+  ctx.fillStyle = '#eef5ee'; ctx.font = '700 68px Arial'; ctx.fillText(`${participant.nickname}, С‚РІРѕСЏ`, 90, 205); ctx.fillText('Р»РёС‡РЅР°СЏ РєР°СЂС‚РѕС‡РєР°', 90, 285)
   ctx.beginPath(); ctx.arc(540, 510, 170, 0, Math.PI * 2); ctx.fillStyle = '#123d31'; ctx.fill(); ctx.strokeStyle = '#32ce8b'; ctx.lineWidth = 2; ctx.stroke()
-  ctx.fillStyle = '#eef5ee'; ctx.font = '700 100px Arial'; ctx.textAlign = 'center'; ctx.fillText(`${scores.total}%`, 540, 535); ctx.font = '400 25px Arial'; ctx.fillStyle = '#9aafa5'; ctx.fillText('общий ориентир', 540, 582); ctx.textAlign = 'left'
+  ctx.fillStyle = '#eef5ee'; ctx.font = '700 100px Arial'; ctx.textAlign = 'center'; ctx.fillText(`${scores.total}%`, 540, 535); ctx.font = '400 25px Arial'; ctx.fillStyle = '#9aafa5'; ctx.fillText('РѕР±С‰РёР№ РѕСЂРёРµРЅС‚РёСЂ', 540, 582); ctx.textAlign = 'left'
   let y = 770; Object.entries(scores.categories).forEach(([id, value]) => { ctx.fillStyle = '#eef5ee'; ctx.font = '600 28px Arial'; ctx.fillText(categories[id as keyof typeof categories], 90, y); ctx.textAlign = 'right'; ctx.fillStyle = '#32ce8b'; ctx.fillText(`${value}%`, 990, y); ctx.textAlign = 'left'; ctx.fillStyle = '#0e362b'; ctx.fillRect(90, y + 22, 900, 14); ctx.fillStyle = '#32ce8b'; ctx.fillRect(90, y + 22, 900 * value / 100, 14); y += 115 })
-  ctx.fillStyle = '#c8ae67'; ctx.font = '700 27px Arial'; ctx.fillText('НЕБОЛЬШОЙ ШАГ', 90, 1230); ctx.fillStyle = '#9aafa5'; ctx.font = '400 25px Arial'; wrapCanvasText(ctx, recommendation(scores), 90, 1275, 900, 35)
-  const anchor = document.createElement('a'); anchor.download = `личная-карточка-${participant.nickname}.png`; anchor.href = canvas.toDataURL('image/png'); anchor.click()
+  ctx.fillStyle = '#c8ae67'; ctx.font = '700 27px Arial'; ctx.fillText('РќР•Р‘РћР›Р¬РЁРћР™ РЁРђР“', 90, 1230); ctx.fillStyle = '#9aafa5'; ctx.font = '400 25px Arial'; wrapCanvasText(ctx, recommendation(scores), 90, 1275, 900, 35)
+  const anchor = document.createElement('a'); anchor.download = `Р»РёС‡РЅР°СЏ-РєР°СЂС‚РѕС‡РєР°-${participant.nickname}.png`; anchor.href = canvas.toDataURL('image/png'); anchor.click()
 }
 function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number) { let line = ''; let top = y; text.split(' ').forEach(word => { const next = `${line}${word} `; if (ctx.measureText(next).width > maxWidth && line) { ctx.fillText(line, x, top); line = `${word} `; top += lineHeight } else line = next }); ctx.fillText(line, x, top) }
 
 function Stage({ room }: { room: string }) {
   const [session, , connection] = useRoom(room)
-  if (!room) return <main className="stage"><p className="eyebrow">ЭКРАН ПРОГРЕССА</p><h1>Нужен код комнаты</h1><p className="stage-caption">Откройте этот экран из панели ведущего.</p></main>
-  if (!session) return <main className="stage"><div className="stage-glow" /><p className="eyebrow">ЭКРАН ПРОГРЕССА</p><h1>{connection === 'error' ? 'Не удалось подключиться' : 'Подключаемся к комнате'}</h1><p className="stage-caption">{connection === 'error' ? 'Проверьте интернет и откройте экран ещё раз.' : 'Это займёт несколько секунд.'}</p>{connection === 'error' ? <Button secondary onClick={() => window.location.reload()}>Повторить подключение</Button> : <div className="waiting-dot" />}</main>
+  if (!room) return <main className="stage"><p className="eyebrow">Р­РљР РђРќ РџР РћР“Р Р•РЎРЎРђ</p><h1>РќСѓР¶РµРЅ РєРѕРґ РєРѕРјРЅР°С‚С‹</h1><p className="stage-caption">РћС‚РєСЂРѕР№С‚Рµ СЌС‚РѕС‚ СЌРєСЂР°РЅ РёР· РїР°РЅРµР»Рё РІРµРґСѓС‰РµРіРѕ.</p></main>
+  if (!session) return <main className="stage"><div className="stage-glow" /><p className="eyebrow">Р­РљР РђРќ РџР РћР“Р Р•РЎРЎРђ</p><h1>{connection === 'error' ? 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ' : 'РџРѕРґРєР»СЋС‡Р°РµРјСЃСЏ Рє РєРѕРјРЅР°С‚Рµ'}</h1><p className="stage-caption">{connection === 'error' ? 'РџСЂРѕРІРµСЂСЊС‚Рµ РёРЅС‚РµСЂРЅРµС‚ Рё РѕС‚РєСЂРѕР№С‚Рµ СЌРєСЂР°РЅ РµС‰С‘ СЂР°Р·.' : 'Р­С‚Рѕ Р·Р°Р№РјС‘С‚ РЅРµСЃРєРѕР»СЊРєРѕ СЃРµРєСѓРЅРґ.'}</p>{connection === 'error' ? <Button secondary onClick={() => window.location.reload()}>РџРѕРІС‚РѕСЂРёС‚СЊ РїРѕРґРєР»СЋС‡РµРЅРёРµ</Button> : <div className="waiting-dot" />}</main>
   const people = Object.values(session?.participants || {})
   const activeQuestionCount = session?.questions?.length || questions.length
   const answers = people.reduce((sum, participant) => sum + Object.keys(participant.answers || {}).length, 0)
   const total = Math.max(people.length * activeQuestionCount, 1)
   const progress = Math.round(answers / total * 100)
-  return <main className="stage"><div className="stage-glow" /><p className="eyebrow">ДИАГНОСТИКА АТМОСФЕРЫ МОЛОДЁЖИ</p><h1>{session?.phase === 'lobby' ? 'Скоро начнём' : session?.phase === 'resultsIntro' ? 'Собираем общую картину' : session?.phase === 'resultsReal' ? 'Результаты готовы' : session ? 'Мы идём вместе' : 'Ожидаем комнату'}</h1><p className="stage-caption">{session?.phase === 'lobby' ? 'Участники подключаются по QR-коду.' : session?.phase === 'live' ? 'Каждый отвечает в своём темпе. Здесь — только общий прогресс.' : 'Спасибо каждому, кто ответил честно.'}</p><div className="stage-metrics"><Metric label="Подключились" value={people.length} note="участников" /><Metric label="Отвечают" value={people.filter(person => person.status === 'answering').length} note="в своём темпе" /><Metric label="Завершили" value={people.filter(person => person.status === 'finished').length} note="готовы к итогу" /></div><Glass className="stage-progress"><p>Общий прогресс</p><strong>{answers} <small>из {total} ответов</small></strong><div className="progress large"><i style={{ width: `${progress}%` }} /></div><span>{progress}%</span></Glass><small className="privacy">На этом экране отображаются только общие числа.</small></main>
+  return <main className="stage"><div className="stage-glow" /><p className="eyebrow">Р”РРђР“РќРћРЎРўРРљРђ РђРўРњРћРЎР¤Р•Р Р« РњРћР›РћР”РЃР–Р</p><h1>{session?.phase === 'lobby' ? 'РЎРєРѕСЂРѕ РЅР°С‡РЅС‘Рј' : session?.phase === 'resultsIntro' ? 'РЎРѕР±РёСЂР°РµРј РѕР±С‰СѓСЋ РєР°СЂС‚РёРЅСѓ' : session?.phase === 'resultsReal' ? 'Р РµР·СѓР»СЊС‚Р°С‚С‹ РіРѕС‚РѕРІС‹' : session ? 'РњС‹ РёРґС‘Рј РІРјРµСЃС‚Рµ' : 'РћР¶РёРґР°РµРј РєРѕРјРЅР°С‚Сѓ'}</h1><p className="stage-caption">{session?.phase === 'lobby' ? 'РЈС‡Р°СЃС‚РЅРёРєРё РїРѕРґРєР»СЋС‡Р°СЋС‚СЃСЏ РїРѕ QR-РєРѕРґСѓ.' : session?.phase === 'live' ? 'РљР°Р¶РґС‹Р№ РѕС‚РІРµС‡Р°РµС‚ РІ СЃРІРѕС‘Рј С‚РµРјРїРµ. Р—РґРµСЃСЊ вЂ” С‚РѕР»СЊРєРѕ РѕР±С‰РёР№ РїСЂРѕРіСЂРµСЃСЃ.' : 'РЎРїР°СЃРёР±Рѕ РєР°Р¶РґРѕРјСѓ, РєС‚Рѕ РѕС‚РІРµС‚РёР» С‡РµСЃС‚РЅРѕ.'}</p><div className="stage-metrics"><Metric label="РџРѕРґРєР»СЋС‡РёР»РёСЃСЊ" value={people.length} note="СѓС‡Р°СЃС‚РЅРёРєРѕРІ" /><Metric label="РћС‚РІРµС‡Р°СЋС‚" value={people.filter(person => person.status === 'answering').length} note="РІ СЃРІРѕС‘Рј С‚РµРјРїРµ" /><Metric label="Р—Р°РІРµСЂС€РёР»Рё" value={people.filter(person => person.status === 'finished').length} note="РіРѕС‚РѕРІС‹ Рє РёС‚РѕРіСѓ" /></div><Glass className="stage-progress"><p>РћР±С‰РёР№ РїСЂРѕРіСЂРµСЃСЃ</p><strong>{answers} <small>РёР· {total} РѕС‚РІРµС‚РѕРІ</small></strong><div className="progress large"><i style={{ width: `${progress}%` }} /></div><span>{progress}%</span></Glass><small className="privacy">РќР° СЌС‚РѕРј СЌРєСЂР°РЅРµ РѕС‚РѕР±СЂР°Р¶Р°СЋС‚СЃСЏ С‚РѕР»СЊРєРѕ РѕР±С‰РёРµ С‡РёСЃР»Р°.</small></main>
 }
 
 function Results({ room }: { room: string }) {
@@ -337,7 +324,7 @@ function Results({ room }: { room: string }) {
   const real = useMemo(() => { if (!people.length) return { communication: 84, forgiveness: 71, service: 79, care: 68, honesty: 76 }; const values = people.map(person => scoreAnswers(person.answers || {}, session?.questions || questions).categories); return Object.fromEntries(Object.keys(categories).map(key => [key, Math.round(values.reduce((sum, item) => sum + item[key as keyof typeof item], 0) / values.length)])) as Record<keyof typeof categories, number> }, [people, session?.questions])
   const shown = showReal ? real : { communication: 96, forgiveness: 94, service: 97, care: 93, honesty: 95 }
   const countdown = Math.max(0, Math.ceil((20000 - elapsed) / 1000))
-  return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><div className="big-score"><b>{Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)}%</b><span>общий ориентир</span></div><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b>{value}%</b><i><em style={{ width: `${value}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p><small className="privacy">Показаны только агрегированные результаты — без имён и личных ответов.</small></main>
+  return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">РћР‘Р©РР™ Р Р•Р—РЈР›Р¬РўРђРў В· {showReal ? 'Р Р•РђР›Р¬РќР«Р• Р”РђРќРќР«Р•' : `РР”Р•РђР›Р¬РќР«Р™ РћР РР•РќРўРР  В· ${countdown} РЎР•Рљ.`}</p><h1>{showReal ? 'РќР°С€Р° РѕР±С‰Р°СЏ РєР°СЂС‚РёРЅР°' : 'РљР°РєРёРјРё РјС‹ РјРѕР¶РµРј Р±С‹С‚СЊ РІРјРµСЃС‚Рµ'}</h1>{!showReal && <div className="result-loader"><i /><span>Р§РµСЂРµР· РЅРµСЃРєРѕР»СЊРєРѕ СЃРµРєСѓРЅРґ СѓРІРёРґРёРј СЂРµР°Р»СЊРЅСѓСЋ РєР°СЂС‚РёРЅСѓ РіСЂСѓРїРїС‹</span></div>}<Glass className="result-board"><div className="big-score"><b>{Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)}%</b><span>РѕР±С‰РёР№ РѕСЂРёРµРЅС‚РёСЂ</span></div><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b>{value}%</b><i><em style={{ width: `${value}%` }} /></i></div>)}</div></Glass><p className="closing">Р›СЋР±РѕРІСЊ Рё РµРґРёРЅСЃС‚РІРѕ РЅР°С‡РёРЅР°СЋС‚СЃСЏ РЅРµ СЃ РґСЂСѓРіРёС…, Р° Р»РёС‡РЅРѕ СЃ РєР°Р¶РґРѕРіРѕ РёР· РЅР°СЃ.</p><small className="privacy">РџРѕРєР°Р·Р°РЅС‹ С‚РѕР»СЊРєРѕ Р°РіСЂРµРіРёСЂРѕРІР°РЅРЅС‹Рµ СЂРµР·СѓР»СЊС‚Р°С‚С‹ вЂ” Р±РµР· РёРјС‘РЅ Рё Р»РёС‡РЅС‹С… РѕС‚РІРµС‚РѕРІ.</small></main>
 }
 
 export default App
