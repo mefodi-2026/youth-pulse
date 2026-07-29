@@ -1,4 +1,4 @@
-export type CategoryId = 'communication' | 'forgiveness' | 'service' | 'care'
+export type CategoryId = 'communication' | 'forgiveness' | 'service' | 'care' | 'honesty'
 export type Answer = 'A' | 'B' | 'C' | 'D'
 export type SessionPhase = 'lobby' | 'live' | 'personal' | 'resultsIntro' | 'resultsReal' | 'closed'
 
@@ -7,3 +7,4 @@ export interface Participant { id: string; nickname: string; joinedAt: number; s
 export interface Session { roomId: string; createdAt: number; phase: SessionPhase; maxParticipants: number; hostUid: string; resultsIntroStartedAt?: number; closedAt?: number; questions?: Question[]; participants: Record<string, Participant> }
 export interface SessionArchive extends Session { archivedAt: number }
 export interface Scores { total: number; categories: Record<CategoryId, number> }
+
