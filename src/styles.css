@@ -147,3 +147,72 @@
   .report-downloads .mobile-action { min-height:40px; font-size:10px; }
   .return-link { margin-top:10px; }
 }
+
+/* Restore the intended readable mobile scale while keeping every screen fixed. */
+@media (max-width:600px) {
+  .phone-screen { padding-left:24px; padding-right:24px; }
+  .question-screen { justify-content:flex-start; padding:34px 22px 18px; }
+  .question-screen h1 { max-width:100%; margin-bottom:14px; font-size:clamp(31px,8.8vw,38px); line-height:1.02; }
+  .question-screen>p { font-size:14px!important; line-height:1.35; }
+  .answer-options { margin-top:20px; gap:9px; }
+  .answer-options button { min-height:56px; padding:10px 12px; gap:12px; border-radius:16px; }
+  .answer-options b { flex-basis:30px; width:30px; height:30px; font-size:13px; }
+  .answer-options span { font-size:13px; line-height:1.22; }
+  .question-footer { padding-top:16px; gap:6px; }
+  .question-footer .mobile-action.secondary { min-height:34px; font-size:13px; }
+  .question-footer small { font-size:11px; }
+
+  .report-ready { justify-content:center; padding:0 24px 34px; text-align:center; }
+  .report-ready .ready-spark { width:84px; height:84px; margin:0 auto 28px; border-radius:25px; font-size:44px; }
+  .report-ready .flow-label { font-size:12px; }
+  .report-ready h1 { max-width:100%; margin:18px auto 22px; font-size:clamp(38px,10vw,48px); line-height:1; }
+  .report-ready>p:not(.flow-label) { max-width:360px; font-size:16px; line-height:1.45; }
+  .report-ready .mobile-action { width:100%; margin-top:40px; min-height:58px; font-size:15px; }
+
+  .report-screen { padding:30px 24px 18px; }
+  .report-screen .flow-label { font-size:12px; }
+  .report-screen h1 { margin:14px 0 20px; font-size:40px; line-height:1; }
+  .report-summary { margin-top:0; min-height:136px; padding:18px; gap:18px; border-radius:22px; }
+  .report-ring { flex-basis:116px; height:116px; }
+  .report-ring b { font-size:30px; }
+  .report-ring small { font-size:9px; }
+  .report-summary>p { max-width:185px; font-size:13px; line-height:1.25; }
+  .report-screen h2 { margin:24px 0 14px; font-size:21px; }
+  .report-bars { gap:13px; }
+  .report-bars span, .report-bars b { font-size:13px; }
+  .report-bars b { min-width:52px; }
+  .report-bars i { height:7px; }
+  .wish-card { margin:22px 0 18px; padding:17px; border-radius:22px; }
+  .wish-card small { font-size:13px; }
+  .wish-card p { margin-top:9px; font-size:13px; line-height:1.4; }
+  .report-downloads .mobile-action { min-height:50px; font-size:13px; }
+  .return-link { margin-top:16px; font-size:13px; }
+}
+
+@media (max-width:600px) and (max-height:760px) {
+  .question-screen { padding-top:24px; }
+  .question-screen h1 { font-size:30px; margin-bottom:10px; }
+  .question-screen>p { font-size:12px!important; }
+  .answer-options { margin-top:14px; gap:7px; }
+  .answer-options button { min-height:50px; }
+  .answer-options span { font-size:12px; }
+  .question-footer { padding-top:10px; }
+  .report-ready { padding-bottom:24px; }
+  .report-ready .ready-spark { width:70px; height:70px; margin-bottom:20px; }
+  .report-ready h1 { margin:12px auto 16px; font-size:38px; }
+  .report-ready>p:not(.flow-label) { font-size:14px; }
+  .report-ready .mobile-action { margin-top:28px; min-height:52px; }
+  .report-screen { padding-top:22px; }
+  .report-screen h1 { margin:10px 0 14px; font-size:34px; }
+  .report-summary { min-height:112px; padding:13px; gap:12px; }
+  .report-ring { flex-basis:94px; height:94px; }
+  .report-ring b { font-size:25px; }
+  .report-summary>p { font-size:11px; }
+  .report-screen h2 { margin:16px 0 10px; font-size:18px; }
+  .report-bars { gap:9px; }
+  .report-bars span, .report-bars b { font-size:11px; }
+  .report-bars i { height:6px; }
+  .wish-card { margin:14px 0 12px; padding:13px; }
+  .wish-card small, .wish-card p { font-size:11px; }
+  .report-downloads .mobile-action { min-height:44px; font-size:11px; }
+}
