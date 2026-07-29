@@ -329,3 +329,4 @@ function Results({ room }: { room: string }) {
 
 export default App
 
+// Mobile participant flow and scoring updates.
