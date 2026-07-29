@@ -116,3 +116,34 @@
   .results .result-bars b { min-width:56px; font-size:16px; }
   .results .result-bars i { height:8px; }
 }
+
+/* Mobile is a fixed viewport flow: never create a page-level scroll. */
+@media (max-width:600px) {
+  html, body, #root { width:100%; height:100%; min-height:100%; overflow:hidden; }
+  .mobile-flow, .mobile-wrap { width:100%; height:100svh; min-height:100svh; max-height:100svh; padding:0; overflow:hidden; }
+  .phone-screen, .mobile-card { width:100%; height:100%; min-height:0!important; max-height:100svh; overflow:hidden; border-radius:0; box-shadow:none; }
+  .phone-screen { padding:26px 22px 14px; }
+  .mobile-card { padding:24px 22px; }
+  .intro-screen { padding-top:28px; }
+  .intro-info { margin:20px 0 14px; padding:15px; }
+  .nickname-screen input { margin-top:16px; }
+  .flow-note { margin:22px 0 12px; padding:15px; }
+  .waiting-status { margin-top:24px; }
+  .report-ready { padding-top:52px; }
+  .report-ready .mobile-action { margin-top:30px; }
+  .report-screen { padding:22px 18px 12px; }
+  .report-screen h1 { font-size:31px; margin:8px 0 10px; }
+  .report-summary { margin-top:10px; padding:12px; gap:9px; border-radius:16px; }
+  .report-ring { flex-basis:82px; height:82px; }
+  .report-ring b { font-size:24px; }
+  .report-summary>p { font-size:9px; }
+  .report-screen h2 { margin:14px 0 8px; }
+  .report-bars { gap:8px; }
+  .report-bars span, .report-bars b { font-size:9px; }
+  .report-bars b { min-width:42px; }
+  .report-bars i { height:5px; }
+  .wish-card { margin:14px 0 12px; padding:12px; }
+  .wish-card p { margin-top:5px; font-size:9px; }
+  .report-downloads .mobile-action { min-height:40px; font-size:10px; }
+  .return-link { margin-top:10px; }
+}
