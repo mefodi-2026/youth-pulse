@@ -92,9 +92,9 @@ export const subscribeQuestionBank = (callback: (value: Question[] | null) => vo
   return onValue(ref(db, 'questionBank'), snapshot => callback((snapshot.val() || null) as Question[] | null), error => onError?.(error))
 }
 
-export const saveAnswer = async (roomId: string, participant: Participant, questionId: string, answer: Answer, nextIndex: number) => {
+export const saveAnswer = async (roomId: string, participant: Participant, questionId: string, answer: Answer, nextIndex: number, totalQuestions = 16) => {
   if (!db) throw new Error('Firebase не настроен')
-  const finished = nextIndex >= 16
+  const finished = nextIndex >= totalQuestions
   await update(ref(db, `sessions/${roomId}/participants/${participant.id}`), {
     answers: { ...participant.answers, [questionId]: answer }, currentQuestionIndex: nextIndex,
     status: finished ? 'finished' : 'answering', ...(finished ? { completedAt: Date.now() } : {})
