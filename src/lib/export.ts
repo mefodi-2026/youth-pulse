@@ -10,14 +10,14 @@ export function printWish(participant: Participant, scores: Scores) {
   root.id = 'wish-print'
   root.className = 'wish-print'
 
-  const eyebrow = document.createElement('p'); eyebrow.className = 'eyebrow'; eyebrow.textContent = 'ТВОЁ ПЕРСОНАЛЬНОЕ ПОЖЕЛАНИЕ'; root.append(eyebrow)
+  const eyebrow = document.createElement('p'); eyebrow.className = 'eyebrow'; eyebrow.textContent = 'ТВОИ ПОЖЕЛАНИЯ'; root.append(eyebrow)
   const title = document.createElement('h1'); title.textContent = `${participant.nickname}, спасибо`; root.append(title)
+  const intro = document.createElement('p'); intro.className = 'wish-print-intro'; intro.textContent = 'По итогам твоих ответов мы подготовили для тебя пожелания.'; root.append(intro)
   const total = document.createElement('p'); total.className = 'wish-print-total'; total.textContent = `Общий ориентир: ${scores.total}%`; root.append(total)
   const list = document.createElement('div'); list.className = 'wish-print-list'
   wishRows(scores).forEach(item => {
     const card = document.createElement('article'); card.className = 'wish-print-item'
     const heading = document.createElement('h2'); heading.textContent = `${categories[item.category]} · ${item.score}%`; card.append(heading)
-    const label = document.createElement('small'); label.textContent = item.label; card.append(label)
     const text = document.createElement('p'); text.textContent = item.text; card.append(text)
     list.append(card)
   })
@@ -43,15 +43,15 @@ export function downloadWishPng(participant: Participant, scores: Scores) {
   const ctx = canvas.getContext('2d'); if (!ctx) return
   ctx.fillStyle = '#03120e'; ctx.fillRect(0, 0, canvas.width, canvas.height)
   const glow = ctx.createRadialGradient(1150, 80, 0, 1150, 80, 700); glow.addColorStop(0, 'rgba(30, 119, 84, .85)'); glow.addColorStop(1, 'rgba(3, 18, 14, 0)'); ctx.fillStyle = glow; ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.fillStyle = '#32ce8b'; ctx.font = '700 28px Arial'; ctx.fillText('ТВОЁ ПЕРСОНАЛЬНОЕ ПОЖЕЛАНИЕ', 80, 100)
+  ctx.fillStyle = '#32ce8b'; ctx.font = '700 28px Arial'; ctx.fillText('ТВОИ ПОЖЕЛАНИЯ', 80, 100)
   ctx.fillStyle = '#eef5ee'; ctx.font = '700 64px Arial'; ctx.fillText(`${participant.nickname}, спасибо`, 80, 190)
-  ctx.fillStyle = '#c8ae67'; ctx.font = '600 28px Arial'; ctx.fillText(`Общий ориентир: ${scores.total}%`, 80, 245)
-  let y = 330
+  ctx.fillStyle = '#b7c9c0'; ctx.font = '400 24px Arial'; ctx.fillText('По итогам твоих ответов мы подготовили для тебя пожелания.', 80, 235)
+  ctx.fillStyle = '#c8ae67'; ctx.font = '600 28px Arial'; ctx.fillText(`Общий ориентир: ${scores.total}%`, 80, 285)
+  let y = 370
   wishRows(scores).forEach(item => {
     ctx.fillStyle = '#0b3328'; ctx.beginPath(); ctx.roundRect(60, y - 45, 1280, 190, 24); ctx.fill()
     ctx.fillStyle = '#eef5ee'; ctx.font = '700 27px Arial'; ctx.fillText(`${categories[item.category]} · ${item.score}%`, 100, y)
-    ctx.fillStyle = '#c8ae67'; ctx.font = '600 21px Arial'; ctx.fillText(item.label, 100, y + 34)
-    ctx.fillStyle = '#b7c9c0'; ctx.font = '400 22px Arial'; wrapCanvasText(ctx, item.text, 100, y + 76, 1170, 31)
+    ctx.fillStyle = '#b7c9c0'; ctx.font = '400 22px Arial'; wrapCanvasText(ctx, item.text, 100, y + 50, 1170, 31)
     y += 220
   })
   canvas.toBlob(blob => {
