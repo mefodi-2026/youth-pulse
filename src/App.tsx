@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
 import { archiveSession, createSession, ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, saveQuestionBank, saveSessionQuestions, subscribeQuestionBank, subscribeSession, subscribeSessionArchives, updatePhase } from './lib/firebase'
-import { recommendation, scoreAnswers } from './lib/scoring'
+import { recommendations, scoreAnswers } from './lib/scoring'
+import { downloadWishPng, printWish } from './lib/export'
 import { StageDashboard } from './StageDashboard'
 import { MobileParticipantFlow } from './MobileParticipantFlow'
 import type { Answer, Participant, Question, Scores, Session, SessionArchive, SessionPhase } from './types'
@@ -297,24 +298,8 @@ function Completion({ participant, onPersonal }: { participant: Participant; onP
   return <MobileShell><div className="completion-mark">✦</div><p className="eyebrow">ГОТОВО</p><h1>{participant.nickname}, спасибо!</h1><p>Ты ответил(а) на все вопросы и помог(ла) увидеть общую картину. Твоя личная карточка уже готова — её видишь только ты.</p><Button onClick={onPersonal}>Получить личный результат</Button><div className="finish-wait"><span className="waiting-dot" /><small>После этого можешь посмотреть на общий экран и дождаться остальных участников.</small></div></MobileShell>
 }
 function PersonalResult({ participant, scores, onBack }: { participant: Participant; scores: Scores; onBack: () => void }) {
-  return <MobileShell><div className="personal-result" id="personal-result"><p className="eyebrow">ТВОЯ ЛИЧНАЯ КАРТОЧКА</p><h1>{participant.nickname}, спасибо</h1><p>Это не оценка тебя. Это бережная подсказка, где можно расти дальше.</p><div className="score-circle"><b>{scores.total}%</b><small>общий ориентир</small></div><div className="score-list">{Object.entries(scores.categories).map(([id, value]) => { const barValue = Math.max(0, Math.min(100, value)); return <div key={id}><span>{categories[id as keyof typeof categories]}</span><strong>{value}%</strong><i><em style={{ width: `${barValue}%` }} /></i></div> })}</div><Glass className="tip"><b>Небольшой шаг</b><p>{recommendation(scores)}</p></Glass></div><div className="download-actions"><Button secondary onClick={() => printResult()}>Сохранить PDF</Button><Button secondary onClick={() => downloadPoster(participant, scores)}>Скачать PNG</Button></div><Button onClick={onBack}>Вернуться к ожиданию</Button><small>Твоя карточка не показывается на общем экране.</small></MobileShell>
+  return <MobileShell><div className="personal-result" id="personal-result"><p className="eyebrow">ТВОЯ ЛИЧНАЯ КАРТОЧКА</p><h1>{participant.nickname}, спасибо</h1><p>Это не оценка тебя. Это бережная подсказка, где можно расти дальше.</p><div className="score-circle"><b>{scores.total}%</b><small>общий ориентир</small></div><div className="score-list">{Object.entries(scores.categories).map(([id, value]) => { const barValue = Math.max(0, Math.min(100, value)); return <div key={id}><span>{categories[id as keyof typeof categories]}</span><strong>{value}%</strong><i><em style={{ width: `${barValue}%` }} /></i></div> })}</div><div className="wish-stack">{recommendations(scores).map(item => <Glass className="tip wish-card" key={item.category}><b>{categories[item.category]} · {item.score}%</b><p>{item.text}</p></Glass>)}</div></div><div className="download-actions"><Button secondary onClick={() => printWish(participant, scores)}>Сохранить PDF</Button><Button secondary onClick={() => downloadWishPng(participant, scores)}>Скачать PNG</Button></div><Button onClick={onBack}>Вернуться к ожиданию</Button><small>Твоя карточка не показывается на общем экране.</small></MobileShell>
 }
-
-function printResult() { document.body.dataset.printPersonal = 'true'; window.print(); window.setTimeout(() => delete document.body.dataset.printPersonal, 500) }
-function downloadPoster(participant: Participant, scores: Scores) {
-  const canvas = document.createElement('canvas'); canvas.width = 1080; canvas.height = 1350
-  const ctx = canvas.getContext('2d'); if (!ctx) return
-  ctx.fillStyle = '#03120e'; ctx.fillRect(0, 0, canvas.width, canvas.height)
-  const glow = ctx.createRadialGradient(900, 80, 0, 900, 80, 600); glow.addColorStop(0, 'rgba(30, 119, 84, .85)'); glow.addColorStop(1, 'rgba(3, 18, 14, 0)'); ctx.fillStyle = glow; ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.fillStyle = '#32ce8b'; ctx.font = '700 30px Arial'; ctx.fillText('ДИАГНОСТИКА АТМОСФЕРЫ', 90, 110)
-  ctx.fillStyle = '#eef5ee'; ctx.font = '700 68px Arial'; ctx.fillText(`${participant.nickname}, твоя`, 90, 205); ctx.fillText('личная карточка', 90, 285)
-  ctx.beginPath(); ctx.arc(540, 510, 170, 0, Math.PI * 2); ctx.fillStyle = '#123d31'; ctx.fill(); ctx.strokeStyle = '#32ce8b'; ctx.lineWidth = 2; ctx.stroke()
-  ctx.fillStyle = '#eef5ee'; ctx.font = '700 100px Arial'; ctx.textAlign = 'center'; ctx.fillText(`${scores.total}%`, 540, 535); ctx.font = '400 25px Arial'; ctx.fillStyle = '#9aafa5'; ctx.fillText('общий ориентир', 540, 582); ctx.textAlign = 'left'
-  let y = 770; Object.entries(scores.categories).forEach(([id, value]) => { ctx.fillStyle = '#eef5ee'; ctx.font = '600 28px Arial'; ctx.fillText(categories[id as keyof typeof categories], 90, y); ctx.textAlign = 'right'; ctx.fillStyle = '#32ce8b'; ctx.fillText(`${value}%`, 990, y); ctx.textAlign = 'left'; ctx.fillStyle = '#0e362b'; ctx.fillRect(90, y + 22, 900, 14); ctx.fillStyle = '#32ce8b'; ctx.fillRect(90, y + 22, 900 * value / 100, 14); y += 115 })
-  ctx.fillStyle = '#c8ae67'; ctx.font = '700 27px Arial'; ctx.fillText('НЕБОЛЬШОЙ ШАГ', 90, 1230); ctx.fillStyle = '#9aafa5'; ctx.font = '400 25px Arial'; wrapCanvasText(ctx, recommendation(scores), 90, 1275, 900, 35)
-  const anchor = document.createElement('a'); anchor.download = `личная-карточка-${participant.nickname}.png`; anchor.href = canvas.toDataURL('image/png'); anchor.click()
-}
-function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number) { let line = ''; let top = y; text.split(' ').forEach(word => { const next = `${line}${word} `; if (ctx.measureText(next).width > maxWidth && line) { ctx.fillText(line, x, top); line = `${word} `; top += lineHeight } else line = next }); ctx.fillText(line, x, top) }
 
 function ResultRing({ value }: { value: number }) {
   const [draw, setDraw] = useState(false)
