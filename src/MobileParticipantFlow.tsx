@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { categories, questions } from './data/questions'
 import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeSession } from './lib/firebase'
-import { recommendation, scoreAnswers } from './lib/scoring'
+import { recommendations, scoreAnswers } from './lib/scoring'
+import { downloadWishPng, printWish } from './lib/export'
 import type { Answer, Participant, ResponseValue, Scores, Session } from './types'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
@@ -37,7 +38,7 @@ function ScoreRing({ score }: { score: number }) {
 function PersonalReport({ participant, scores, onClose }: { participant: Participant; scores: Scores; onClose: () => void }) {
   const [showBars, setShowBars] = useState(false)
   useEffect(() => { const timer = window.setTimeout(() => setShowBars(true), 180); return () => window.clearTimeout(timer) }, [])
-  return <Shell screen="report-screen"><p className="flow-label gold">ТВОЯ КАРТОЧКА</p><h1>{participant.nickname}</h1><div className="report-summary"><ScoreRing score={scores.total} /><p>Тёплая, живая атмосфера<br />с пространством<br />для роста</p></div><h2>Твои показатели</h2><div className="report-bars">{Object.entries(scores.categories).map(([id, value], index) => { const barValue = Math.max(0, Math.min(100, value)); return <div key={id} style={{ transitionDelay: `${index * 110}ms` }}><span>{categories[id as keyof typeof categories]}</span><b>{value}%</b><i><em style={{ width: showBars ? `${barValue}%` : '0%' }} /></i></div> })}</div><div className="wish-card"><small>Пожелание</small><p>{recommendation(scores)}</p></div><div className="report-downloads"><Action secondary onClick={() => window.print()}>Скачать PDF</Action><Action secondary onClick={() => createPoster(participant, scores)}>Скачать PNG</Action></div><button className="return-link" onClick={onClose}>Вернуться к ожиданию <span>→</span></button></Shell>
+  return <Shell screen="report-screen"><p className="flow-label gold">ТВОЯ КАРТОЧКА</p><h1>{participant.nickname}</h1><div className="report-summary"><ScoreRing score={scores.total} /><p>Тёплая, живая атмосфера<br />с пространством<br />для роста</p></div><h2>Твои показатели</h2><div className="report-bars">{Object.entries(scores.categories).map(([id, value], index) => { const barValue = Math.max(0, Math.min(100, value)); return <div key={id} style={{ transitionDelay: `${index * 110}ms` }}><span>{categories[id as keyof typeof categories]}</span><b>{value}%</b><i><em style={{ width: showBars ? `${barValue}%` : '0%' }} /></i></div> })}</div><div className="wish-stack">{recommendations(scores).map(item => <div className="wish-card" key={item.category}><small>{categories[item.category]} · {item.score}%</small><p>{item.text}</p></div>)}</div><div className="report-downloads"><Action secondary onClick={() => printWish(participant, scores)}>Скачать PDF</Action><Action secondary onClick={() => downloadWishPng(participant, scores)}>Скачать PNG</Action></div><button className="return-link" onClick={onClose}>Вернуться к ожиданию <span>→</span></button></Shell>
 }
 
 function createPoster(participant: Participant, scores: Scores) {
