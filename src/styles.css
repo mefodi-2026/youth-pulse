@@ -218,17 +218,20 @@
 }
  .wish-stack { display:grid; gap:12px; }
  .wish-stack .wish-card { margin:0; }
+ .wish-download-panel { margin:14px 0 10px; padding:14px 16px; border:1px solid rgba(103,203,161,.19); border-radius:18px; background:rgba(20,70,54,.52); }
+ .wish-download-panel > p { margin:0 0 12px; color:#b7c9c0; font-size:11px; line-height:1.4; }
+ .wish-download-panel .report-downloads, .wish-download-panel .download-actions { margin:0; }
  .wish-print { display:none; }
  @media print {
    body[data-print-wish='true'] > * { display:none !important; }
    body[data-print-wish='true'] #wish-print { display:block !important; width:100%; min-height:100vh; box-sizing:border-box; padding:36px 42px; color:#03120e; background:#fff; font-family:Arial,sans-serif; }
    body[data-print-wish='true'] #wish-print .eyebrow { color:#167b57 !important; font-size:13px; letter-spacing:.12em; }
    body[data-print-wish='true'] #wish-print h1 { margin:12px 0 8px; color:#03120e !important; font-size:34px; }
+   body[data-print-wish='true'] #wish-print .wish-print-intro { margin:0 0 6px; color:#18392e; font-size:14px; }
    body[data-print-wish='true'] #wish-print .wish-print-total { color:#806a2f; font-weight:700; }
    body[data-print-wish='true'] #wish-print-list { display:grid; }
    body[data-print-wish='true'] .wish-print-list { display:grid; gap:12px; }
    body[data-print-wish='true'] .wish-print-item { padding:14px 16px; border:1px solid #b9d9c9; border-radius:16px; background:#f3f8f5; break-inside:avoid; }
    body[data-print-wish='true'] .wish-print-item h2 { margin:0 0 5px; color:#03120e; font-size:16px; }
-   body[data-print-wish='true'] .wish-print-item small { color:#806a2f; font-weight:700; }
    body[data-print-wish='true'] .wish-print-item p { margin:7px 0 0; color:#18392e; font-size:13px; line-height:1.45; }
  }
