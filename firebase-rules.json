@@ -1,5 +1,25 @@
 {
   "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['uid', 'fullName', 'phone', 'email', 'workspaceId', 'status', 'createdAt', 'updatedAt']) && !newData.child('password').exists() && newData.child('uid').val() === $uid && newData.child('fullName').isString() && newData.child('phone').isString() && newData.child('email').isString() && newData.child('workspaceId').isString() && (!data.exists() ? (newData.child('status').val() === 'pending' || (newData.child('status').val() === 'active' && root.child('invites').child(newData.child('inviteCode').val()).child('status').val() === 'active' && (!root.child('invites').child(newData.child('inviteCode').val()).child('expiresAt').exists() || root.child('invites').child(newData.child('inviteCode').val()).child('expiresAt').val() > now))) : newData.child('status').val() === data.child('status').val())"
+      }
+    },
+    "workspaces": {
+      "$workspaceId": {
+        ".read": "auth != null && (data.child('ownerUid').val() === auth.uid || data.child('members').child(auth.uid).exists())",
+        ".write": "auth != null && (!data.exists() ? newData.child('ownerUid').val() === auth.uid : data.child('ownerUid').val() === auth.uid)",
+        ".validate": "newData.hasChildren(['id', 'name', 'city', 'ownerUid', 'createdAt', 'updatedAt']) && newData.child('id').val() === $workspaceId && newData.child('name').isString() && newData.child('city').isString()"
+      }
+    },
+    "invites": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": false
+      }
+    },
     "sessionArchives": {
       "$roomId": {
         ".read": "auth != null",
@@ -25,3 +45,4 @@
     }
   }
 }
+

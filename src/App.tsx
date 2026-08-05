@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
-import { archiveSession, createSession, ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, saveQuestionBank, saveSessionQuestions, subscribeQuestionBank, subscribeSession, subscribeSessionArchives, updatePhase } from './lib/firebase'
+import { archiveSession, createSession, ensureAuth, firebaseReady, joinSession, loginLeader, logoutLeader, markPersonalViewed, registerLeader, saveAnswer, saveQuestionBank, saveSessionQuestions, subscribeAuthUser, subscribeLeaderProfile, subscribeQuestionBank, subscribeSession, subscribeSessionArchives, subscribeWorkspace, updatePhase } from './lib/firebase'
 import { scoreAnswers } from './lib/scoring'
 import { downloadWishPng, printWish } from './lib/export'
 import { StageDashboard } from './StageDashboard'
 import { MobileParticipantFlow } from './MobileParticipantFlow'
-import type { Answer, Participant, Question, Scores, Session, SessionArchive, SessionPhase } from './types'
+import type { Answer, LeaderProfile, Participant, Question, Scores, Session, SessionArchive, SessionPhase, Workspace } from './types'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -51,11 +51,97 @@ function useRoom(room: string) {
 
 function App() {
   const path = useRoute()
-  if (path.endsWith('/host')) return <Host />
+  if (path.endsWith('/login')) return <AuthPage mode="login" />
+  if (path.endsWith('/register')) return <AuthPage mode="register" />
+  if (path.endsWith('/account')) return <LeaderRoute allowInactive>{profile => <AccountPage profile={profile} />}</LeaderRoute>
+  if (path.endsWith('/host')) return <LeaderRoute>{profile => <Host leader={profile} />}</LeaderRoute>
   if (path.endsWith('/join')) return <MobileParticipantFlow room={queryRoom()} />
   if (path.endsWith('/stage')) return <StageDashboard room={queryRoom()} />
   if (path.endsWith('/results')) return <Results room={queryRoom()} />
   return <Landing />
+}
+
+function AuthRedirect({ to }: { to: string }) {
+  useEffect(() => { go(to) }, [to])
+  return <main className="auth-page"><Glass className="auth-card"><p className="eyebrow">ПЕРЕХОД</p><h1>Открываем страницу…</h1></Glass></main>
+}
+
+function useLeaderProfile() {
+  const [userUid, setUserUid] = useState<string | null>(null)
+  const [profile, setProfile] = useState<LeaderProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let unsubscribeProfile: () => void = () => undefined
+    const unsubscribeAuth = subscribeAuthUser(user => {
+      unsubscribeProfile()
+      setError('')
+      if (!user || user.isAnonymous) {
+        setUserUid(null); setProfile(null); setLoading(false)
+        return
+      }
+      setUserUid(user.uid); setLoading(true)
+      unsubscribeProfile = subscribeLeaderProfile(user.uid, value => { setProfile(value); setLoading(false) }, reason => { setError(reason.message); setLoading(false) })
+    })
+    return () => { unsubscribeProfile(); unsubscribeAuth() }
+  }, [])
+  return { userUid, profile, loading, error }
+}
+
+function LeaderRoute({ children, allowInactive = false }: { children: (profile: LeaderProfile) => React.ReactNode; allowInactive?: boolean }) {
+  const leader = useLeaderProfile()
+  if (leader.loading) return <main className="auth-page"><Glass className="auth-card"><p className="eyebrow">ПРОВЕРКА ДОСТУПА</p><h1>Подключаем аккаунт…</h1></Glass></main>
+  if (!leader.userUid) return <AuthRedirect to="/login" />
+  if (!leader.profile) return <main className="auth-page"><Glass className="auth-card"><p className="eyebrow">АККАУНТ НЕ ГОТОВ</p><h1>Профиль ведущего не найден</h1><p>{leader.error || 'Завершите регистрацию или обратитесь к администратору.'}</p><Button onClick={() => void logoutLeader().then(() => go('/login'))}>Выйти</Button></Glass></main>
+  if (!allowInactive && leader.profile.status !== 'active') return <AuthRedirect to="/account" />
+  return <>{children(leader.profile)}</>
+}
+
+const authErrorText = (error: unknown) => {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+  if (code === 'auth/email-already-in-use') return 'Этот email уже зарегистрирован.'
+  if (code === 'auth/invalid-email') return 'Введите корректный email.'
+  if (code === 'auth/weak-password') return 'Пароль должен содержать минимум 6 символов.'
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') return 'Неверный email или пароль.'
+  if (code === 'auth/operation-not-allowed') return 'В Firebase нужно включить вход по Email/Password.'
+  return error instanceof Error ? error.message : 'Не удалось выполнить операцию. Попробуйте ещё раз.'
+}
+
+function AuthPage({ mode }: { mode: 'login' | 'register' }) {
+  const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [workspaceName, setWorkspaceName] = useState('')
+  const [city, setCity] = useState('')
+  const [inviteCode, setInviteCode] = useState(() => new URLSearchParams(window.location.search).get('invite') || '')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const register = mode === 'register'
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault(); setError('')
+    if (!firebaseReady) return setError('Firebase пока не настроен для входа.')
+    if (register && (!fullName.trim() || !phone.trim() || !workspaceName.trim() || !city.trim())) return setError('Заполните все поля профиля.')
+    if (password.length < 6) return setError('Пароль должен содержать минимум 6 символов.')
+    setBusy(true)
+    try {
+      if (register) {
+        const profile = await registerLeader({ fullName, phone, email, password, workspaceName, city, inviteCode })
+        go(profile.status === 'active' ? '/host' : '/account')
+      } else {
+        await loginLeader(email, password)
+        go('/host')
+      }
+    } catch (reason) { setError(authErrorText(reason)) } finally { setBusy(false) }
+  }
+  return <main className="auth-page"><div className="orb orb-a" /><div className="orb orb-b" /><Glass className="auth-card"><p className="eyebrow">ПАНЕЛЬ ВЕДУЩЕГО</p><h1>{register ? 'Создать аккаунт' : 'Войти в аккаунт'}</h1><p>{register ? 'Создайте отдельный аккаунт для вашей молодёжки. Пароль хранится только в Firebase Authentication.' : 'Войдите, чтобы управлять комнатами и вопросами своей молодёжки.'}</p><form className="auth-form" onSubmit={event => void submit(event)}>{register && <><label>Имя и фамилия<input value={fullName} onChange={event => setFullName(event.target.value)} autoComplete="name" /></label><label>Телефон<input value={phone} onChange={event => setPhone(event.target.value)} autoComplete="tel" inputMode="tel" /></label><label>Название молодёжки<input value={workspaceName} onChange={event => setWorkspaceName(event.target.value)} /></label><label>Город<input value={city} onChange={event => setCity(event.target.value)} autoComplete="address-level2" /></label></>}<label>Email<input value={email} onChange={event => setEmail(event.target.value)} autoComplete="email" inputMode="email" type="email" required /></label><label>Пароль<input value={password} onChange={event => setPassword(event.target.value)} autoComplete={register ? 'new-password' : 'current-password'} type="password" minLength={6} required /></label>{register && <label>Код приглашения <small>необязательно</small><input value={inviteCode} onChange={event => setInviteCode(event.target.value.toUpperCase())} /></label>}<Button disabled={busy}>{busy ? 'Подождите…' : register ? 'Зарегистрироваться' : 'Войти'}</Button></form>{error && <p className="auth-error">{error}</p>}<div className="auth-switch">{register ? <>Уже есть аккаунт? <button type="button" onClick={() => go('/login')}>Войти</button></> : <>Нет аккаунта? <button type="button" onClick={() => go('/register')}>Зарегистрироваться</button></>}</div></Glass></main>
+}
+
+function AccountPage({ profile }: { profile: LeaderProfile }) {
+  const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  useEffect(() => subscribeWorkspace(profile.workspaceId, setWorkspace), [profile.workspaceId])
+  const labels = { pending: 'Ожидает активации', active: 'Активен', paused: 'Приостановлен', revoked: 'Доступ отозван' }
+  return <main className="auth-page"><Glass className="auth-card account-card"><p className="eyebrow">АККАУНТ ВЕДУЩЕГО</p><h1>{profile.fullName}</h1><p className={`account-status ${profile.status}`}>{labels[profile.status]}</p><dl><div><dt>Молодёжка</dt><dd>{workspace?.name || profile.workspaceId}</dd></div>{workspace?.city && <div><dt>Город</dt><dd>{workspace.city}</dd></div>}<div><dt>Email</dt><dd>{profile.email}</dd></div><div><dt>Телефон</dt><dd>{profile.phone}</dd></div></dl>{profile.status === 'pending' && <p>Заявка сохранена. Доступ к панели появится после активации или регистрации по действующей invite-ссылке.</p>}{profile.status === 'paused' && <p>Доступ к панели временно приостановлен.</p>}{profile.status === 'revoked' && <p>Доступ к панели отозван. Обратитесь к администратору.</p>}{profile.status === 'active' && <Button onClick={() => go('/host')}>Открыть панель ведущего</Button>}<Button secondary onClick={() => void logoutLeader().then(() => go('/login'))}>Выйти</Button></Glass></main>
 }
 
 function Landing() {
@@ -63,7 +149,7 @@ function Landing() {
 }
 
 type HostTab = 'overview' | 'rooms' | 'questions' | 'export' | 'settings'
-function Host() {
+function Host({ leader }: { leader: LeaderProfile }) {
   const [room, setRoom] = useState(() => localStorage.getItem('atmosphere-host-room') || '')
   const [session, setSession] = useRoom(room)
   const [qr, setQr] = useState('')
@@ -129,7 +215,7 @@ function Host() {
     setBusy(true)
     const newRoom = makeRoom()
     try {
-      if (firebaseReady) { const user = await ensureAuth(); if (!user) throw new Error('Не удалось войти в Firebase'); await createSession(newRoom, user.uid, questionBank) }
+      if (firebaseReady) { const user = await ensureAuth(); if (!user) throw new Error('Не удалось войти в Firebase'); await createSession(newRoom, user.uid, questionBank, leader.workspaceId) }
       else setDemo({ roomId: newRoom, createdAt: Date.now(), phase: 'lobby', maxParticipants: 30, hostUid: 'demo-host', questions: questionBank, participants: {} })
       localStorage.setItem('atmosphere-host-room', newRoom); setRoom(newRoom); setTab('overview')
     } finally { setBusy(false) }
@@ -165,70 +251,7 @@ function Host() {
   const showResults = () => {
     window.open(hostUrl(`/results?room=${room}`), 'atmosphere-results')
     void changePhase('resultsIntro')
-    window.setTimeout(() => { void changePhase('resultsReal') }, 20000)
-  }
-  const resetQuestionDraft = (category: Question['category'] = 'communication') => {
-    setEditingQuestionId(null)
-    setQuestionDraft({ category, title: '', options: ['', '', '', ''] })
-  }
-  const editQuestion = (question: Question) => {
-    setEditingQuestionId(question.id)
-    setQuestionDraft({ category: question.category, title: question.title, options: [question.options.A, question.options.B, question.options.C, question.options.D] })
-    setTab('questions')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  const persistQuestionBank = async (nextBank: Question[]) => {
-    setQuestionError('')
-    if (firebaseReady) {
-      let globalError: unknown = null
-      try {
-        await saveQuestionBank(nextBank)
-        localStorage.removeItem('atmosphere-question-bank')
-      } catch (error) {
-        globalError = error
-        localStorage.setItem('atmosphere-question-bank', JSON.stringify(nextBank))
-      }
-      if (session && session.phase !== 'closed') {
-        try {
-          await saveSessionQuestions(room, nextBank)
-        } catch (error) {
-          if (!globalError) globalError = error
-        }
-      }
-      if (globalError) {
-        setQuestionError(`Вопрос сохранён локально${session && session.phase !== 'closed' ? ' и в текущую комнату' : ''}. Firebase пока недоступен: ${globalError instanceof Error ? globalError.message : 'проверьте Rules'}`)
-      }
-    } else localStorage.setItem('atmosphere-question-bank', JSON.stringify(nextBank))
-    setQuestionBank(nextBank)
-  }
-  const saveQuestion = async () => {
-    if (!questionDraft.title.trim() || questionDraft.options.some(option => !option.trim())) return
-    setQuestionSaving(true)
-    const nextQuestion: Question = { id: editingQuestionId || `${questionDraft.category}-${Date.now()}`, category: questionDraft.category, title: questionDraft.title.trim(), options: { A: questionDraft.options[0].trim(), B: questionDraft.options[1].trim(), C: questionDraft.options[2].trim(), D: questionDraft.options[3].trim() } }
-    const nextBank = editingQuestionId ? questionBank.map(question => question.id === editingQuestionId ? nextQuestion : question) : [...questionBank, nextQuestion]
-    try {
-      await persistQuestionBank(nextBank)
-      resetQuestionDraft()
-    } catch (error) {
-      setQuestionError(error instanceof Error ? error.message : 'Не удалось сохранить вопрос')
-    } finally { setQuestionSaving(false) }
-  }
-  const deleteQuestion = async (question: Question) => {
-    if (!window.confirm(`Удалить вопрос «${question.title}»?`)) return
-    setQuestionSaving(true)
-    try {
-      await persistQuestionBank(questionBank.filter(item => item.id !== question.id))
-      if (editingQuestionId === question.id) resetQuestionDraft()
-    } catch (error) {
-      setQuestionError(error instanceof Error ? error.message : 'Не удалось удалить вопрос')
-    } finally { setQuestionSaving(false) }
-  }
-  const warning = !firebaseReady ? 'Для работы с несколькими устройствами подключите Firebase: демо-режим синхронизируется только в этом браузере.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Этот QR ведёт на адрес компьютера. После публикации сайта здесь будет общий интернет-адрес.' : ''
-  if (!session) return <main className="host-page"><header className="topbar"><div><p className="eyebrow">ВЕДУЩИЙ · ЖИВАЯ СЕССИЯ</p><h2>Диагностика атмосферы молодёжи</h2></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><Glass className="start-panel"><h1>Готовы начать?</h1><p>Создайте комнату, покажите QR-код участникам и начните, когда все подключатся.</p><Button disabled={busy} onClick={create}>{busy ? 'Создаём…' : 'Создать сессию'}</Button></Glass></main>
-  return <main className="host-shell"><aside className="host-menu"><div className="brand"><span>✦</span><b>Атмосфера</b><small>панель ведущего</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => setTab(id)}><span>{icon}</span>{label}</button>)}</nav><div className="menu-room"><small>АКТИВНАЯ КОМНАТА</small><b>{room}</b><span>{participants.length} из {session.maxParticipants} участников</span></div></aside><section className="host-content"><header className="host-header"><div><p className="eyebrow">СЕССИЯ · {room}</p><h1>{tab === 'overview' ? 'Управление сессией' : menu.find(item => item[0] === tab)?.[1]}</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
-    {tab === 'overview' && <><div className="metrics"><Metric label="Подключились" value={participants.length} note={`из ${session.maxParticipants} участников`} /><Metric label="Сейчас отвечают" value={answering} note="в своём темпе" /><Metric label="Завершили" value={finished} note={allFinished ? 'все готовы' : 'ждём завершения'} /></div><div className="overview-grid"><Glass className="control-panel"><p className="eyebrow">ТЕКУЩАЯ ФАЗА</p><h2>{phaseText(session.phase)}</h2><p>{session.phase === 'lobby' ? 'Покажите QR-код. После запуска у вас автоматически откроется отдельный экран с живым прогрессом.' : allFinished ? 'Все участники завершили ответы. Можно открыть общую визуализацию на большом экране.' : 'Экран прогресса обновляется в реальном времени — без личных ответов и имён.'}</p><div className="control-actions">{session.phase === 'lobby' && <Button disabled={!participants.length} onClick={start}>Запустить диагностику</Button>}{session.phase !== 'lobby' && <Button secondary onClick={() => window.open(hostUrl(`/stage?room=${room}`), 'atmosphere-stage')}>Открыть экран прогресса</Button>}<Button onClick={showResults} disabled={!allFinished || session.phase === 'resultsIntro' || session.phase === 'resultsReal'}>Показать общие результаты</Button></div><div className="results-lock"><span className={allFinished ? 'ready' : ''}>{allFinished ? '✓' : '⌕'}</span><div><b>{allFinished ? 'Общий результат готов' : 'Общий результат пока закрыт'}</b><small>{allFinished ? 'Нажмите кнопку выше, чтобы начать показ.' : `Завершили ${finished} из ${participants.length || '—'} участников.`}</small></div></div><div className="phase-track">{(['lobby', 'live', 'resultsIntro', 'resultsReal'] as SessionPhase[]).map(item => <span className={session.phase === item ? 'active' : ''} key={item}>{phaseText(item)}</span>)}</div></Glass><Glass className="qr-panel"><p className="eyebrow">ПОДКЛЮЧЕНИЕ УЧАСТНИКОВ</p>{qr && <img src={qr} alt="QR-код для подключения" className="qr" />}<code>{joinUrl}</code><Button secondary onClick={() => navigator.clipboard.writeText(joinUrl)}>Скопировать ссылку</Button>{warning && <p className="connection-warning">{warning}</p>}</Glass></div></>}
-    {tab === 'rooms' && <div className="stack"><Glass className="room-row"><div><p className="eyebrow">ТЕКУЩАЯ</p><h2>{room}</h2><p>{phaseText(session.phase)} · {participants.length} подключились · {finished} завершили</p></div><Button onClick={() => void create()}>Создать новую комнату</Button></Glass><div className="archive-list">{Object.values(archives).sort((a, b) => b.archivedAt - a.archivedAt).map(archived => <Glass className="archive-card" key={archived.roomId}><div><p className="eyebrow">АРХИВ · {new Date(archived.archivedAt).toLocaleDateString('ru-RU')}</p><h3>{archived.roomId}</h3><p>{Object.keys(archived.participants).length} участников · {Object.values(archived.participants).filter(person => person.status === 'finished').length} завершили</p></div><Button secondary onClick={() => exportCsv(archived)}>Скачать CSV</Button></Glass>)}</div>{!Object.keys(archives).length && <Glass className="empty-state"><h3>История комнат пока пуста</h3><p>После завершения комнаты она появится здесь вместе с ответами участников.</p></Glass>}</div>}
-    {tab === 'questions' && <div className="question-admin"><Glass className="question-editor"><p className="eyebrow">{editingQuestionId ? 'РЕДАКТИРОВАНИЕ' : 'НОВЫЙ ВОПРОС'}</p><h3>{editingQuestionId ? 'Изменить вопрос' : 'Добавить вопрос в банк'}</h3><select value={questionDraft.category} onChange={event => setQuestionDraft(prev => ({ ...prev, category: event.target.value as Question['category'] }))}>{Object.entries(categories).map(([id, title]) => <option value={id} key={id}>{title}</option>)}</select><input value={questionDraft.title} onChange={event => setQuestionDraft(prev => ({ ...prev, title: event.target.value }))} placeholder="Текст вопроса" />{questionDraft.options.map((option, index) => <input key={index} value={option} onChange={event => setQuestionDraft(prev => ({ ...prev, options: prev.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} placeholder={`Вариант ${String.fromCharCode(65 + index)}`} />)}<div className="question-editor-actions"><Button disabled={questionSaving} onClick={() => void saveQuestion()}>{questionSaving ? 'Сохраняем…' : editingQuestionId ? 'Сохранить изменения' : 'Добавить вопрос'}</Button>{editingQuestionId && <Button secondary onClick={() => resetQuestionDraft()}>Отмена</Button>}</div>{questionError && <p className="connection-warning">{questionError}</p>}</Glass><div className="question-admin-list">{Object.entries(categories).map(([id, title]) => { const categoryId = id as Question['category']; const categoryQuestions = questionBank.filter(question => question.category === categoryId); return <Glass key={id} className="question-group"><div className="question-group-header"><div><p className="eyebrow">{categoryQuestions.length} ВОПРОСОВ</p><h3>{title}</h3></div><Button secondary onClick={() => resetQuestionDraft(categoryId)}>Добавить</Button></div>{categoryQuestions.map((question, index) => <div className="question-row" key={question.id}><span>{index + 1}</span><div className="question-row-content"><b>{question.title}</b><small>{question.options.A} · {question.options.B} · {question.options.C} · {question.options.D}</small></div><div className="question-row-actions"><button type="button" onClick={() => editQuestion(question)}>Редактировать</button><button type="button" onClick={() => void deleteQuestion(question)}>Удалить</button></div></div>)}</Glass> })}</div></div>}
+    window.setTimeout(() => { void ch…2490 tokens truncated…options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} placeholder={`Вариант ${String.fromCharCode(65 + index)}`} />)}<div className="question-editor-actions"><Button disabled={questionSaving} onClick={() => void saveQuestion()}>{questionSaving ? 'Сохраняем…' : editingQuestionId ? 'Сохранить изменения' : 'Добавить вопрос'}</Button>{editingQuestionId && <Button secondary onClick={() => resetQuestionDraft()}>Отмена</Button>}</div>{questionError && <p className="connection-warning">{questionError}</p>}</Glass><div className="question-admin-list">{Object.entries(categories).map(([id, title]) => { const categoryId = id as Question['category']; const categoryQuestions = questionBank.filter(question => question.category === categoryId); return <Glass key={id} className="question-group"><div className="question-group-header"><div><p className="eyebrow">{categoryQuestions.length} ВОПРОСОВ</p><h3>{title}</h3></div><Button secondary onClick={() => resetQuestionDraft(categoryId)}>Добавить</Button></div>{categoryQuestions.map((question, index) => <div className="question-row" key={question.id}><span>{index + 1}</span><div className="question-row-content"><b>{question.title}</b><small>{question.options.A} · {question.options.B} · {question.options.C} · {question.options.D}</small></div><div className="question-row-actions"><button type="button" onClick={() => editQuestion(question)}>Редактировать</button><button type="button" onClick={() => void deleteQuestion(question)}>Удалить</button></div></div>)}</Glass> })}</div></div>}
     {tab === 'export' && <div className="stack"><Glass className="export-panel"><p className="eyebrow">ВЫГРУЗКА ДАННЫХ</p><h2>Результаты сессии {room}</h2><p>Файл открывается в Excel: никнейм, статус, полный текст каждого вопроса и выбранный текст ответа. Буквы A/B/C/D в выгрузку не попадут.</p><Button onClick={() => exportCsv(session)}>Скачать CSV</Button></Glass></div>}
     {tab === 'settings' && <div className="stack"><Glass className="settings-panel"><p className="eyebrow">ПОДКЛЮЧЕНИЕ ПО QR</p><h2>Адрес для участников</h2><p>После публикации укажите здесь адрес сайта — он попадёт в QR-код. До публикации можно использовать адрес компьютера в одной Wi‑Fi сети.</p><input value={publicOrigin} onChange={event => setPublicOrigin(event.target.value)} placeholder="https://ваш-сайт.web.app" /><small>Firebase: {firebaseReady ? 'подключён' : 'не настроен'}</small></Glass><Glass className="settings-panel"><p className="eyebrow">СЕССИЯ</p><h2>Завершение</h2><p>После завершения к этой комнате больше нельзя будет присоединиться.</p><Button secondary onClick={() => void changePhase('closed')}>Завершить сессию</Button>{actionError && <p className="connection-warning">{actionError}</p>}</Glass></div>}
   </section></main>
@@ -337,3 +360,4 @@ function Results({ room }: { room: string }) {
 }
 
 export default App
+
