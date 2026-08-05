@@ -251,7 +251,70 @@ function Host({ leader }: { leader: LeaderProfile }) {
   const showResults = () => {
     window.open(hostUrl(`/results?room=${room}`), 'atmosphere-results')
     void changePhase('resultsIntro')
-    window.setTimeout(() => { void ch…2490 tokens truncated…options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} placeholder={`Вариант ${String.fromCharCode(65 + index)}`} />)}<div className="question-editor-actions"><Button disabled={questionSaving} onClick={() => void saveQuestion()}>{questionSaving ? 'Сохраняем…' : editingQuestionId ? 'Сохранить изменения' : 'Добавить вопрос'}</Button>{editingQuestionId && <Button secondary onClick={() => resetQuestionDraft()}>Отмена</Button>}</div>{questionError && <p className="connection-warning">{questionError}</p>}</Glass><div className="question-admin-list">{Object.entries(categories).map(([id, title]) => { const categoryId = id as Question['category']; const categoryQuestions = questionBank.filter(question => question.category === categoryId); return <Glass key={id} className="question-group"><div className="question-group-header"><div><p className="eyebrow">{categoryQuestions.length} ВОПРОСОВ</p><h3>{title}</h3></div><Button secondary onClick={() => resetQuestionDraft(categoryId)}>Добавить</Button></div>{categoryQuestions.map((question, index) => <div className="question-row" key={question.id}><span>{index + 1}</span><div className="question-row-content"><b>{question.title}</b><small>{question.options.A} · {question.options.B} · {question.options.C} · {question.options.D}</small></div><div className="question-row-actions"><button type="button" onClick={() => editQuestion(question)}>Редактировать</button><button type="button" onClick={() => void deleteQuestion(question)}>Удалить</button></div></div>)}</Glass> })}</div></div>}
+    window.setTimeout(() => { void changePhase('resultsReal') }, 20000)
+  }
+  const resetQuestionDraft = (category: Question['category'] = 'communication') => {
+    setEditingQuestionId(null)
+    setQuestionDraft({ category, title: '', options: ['', '', '', ''] })
+  }
+  const editQuestion = (question: Question) => {
+    setEditingQuestionId(question.id)
+    setQuestionDraft({ category: question.category, title: question.title, options: [question.options.A, question.options.B, question.options.C, question.options.D] })
+    setTab('questions')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const persistQuestionBank = async (nextBank: Question[]) => {
+    setQuestionError('')
+    if (firebaseReady) {
+      let globalError: unknown = null
+      try {
+        await saveQuestionBank(nextBank)
+        localStorage.removeItem('atmosphere-question-bank')
+      } catch (error) {
+        globalError = error
+        localStorage.setItem('atmosphere-question-bank', JSON.stringify(nextBank))
+      }
+      if (session && session.phase !== 'closed') {
+        try {
+          await saveSessionQuestions(room, nextBank)
+        } catch (error) {
+          if (!globalError) globalError = error
+        }
+      }
+      if (globalError) {
+        setQuestionError(`Вопрос сохранён локально${session && session.phase !== 'closed' ? ' и в текущую комнату' : ''}. Firebase пока недоступен: ${globalError instanceof Error ? globalError.message : 'проверьте Rules'}`)
+      }
+    } else localStorage.setItem('atmosphere-question-bank', JSON.stringify(nextBank))
+    setQuestionBank(nextBank)
+  }
+  const saveQuestion = async () => {
+    if (!questionDraft.title.trim() || questionDraft.options.some(option => !option.trim())) return
+    setQuestionSaving(true)
+    const nextQuestion: Question = { id: editingQuestionId || `${questionDraft.category}-${Date.now()}`, category: questionDraft.category, title: questionDraft.title.trim(), options: { A: questionDraft.options[0].trim(), B: questionDraft.options[1].trim(), C: questionDraft.options[2].trim(), D: questionDraft.options[3].trim() } }
+    const nextBank = editingQuestionId ? questionBank.map(question => question.id === editingQuestionId ? nextQuestion : question) : [...questionBank, nextQuestion]
+    try {
+      await persistQuestionBank(nextBank)
+      resetQuestionDraft()
+    } catch (error) {
+      setQuestionError(error instanceof Error ? error.message : 'Не удалось сохранить вопрос')
+    } finally { setQuestionSaving(false) }
+  }
+  const deleteQuestion = async (question: Question) => {
+    if (!window.confirm(`Удалить вопрос «${question.title}»?`)) return
+    setQuestionSaving(true)
+    try {
+      await persistQuestionBank(questionBank.filter(item => item.id !== question.id))
+      if (editingQuestionId === question.id) resetQuestionDraft()
+    } catch (error) {
+      setQuestionError(error instanceof Error ? error.message : 'Не удалось удалить вопрос')
+    } finally { setQuestionSaving(false) }
+  }
+  const warning = !firebaseReady ? 'Для работы с несколькими устройствами подключите Firebase: демо-режим синхронизируется только в этом браузере.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Этот QR ведёт на адрес компьютера. После публикации сайта здесь будет общий интернет-адрес.' : ''
+  if (!session) return <main className="host-page"><header className="topbar"><div><p className="eyebrow">ВЕДУЩИЙ · ЖИВАЯ СЕССИЯ</p><h2>Диагностика атмосферы молодёжи</h2></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><Glass className="start-panel"><h1>Готовы начать?</h1><p>Создайте комнату, покажите QR-код участникам и начните, когда все подключатся.</p><Button disabled={busy} onClick={create}>{busy ? 'Создаём…' : 'Создать сессию'}</Button></Glass></main>
+  return <main className="host-shell"><aside className="host-menu"><div className="brand"><span>✦</span><b>Атмосфера</b><small>панель ведущего</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => setTab(id)}><span>{icon}</span>{label}</button>)}</nav><div className="menu-room"><small>АКТИВНАЯ КОМНАТА</small><b>{room}</b><span>{participants.length} из {session.maxParticipants} участников</span></div></aside><section className="host-content"><header className="host-header"><div><p className="eyebrow">СЕССИЯ · {room}</p><h1>{tab === 'overview' ? 'Управление сессией' : menu.find(item => item[0] === tab)?.[1]}</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
+    {tab === 'overview' && <><div className="metrics"><Metric label="Подключились" value={participants.length} note={`из ${session.maxParticipants} участников`} /><Metric label="Сейчас отвечают" value={answering} note="в своём темпе" /><Metric label="Завершили" value={finished} note={allFinished ? 'все готовы' : 'ждём завершения'} /></div><div className="overview-grid"><Glass className="control-panel"><p className="eyebrow">ТЕКУЩАЯ ФАЗА</p><h2>{phaseText(session.phase)}</h2><p>{session.phase === 'lobby' ? 'Покажите QR-код. После запуска у вас автоматически откроется отдельный экран с живым прогрессом.' : allFinished ? 'Все участники завершили ответы. Можно открыть общую визуализацию на большом экране.' : 'Экран прогресса обновляется в реальном времени — без личных ответов и имён.'}</p><div className="control-actions">{session.phase === 'lobby' && <Button disabled={!participants.length} onClick={start}>Запустить диагностику</Button>}{session.phase !== 'lobby' && <Button secondary onClick={() => window.open(hostUrl(`/stage?room=${room}`), 'atmosphere-stage')}>Открыть экран прогресса</Button>}<Button onClick={showResults} disabled={!allFinished || session.phase === 'resultsIntro' || session.phase === 'resultsReal'}>Показать общие результаты</Button></div><div className="results-lock"><span className={allFinished ? 'ready' : ''}>{allFinished ? '✓' : '⌕'}</span><div><b>{allFinished ? 'Общий результат готов' : 'Общий результат пока закрыт'}</b><small>{allFinished ? 'Нажмите кнопку выше, чтобы начать показ.' : `Завершили ${finished} из ${participants.length || '—'} участников.`}</small></div></div><div className="phase-track">{(['lobby', 'live', 'resultsIntro', 'resultsReal'] as SessionPhase[]).map(item => <span className={session.phase === item ? 'active' : ''} key={item}>{phaseText(item)}</span>)}</div></Glass><Glass className="qr-panel"><p className="eyebrow">ПОДКЛЮЧЕНИЕ УЧАСТНИКОВ</p>{qr && <img src={qr} alt="QR-код для подключения" className="qr" />}<code>{joinUrl}</code><Button secondary onClick={() => navigator.clipboard.writeText(joinUrl)}>Скопировать ссылку</Button>{warning && <p className="connection-warning">{warning}</p>}</Glass></div></>}
+    {tab === 'rooms' && <div className="stack"><Glass className="room-row"><div><p className="eyebrow">ТЕКУЩАЯ</p><h2>{room}</h2><p>{phaseText(session.phase)} · {participants.length} подключились · {finished} завершили</p></div><Button onClick={() => void create()}>Создать новую комнату</Button></Glass><div className="archive-list">{Object.values(archives).sort((a, b) => b.archivedAt - a.archivedAt).map(archived => <Glass className="archive-card" key={archived.roomId}><div><p className="eyebrow">АРХИВ · {new Date(archived.archivedAt).toLocaleDateString('ru-RU')}</p><h3>{archived.roomId}</h3><p>{Object.keys(archived.participants).length} участников · {Object.values(archived.participants).filter(person => person.status === 'finished').length} завершили</p></div><Button secondary onClick={() => exportCsv(archived)}>Скачать CSV</Button></Glass>)}</div>{!Object.keys(archives).length && <Glass className="empty-state"><h3>История комнат пока пуста</h3><p>После завершения комнаты она появится здесь вместе с ответами участников.</p></Glass>}</div>}
+    {tab === 'questions' && <div className="question-admin"><Glass className="question-editor"><p className="eyebrow">{editingQuestionId ? 'РЕДАКТИРОВАНИЕ' : 'НОВЫЙ ВОПРОС'}</p><h3>{editingQuestionId ? 'Изменить вопрос' : 'Добавить вопрос в банк'}</h3><select value={questionDraft.category} onChange={event => setQuestionDraft(prev => ({ ...prev, category: event.target.value as Question['category'] }))}>{Object.entries(categories).map(([id, title]) => <option value={id} key={id}>{title}</option>)}</select><input value={questionDraft.title} onChange={event => setQuestionDraft(prev => ({ ...prev, title: event.target.value }))} placeholder="Текст вопроса" />{questionDraft.options.map((option, index) => <input key={index} value={option} onChange={event => setQuestionDraft(prev => ({ ...prev, options: prev.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} placeholder={`Вариант ${String.fromCharCode(65 + index)}`} />)}<div className="question-editor-actions"><Button disabled={questionSaving} onClick={() => void saveQuestion()}>{questionSaving ? 'Сохраняем…' : editingQuestionId ? 'Сохранить изменения' : 'Добавить вопрос'}</Button>{editingQuestionId && <Button secondary onClick={() => resetQuestionDraft()}>Отмена</Button>}</div>{questionError && <p className="connection-warning">{questionError}</p>}</Glass><div className="question-admin-list">{Object.entries(categories).map(([id, title]) => { const categoryId = id as Question['category']; const categoryQuestions = questionBank.filter(question => question.category === categoryId); return <Glass key={id} className="question-group"><div className="question-group-header"><div><p className="eyebrow">{categoryQuestions.length} ВОПРОСОВ</p><h3>{title}</h3></div><Button secondary onClick={() => resetQuestionDraft(categoryId)}>Добавить</Button></div>{categoryQuestions.map((question, index) => <div className="question-row" key={question.id}><span>{index + 1}</span><div className="question-row-content"><b>{question.title}</b><small>{question.options.A} · {question.options.B} · {question.options.C} · {question.options.D}</small></div><div className="question-row-actions"><button type="button" onClick={() => editQuestion(question)}>Редактировать</button><button type="button" onClick={() => void deleteQuestion(question)}>Удалить</button></div></div>)}</Glass> })}</div></div>}
     {tab === 'export' && <div className="stack"><Glass className="export-panel"><p className="eyebrow">ВЫГРУЗКА ДАННЫХ</p><h2>Результаты сессии {room}</h2><p>Файл открывается в Excel: никнейм, статус, полный текст каждого вопроса и выбранный текст ответа. Буквы A/B/C/D в выгрузку не попадут.</p><Button onClick={() => exportCsv(session)}>Скачать CSV</Button></Glass></div>}
     {tab === 'settings' && <div className="stack"><Glass className="settings-panel"><p className="eyebrow">ПОДКЛЮЧЕНИЕ ПО QR</p><h2>Адрес для участников</h2><p>После публикации укажите здесь адрес сайта — он попадёт в QR-код. До публикации можно использовать адрес компьютера в одной Wi‑Fi сети.</p><input value={publicOrigin} onChange={event => setPublicOrigin(event.target.value)} placeholder="https://ваш-сайт.web.app" /><small>Firebase: {firebaseReady ? 'подключён' : 'не настроен'}</small></Glass><Glass className="settings-panel"><p className="eyebrow">СЕССИЯ</p><h2>Завершение</h2><p>После завершения к этой комнате больше нельзя будет присоединиться.</p><Button secondary onClick={() => void changePhase('closed')}>Завершить сессию</Button>{actionError && <p className="connection-warning">{actionError}</p>}</Glass></div>}
   </section></main>
@@ -360,4 +423,3 @@ function Results({ room }: { room: string }) {
 }
 
 export default App
-
