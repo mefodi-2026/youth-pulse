@@ -24,7 +24,7 @@ function useParticipantSession(room: string) {
   return [session, setSession] as const
 }
 
-const Shell = ({ children, screen = '' }: { children: React.ReactNode; screen?: string }) => <main className="mobile-flow"><div className={`phone-screen ${screen}`}>{children}</div></main>
+const Shell = ({ children, screen = '' }: { children: React.ReactNode; screen?: string }) => <main className="mobile-wrap mobile-flow"><div className={`mobile-card phone-screen ${screen}`}>{children}</div></main>
 const Action = ({ children, onClick, disabled = false, secondary = false }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; secondary?: boolean }) => <button className={secondary ? 'mobile-action secondary' : 'mobile-action'} disabled={disabled} onClick={onClick}>{children}</button>
 
 function ScoreRing({ score }: { score: number }) {
@@ -93,5 +93,5 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   if (participant.status === 'finished') return <PersonalReport participant={participant} scores={scoreAnswers(participant.answers || {}, activeQuestions)} onClose={() => setShowReport(false)} />
   const question = activeQuestions[participant.currentQuestionIndex]
   const done = Math.round(participant.currentQuestionIndex / activeQuestions.length * 100)
-  return <Shell screen="question-screen"><div className="question-top"><div><span>ВОПРОС {participant.currentQuestionIndex + 1} / {activeQuestions.length}</span><small>{categories[question.category]}</small></div><b>{done}%</b></div><div className="question-progress"><i style={{ width: `${done}%` }} /></div><h1>{question.title}</h1><p>Выбери вариант, который ближе всего к тебе.</p><div className="answer-options">{(['A', 'B', 'C', 'D'] as Answer[]).map(letter => <button disabled={saving} key={letter} onClick={() => void answer(letter)}><b>{letter}</b><span>{question.options[letter]}</span></button>)}</div><div className="question-footer"><Action secondary disabled={saving} onClick={() => void answer('SKIP')}>Пропустить вопрос</Action><small>Но это может стоить вам <b>баллов.</b></small></div></Shell>
+  return <Shell screen="question-screen"><div className="question-top"><div><span>ВОПРОС {participant.currentQuestionIndex + 1} / {activeQuestions.length}</span><small>{categories[question.category]}</small></div><b>{done}%</b></div><div className="question-progress"><i style={{ width: `${done}%` }} /></div><h1 className="question">{question.title}</h1><p>Выбери вариант, который ближе всего к тебе.</p><div className="options answer-options">{(['A', 'B', 'C', 'D'] as Answer[]).map(letter => <button className="option" disabled={saving} key={letter} onClick={() => void answer(letter)}><b>{letter}</b><span>{question.options[letter]}</span></button>)}</div><div className="question-footer"><Action secondary disabled={saving} onClick={() => void answer('SKIP')}>Пропустить вопрос</Action><small>Но это может стоить вам <b>баллов.</b></small></div></Shell>
 }
