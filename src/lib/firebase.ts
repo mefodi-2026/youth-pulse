@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { createUserWithEmailAndPassword, deleteUser, getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
+import { browserLocalPersistence, createUserWithEmailAndPassword, deleteUser, getAuth, onAuthStateChanged, setPersistence, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
 import { get, getDatabase, onValue, push, ref, runTransaction, set, update } from 'firebase/database'
 import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
@@ -27,6 +27,7 @@ const app = firebaseReady ? initializeApp(config) : null
 const auth = app ? getAuth(app) : null
 const db = app ? getDatabase(app) : null
 let pendingAnonymousSignIn: Promise<NonNullable<typeof auth>['currentUser']> | null = null
+const authPersistence = auth ? setPersistence(auth, browserLocalPersistence) : Promise.resolve()
 
 export interface RegisterLeaderInput { fullName: string; phone: string; email: string; password: string; workspaceName: string; city: string; inviteCode?: string }
 
@@ -118,7 +119,17 @@ const inviteStatus = async (inviteCode?: string): Promise<UserStatus> => {
 
 export const subscribeAuthUser = (callback: (user: User | null) => void) => {
   if (!auth) { callback(null); return () => undefined }
-  return onAuthStateChanged(auth, callback)
+  let active = true
+  let unsubscribe: () => void = () => undefined
+  void authPersistence.then(() => {
+    if (active) unsubscribe = onAuthStateChanged(auth, callback)
+  }).catch(() => { if (active) callback(null) })
+  return () => { active = false; unsubscribe() }
+}
+
+export const waitForAuthPersistence = async () => {
+  await authPersistence
+  return auth?.currentUser || null
 }
 
 export const subscribeLeaderProfile = (uid: string, callback: (value: LeaderProfile | null) => void, onError?: (error: Error) => void) => {
@@ -143,6 +154,7 @@ export const subscribeProduct = (productId: string, callback: (value: ProductCon
 
 export const registerLeader = async (input: RegisterLeaderInput) => {
   const services = requireFirebase()
+  await authPersistence
   const credential = await createUserWithEmailAndPassword(services.auth, input.email.trim(), input.password)
   const { user } = credential
   const now = Date.now()
@@ -189,6 +201,7 @@ export const registerLeader = async (input: RegisterLeaderInput) => {
 
 export const loginLeader = async (email: string, password: string) => {
   const services = requireFirebase()
+  await authPersistence
   return signInWithEmailAndPassword(services.auth, email.trim(), password)
 }
 
@@ -199,6 +212,7 @@ export const logoutLeader = async () => {
 
 export const ensureAuth = async () => {
   if (!auth) return null
+  await authPersistence
   if (auth.currentUser) return auth.currentUser
   if (!pendingAnonymousSignIn) pendingAnonymousSignIn = signInAnonymously(auth).then(result => result.user).finally(() => { pendingAnonymousSignIn = null })
   return pendingAnonymousSignIn
@@ -260,12 +274,15 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
 }
 
 export const joinSession = async (roomId: string, participant: Participant) => {
-  if (!db) throw new Error('Firebase не настроен')
-  const sessionSnapshot = await get(ref(db, `sessions/${roomId}`))
+  const services = requireFirebase()
+  await authPersistence
+  if (!services.auth.currentUser) throw new Error('Firebase user is not ready.')
+  if (services.auth.currentUser.uid !== participant.id) throw new Error('Participant identity does not match the current Firebase user.')
+  const sessionSnapshot = await get(ref(services.db, `sessions/${roomId}`))
   const session = sessionSnapshot.val() as Session | null
   if (!session) throw new Error('Комната не найдена или больше недоступна.')
   if (session.phase === 'closed') throw new Error('Сессия завершена ведущим. Подключение больше недоступно.')
-  const result = await runTransaction(ref(db, `sessions/${roomId}/participants`), current => {
+  const result = await runTransaction(ref(services.db, `sessions/${roomId}/participants`), current => {
     const participants = current ?? {}
     if (participants[participant.id]) return participants
     if (Object.keys(participants).length >= 30) return
@@ -331,20 +348,24 @@ export const subscribeQuestionBank = (callback: (value: Question[] | null) => vo
 }
 
 export const saveAnswer = async (roomId: string, participant: Participant, questionId: string, answer: ResponseValue, nextIndex: number, totalQuestions = 16) => {
-  if (!db) throw new Error('Firebase не настроен')
-  const sessionSnapshot = await get(ref(db, `sessions/${roomId}`))
+  const services = requireFirebase()
+  await authPersistence
+  const currentUser = services.auth.currentUser
+  if (!currentUser || currentUser.uid !== participant.id) throw new Error('Participant identity does not match the current Firebase user.')
+  const sessionSnapshot = await get(ref(services.db, `sessions/${roomId}`))
   const session = sessionSnapshot.val() as Session | null
   if (!session) throw new Error('Комната больше недоступна.')
   if (session.phase !== 'live') throw new Error(session.phase === 'closed' ? 'Сессия завершена ведущим. Ответы больше не принимаются.' : 'Диагностика ещё не запущена.')
   const storedParticipant = session.participants?.[participant.id]
   if (!storedParticipant) throw new Error('Участник не найден в комнате. Подключитесь заново.')
+  if (storedParticipant.id !== currentUser.uid) throw new Error('Participant record does not belong to the current Firebase user.')
   const finished = nextIndex >= totalQuestions
   const next: Participant = {
     ...storedParticipant,
     answers: { ...storedParticipant.answers, [questionId]: answer }, currentQuestionIndex: nextIndex,
     status: finished ? 'finished' : 'answering', ...(finished ? { completedAt: Date.now() } : {})
   }
-  await update(ref(db, `sessions/${roomId}/participants/${participant.id}`), {
+  await update(ref(services.db, `sessions/${roomId}/participants/${participant.id}`), {
     answers: next.answers, currentQuestionIndex: next.currentQuestionIndex,
     status: next.status, ...(next.completedAt ? { completedAt: next.completedAt } : {})
   })
@@ -352,6 +373,8 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
 }
 
 export const markPersonalViewed = async (roomId: string, participantId: string) => {
-  if (!db) throw new Error('Firebase не настроен')
-  await update(ref(db, `sessions/${roomId}/participants/${participantId}`), { personalViewedAt: Date.now() })
+  const services = requireFirebase()
+  await authPersistence
+  if (!services.auth.currentUser || services.auth.currentUser.uid !== participantId) throw new Error('Participant identity does not match the current Firebase user.')
+  await update(ref(services.db, `sessions/${roomId}/participants/${participantId}`), { personalViewedAt: Date.now() })
 }

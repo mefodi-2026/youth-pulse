@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { questions } from './data/questions'
 import { ensureAuth, firebaseReady, subscribeSession, updatePhase } from './lib/firebase'
 import { getSessionQuestions, type Participant, type Session } from './types'
+import { appBasePath } from './lib/urls'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -44,7 +45,6 @@ export function StageDashboard({ room }: { room: string }) {
   const progress = Math.round(answered / totalAnswers * 100)
   const ready = people.length > 0 && finished === people.length && viewed === people.length
   const phaseLabel = session?.phase === 'lobby' ? 'Собираем участников' : ready ? 'Группа готова к общему результату' : 'Ждём завершения диагностики'
-  const basePath = window.location.pathname.replace(/\/stage$/, '')
   const reveal = async () => {
     if (!session || !ready || opening) return
     setOpening(true)
@@ -57,7 +57,7 @@ export function StageDashboard({ room }: { room: string }) {
         setDemo(next); setSession(next)
         window.setTimeout(() => { const real = { ...next, phase: 'resultsReal' as const }; setDemo(real); setSession(real) }, 20000)
       }
-      window.location.assign(`${basePath}/results?room=${room}`)
+      window.location.assign(`${appBasePath()}/host?tab=results&room=${encodeURIComponent(room)}`)
     } catch { setOpening(false) }
   }
 

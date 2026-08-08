@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { categories, questions } from './data/questions'
-import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeSession } from './lib/firebase'
+import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeSession, waitForAuthPersistence } from './lib/firebase'
 import { scoreAnswers } from './lib/scoring'
 import { downloadWishPng, printWish } from './lib/export'
 import { getSessionQuestions, type Answer, type Participant, type ResponseValue, type Scores, type Session } from './types'
@@ -58,9 +58,39 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   const [saving, setSaving] = useState(false)
   const [reportReady, setReportReady] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  const [authReady, setAuthReady] = useState(!firebaseReady)
+  const [authUid, setAuthUid] = useState('')
   const activeQuestions = getSessionQuestions(session, questions)
 
-  useEffect(() => { const stored = localStorage.getItem(`atmosphere-participant-${room}`); if (stored) setParticipant(JSON.parse(stored)) }, [room])
+  useEffect(() => {
+    let active = true
+    if (!firebaseReady) return
+    setAuthReady(false)
+    void waitForAuthPersistence().then(user => {
+      if (!active) return
+      setAuthUid(user?.uid || '')
+      setAuthReady(true)
+    }).catch(error => {
+      console.error('participant auth persistence failed', { room, error })
+      if (active) { setNotice('Не удалось восстановить подключение к Firebase. Обновите страницу.'); setAuthReady(true) }
+    })
+    return () => { active = false }
+  }, [room])
+  useEffect(() => {
+    if (firebaseReady && !authReady) return
+    const key = `atmosphere-participant-${room}`
+    const stored = localStorage.getItem(key)
+    if (!stored) return
+    try {
+      const saved = JSON.parse(stored) as Participant
+      if (firebaseReady && saved.id !== authUid) {
+        localStorage.removeItem(key)
+        setParticipant(null)
+        return
+      }
+      setParticipant(saved)
+    } catch { localStorage.removeItem(key) }
+  }, [room, authReady, authUid])
   // Do not render Firebase's optimistic local answer update. Wait for the
   // server-confirmed write, so a rejected write cannot flash the next question.
   useEffect(() => { if (!saving && participant && session?.participants?.[participant.id]) setParticipant(session.participants[participant.id]) }, [session, participant?.id, saving])
@@ -99,12 +129,14 @@ export function MobileParticipantFlow({ room }: { room: string }) {
       localStorage.setItem(`atmosphere-participant-${room}`, JSON.stringify(next))
       setParticipant(next)
     } catch (error) {
-      setNotice(error instanceof Error ? `Ответ не сохранён: ${error.message}` : 'Ответ не сохранён. Пожалуйста, попробуйте ещё раз.')
+      console.error('participant answer rejected', { room, participantId: participant.id, questionId: question.id, error })
+      setNotice(error instanceof Error ? `Ответ не сохранён: ${error.message}. Подключитесь к комнате заново.` : 'Ответ не сохранён. Пожалуйста, подключитесь к комнате заново.')
     } finally { setSaving(false) }
   }
   const openReport = async () => { if (!participant) return; try { if (firebaseReady) await markPersonalViewed(room, participant.id); else if (session) { const next = { ...participant, personalViewedAt: Date.now() }; const demo = { ...session, participants: { ...session.participants, [participant.id]: next } }; setDemo(demo); setSession(demo); setParticipant(next) } } finally { setShowReport(true) } }
 
   if (!room) return <Shell screen="intro-screen"><p className="flow-label">ОНЛАЙН-ДИАГНОСТИКА</p><h1>Нужен QR-код ведущего</h1><p>Отсканируйте код, чтобы открыть личную ссылку на диагностику.</p></Shell>
+  if (firebaseReady && !authReady) return <Shell screen="waiting-screen"><p className="flow-label">ПОДКЛЮЧАЕМ</p><h1>Проверяем подключение</h1><p>Восстанавливаем безопасную сессию участника.</p></Shell>
   if (session?.phase === 'closed') return <Shell screen="waiting-screen"><div className="ready-spark">✓</div><p className="flow-label">СЕССИЯ ЗАВЕРШЕНА</p><h1>Эта диагностика уже завершена</h1><p>Ведущий закрыл комнату. Ответы больше не принимаются, а подключиться по этой ссылке нельзя.</p></Shell>
   if (!participant && screen === 'intro') return <Shell screen="intro-screen"><p className="flow-label gold">ОНЛАЙН-ДИАГНОСТИКА</p><h1>Атмосфера<br />нашей молодёжи</h1><p>Небольшая анонимная диагностика, которая помогает увидеть сильные стороны и точки роста.</p><div className="intro-info"><b>✦</b><strong>{activeQuestions.length} простых вопросов</strong><small>{Object.keys(categories).length} тем · в своём темпе · без оценок</small><i /><span>В конце ты получишь личную карточку с результатами.</span></div><Action onClick={() => setScreen('nickname')}>Начать диагностику</Action><small className="flow-footnote">Твоя искренность поможет нам стать ближе.</small></Shell>
   if (!participant) return <Shell screen="nickname-screen"><p className="flow-label">ШАГ 1 ИЗ 2</p><h1>Как тебя<br />называть?</h1><p>Можно указать имя или придумать никнейм — результаты всё равно останутся анонимными.</p><input value={name} onChange={event => setName(event.target.value)} placeholder="Например, «Свет»" maxLength={20} /><small className="input-help">Это нужно только для твоей личной карточки.</small><div className="flow-note"><b>Важно</b><p>Нет правильных или неправильных ответов. Главное — отвечать честно.</p></div><Action onClick={() => void join()}>Продолжить</Action>{notice && <p className="flow-error">{notice}</p>}</Shell>

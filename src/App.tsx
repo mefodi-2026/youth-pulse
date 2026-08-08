@@ -7,6 +7,7 @@ import { downloadWishPng, printWish } from './lib/export'
 import { StageDashboard } from './StageDashboard'
 import { MobileParticipantFlow } from './MobileParticipantFlow'
 import { getSessionQuestions, type Answer, type LeaderProfile, type Participant, type Question, type Scores, type Session, type SessionArchive, type SessionPhase, type Workspace } from './types'
+import { appBasePath as getAppBasePath, createJoinUrl } from './lib/urls'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -59,10 +60,12 @@ function App() {
   if (path.endsWith('/login')) return <AuthPage mode="login" />
   if (path.endsWith('/register')) return <AuthPage mode="register" />
   if (path.endsWith('/account')) return <LeaderRoute allowInactive>{profile => <AccountPage profile={profile} />}</LeaderRoute>
-  if (path.endsWith('/host')) return <LeaderRoute>{profile => <Host leader={profile} />}</LeaderRoute>
+  if (path.endsWith('/host') || path.endsWith('/results')) {
+    const requestedTab = new URLSearchParams(window.location.search).get('tab')
+    return <LeaderRoute>{profile => <Host leader={profile} initialTab={path.endsWith('/results') || requestedTab === 'results' ? 'results' : undefined} initialRoom={queryRoom()} />}</LeaderRoute>
+  }
   if (path.endsWith('/join')) return <MobileParticipantFlow room={queryRoom()} />
   if (path.endsWith('/stage')) return <StageDashboard room={queryRoom()} />
-  if (path.endsWith('/results')) return <Results room={queryRoom()} />
   return <Landing />
 }
 
@@ -153,16 +156,18 @@ function Landing() {
   return <main className="landing"><div className="orb orb-a" /><div className="orb orb-b" /><Glass className="landing-card"><p className="eyebrow">ИНТЕРАКТИВНАЯ ДИАГНОСТИКА</p><h1>Атмосфера<br />нашей молодёжи</h1><p>Бережная встреча, которая помогает увидеть точки роста — без сравнений и осуждения.</p><div className="landing-actions"><Button onClick={() => go('/host')}>Открыть панель ведущего</Button><Button secondary onClick={() => go('/join?room=DEMO42')}>Открыть демо участника</Button></div><small>{questions.length} вопросов · {Object.keys(categories).length} тем · без оценок</small></Glass></main>
 }
 
-type HostTab = 'overview' | 'rooms' | 'questions' | 'export' | 'settings'
-function Host({ leader }: { leader: LeaderProfile }) {
-  const [room, setRoom] = useState(() => localStorage.getItem('atmosphere-host-room') || '')
+type HostTab = 'overview' | 'rooms' | 'results' | 'questions' | 'export' | 'settings'
+function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; initialTab?: HostTab; initialRoom?: string }) {
+  const roomKey = `atmosphere-host-room-${leader.uid}`
+  const lastRoomKey = `atmosphere-host-last-room-${leader.uid}`
+  const [room, setRoom] = useState(() => initialRoom || localStorage.getItem(roomKey) || localStorage.getItem(lastRoomKey) || localStorage.getItem('atmosphere-host-room') || '')
   const [session, setSession] = useRoom(room)
   const [qr, setQr] = useState('')
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState('')
   const [createError, setCreateError] = useState('')
   const [lastClosedRoom, setLastClosedRoom] = useState('')
-  const [tab, setTab] = useState<HostTab>('overview')
+  const [tab, setTab] = useState<HostTab>(initialTab || 'overview')
   const [archives, setArchives] = useState<Record<string, SessionArchive>>({})
   const [questionBank, setQuestionBank] = useState<Question[]>(questions)
   const [questionDraft, setQuestionDraft] = useState({ category: 'communication' as Question['category'], title: '', options: ['', '', '', ''] })
@@ -170,25 +175,28 @@ function Host({ leader }: { leader: LeaderProfile }) {
   const [questionSaving, setQuestionSaving] = useState(false)
   const [questionError, setQuestionError] = useState('')
   const [publicOrigin, setPublicOrigin] = useState(() => localStorage.getItem('atmosphere-public-origin') || import.meta.env.VITE_PUBLIC_ORIGIN || window.location.origin)
-  const basePath = window.location.pathname.replace(/\/host$/, '')
-  const publicUrl = (path: string) => `${publicOrigin.replace(/\/$/, '')}${basePath}${path}`
-  const hostUrl = (path: string) => `${basePath}${path}`
-  const joinUrl = room ? publicUrl(`/join?room=${room}`) : ''
+  const hostUrl = (path: string) => `${getAppBasePath()}${path}`
+  const joinUrl = room ? createJoinUrl(room, publicOrigin) : ''
   const participants = Object.values(session?.participants || {})
   const finished = participants.filter(p => p.status === 'finished').length
   const answering = participants.filter(p => p.status === 'answering').length
   const allFinished = participants.length > 0 && finished === participants.length
-  const menu: Array<[HostTab, string, string]> = [['overview', 'Обзор', '⌁'], ['rooms', 'Комнаты', '◫'], ['questions', 'Вопросы', '◌'], ['export', 'Экспорт', '↓'], ['settings', 'Настройки', '⚙']]
+  const menu: Array<[HostTab, string, string]> = [['overview', 'Обзор', '⌁'], ['rooms', 'Комнаты', '◫'], ['results', 'Результаты', '◉'], ['questions', 'Вопросы', '◌'], ['export', 'Экспорт', '↓'], ['settings', 'Настройки', '⚙']]
 
   // A closed room is kept in Firebase and its archive, but it must never be
   // restored as the active room for the leader after a reload.
   useEffect(() => {
     if (session?.phase !== 'closed') return
+    if (localStorage.getItem(roomKey) === room) localStorage.removeItem(roomKey)
     if (localStorage.getItem('atmosphere-host-room') === room) localStorage.removeItem('atmosphere-host-room')
+    localStorage.setItem(lastRoomKey, room)
     setLastClosedRoom(room)
-    setRoom(currentRoom => currentRoom === room ? '' : currentRoom)
-  }, [room, session?.phase])
-  useEffect(() => { if (joinUrl) QRCode.toDataURL(joinUrl, { margin: 0, width: 216, color: { dark: '#03120e', light: '#eef5ee' } }).then(setQr) }, [joinUrl])
+  }, [room, roomKey, lastRoomKey, session?.phase])
+  useEffect(() => {
+    if (!joinUrl) return
+    console.info('diagnostic joinUrl', { qr: joinUrl, copy: joinUrl, manual: joinUrl })
+    void QRCode.toDataURL(joinUrl, { margin: 0, width: 216, color: { dark: '#03120e', light: '#eef5ee' } }).then(setQr)
+  }, [joinUrl])
   useEffect(() => { localStorage.setItem('atmosphere-public-origin', publicOrigin) }, [publicOrigin])
   useEffect(() => {
     if (!firebaseReady) {
@@ -197,9 +205,13 @@ function Host({ leader }: { leader: LeaderProfile }) {
       return
     }
     let unsubscribe: () => void = () => undefined
-    void ensureAuth().then(() => { unsubscribe = subscribeSessionArchives(setArchives) }).catch(() => undefined)
+    void ensureAuth().then(() => {
+      unsubscribe = subscribeSessionArchives(value => {
+        setArchives(Object.fromEntries(Object.entries(value).filter(([, archived]) => archived.hostUid === leader.uid)))
+      })
+    }).catch(() => undefined)
     return () => unsubscribe()
-  }, [])
+  }, [leader.uid])
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem('atmosphere-question-bank') || 'null') as Question[] | null
     // Старый браузерный кэш на 16 вопросов не должен перекрывать новый встроенный банк.
@@ -232,7 +244,7 @@ function Host({ leader }: { leader: LeaderProfile }) {
     try {
       if (firebaseReady) { const user = await ensureAuth(); if (!user) throw new Error('Не удалось войти в Firebase'); await createSession(newRoom, user.uid, questionBank, leader.workspaceId) }
       else setDemo(createSessionRecord(newRoom, 'demo-host', questionBank, leader.workspaceId))
-      localStorage.setItem('atmosphere-host-room', newRoom); setLastClosedRoom(''); setRoom(newRoom); setTab('overview')
+      localStorage.setItem(roomKey, newRoom); localStorage.setItem(lastRoomKey, newRoom); localStorage.removeItem('atmosphere-host-room'); setLastClosedRoom(''); setRoom(newRoom); setTab('overview')
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : 'Не удалось создать комнату.')
     } finally { setBusy(false) }
@@ -248,9 +260,10 @@ function Host({ leader }: { leader: LeaderProfile }) {
           await updatePhase(room, 'closed', session.hostUid)
           const closedSession: Session = { ...session, phase: 'closed', closedAt: Date.now() }
           setSession(closedSession)
+          localStorage.removeItem(roomKey)
           localStorage.removeItem('atmosphere-host-room')
+          localStorage.setItem(lastRoomKey, room)
           setLastClosedRoom(room)
-          setRoom('')
           try {
             const archived = await archiveSession(closedSession)
             setArchives(prev => ({ ...prev, [room]: archived }))
@@ -269,24 +282,26 @@ function Host({ leader }: { leader: LeaderProfile }) {
           const localArchives = JSON.parse(localStorage.getItem('atmosphere-archives') || '{}') as Record<string, SessionArchive>
           localStorage.setItem('atmosphere-archives', JSON.stringify({ ...localArchives, [room]: archived }))
           setArchives(prev => ({ ...prev, [room]: archived }))
+          localStorage.removeItem(roomKey)
           localStorage.removeItem('atmosphere-host-room')
+          localStorage.setItem(lastRoomKey, room)
           setLastClosedRoom(room)
-          setRoom('')
         }
       }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Не удалось изменить состояние сессии')
     }
   }
-  const start = () => {
-    window.open(hostUrl(`/stage?room=${room}`), 'atmosphere-stage')
-    void changePhase('live')
+  const start = async () => {
+    await changePhase('live')
   }
-  const showResults = () => {
-    window.open(hostUrl(`/results?room=${room}`), 'atmosphere-results')
-    void changePhase('resultsIntro')
+  const showResults = async () => {
+    if (!session) return
+    await changePhase('resultsIntro')
+    setTab('results')
     window.setTimeout(() => { void changePhase('resultsReal') }, 20000)
   }
+  if (tab === 'results' && session) return <main className="host-shell"><aside className="host-menu"><div className="brand"><span>✦</span><b>Атмосфера</b><small>панель ведущего</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => setTab(id)}><span>{icon}</span>{label}</button>)}</nav><div className="menu-room"><small>{session.phase === 'closed' ? 'ЗАВЕРШЁННАЯ КОМНАТА' : 'АКТИВНАЯ КОМНАТА'}</small><b>{room}</b></div></aside><section className="host-content"><header className="host-header"><div><p className="eyebrow">СЕССИЯ · {room}</p><h1>Результаты</h1></div><span className="status">ЭФИР</span></header><Results room={room} sessionOverride={session} embedded /></section></main>
   const resetQuestionDraft = (category: Question['category'] = 'communication') => {
     setEditingQuestionId(null)
     setQuestionDraft({ category, title: '', options: ['', '', '', ''] })
@@ -441,8 +456,9 @@ function Stage({ room }: { room: string }) {
   return <main className="stage"><div className="stage-glow" /><p className="eyebrow">ДИАГНОСТИКА АТМОСФЕРЫ МОЛОДЁЖИ</p><h1>{session?.phase === 'lobby' ? 'Скоро начнём' : session?.phase === 'resultsIntro' ? 'Собираем общую картину' : session?.phase === 'resultsReal' ? 'Результаты готовы' : session ? 'Мы идём вместе' : 'Ожидаем комнату'}</h1><p className="stage-caption">{session?.phase === 'lobby' ? 'Участники подключаются по QR-коду.' : session?.phase === 'live' ? 'Каждый отвечает в своём темпе. Здесь — только общий прогресс.' : 'Спасибо каждому, кто ответил честно.'}</p><div className="stage-metrics"><Metric label="Подключились" value={people.length} note="участников" /><Metric label="Отвечают" value={people.filter(person => person.status === 'answering').length} note="в своём темпе" /><Metric label="Завершили" value={people.filter(person => person.status === 'finished').length} note="готовы к итогу" /></div><Glass className="stage-progress"><p>Общий прогресс</p><strong>{answers} <small>из {total} ответов</small></strong><div className="progress large"><i style={{ width: `${progress}%` }} /></div><span>{progress}%</span></Glass><small className="privacy">На этом экране отображаются только общие числа.</small></main>
 }
 
-function Results({ room }: { room: string }) {
-  const [session] = useRoom(room)
+function Results({ room, sessionOverride, embedded = false }: { room: string; sessionOverride?: Session | null; embedded?: boolean }) {
+  const [liveSession] = useRoom(room)
+  const session = sessionOverride || liveSession
   const [now, setNow] = useState(Date.now())
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 250); return () => clearInterval(timer) }, [])
   const elapsed = session?.resultsIntroStartedAt ? now - session.resultsIntroStartedAt : 0
@@ -452,6 +468,7 @@ function Results({ room }: { room: string }) {
   const shown = showReal ? real : { communication: 96, forgiveness: 94, service: 97, care: 93, honesty: 95 }
   const overall = Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)
   const countdown = Math.max(0, Math.ceil((20000 - elapsed) / 1000))
+  if (embedded) return <div className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><ResultRing value={overall} /><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b className={value < 0 ? 'negative' : ''}>{value}%</b><i><em style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p></div>
   return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><ResultRing value={overall} /><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b className={value < 0 ? 'negative' : ''}>{value}%</b><i><em style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p><small className="privacy">Показаны только агрегированные результаты — без имён и личных ответов.</small></main>
   return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><div className="big-score"><b>{Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)}%</b><span>общий ориентир</span></div><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b>{value}%</b><i><em style={{ width: `${value}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p><small className="privacy">Показаны только агрегированные результаты — без имён и личных ответов.</small></main>
 }
