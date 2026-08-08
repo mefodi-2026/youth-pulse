@@ -75,7 +75,7 @@
           "$participantId": {
             ".read": "auth != null && (auth.uid === $participantId || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid || auth.token.platformAdmin === true)",
             ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && !data.exists() && root.child('sessions').child($roomId).exists() && root.child('sessions').child($roomId).child('phase').val() !== 'closed' && newData.child('id').val() === auth.uid",
-            ".validate": "newData.hasChildren(['id','nickname','joinedAt','status','currentQuestionIndex','answers']) && newData.child('id').val() === $participantId && newData.child('nickname').isString() && newData.child('joinedAt').isNumber() && (newData.child('status').val() === 'waiting' || newData.child('status').val() === 'answering' || newData.child('status').val() === 'finished') && newData.child('currentQuestionIndex').isNumber()",
+            ".validate": "newData.hasChildren(['id','nickname','joinedAt','status','currentQuestionIndex']) && newData.child('id').val() === $participantId && newData.child('nickname').isString() && newData.child('joinedAt').isNumber() && (newData.child('status').val() === 'waiting' || newData.child('status').val() === 'answering' || newData.child('status').val() === 'finished') && newData.child('currentQuestionIndex').isNumber()",
             "answers": {
               "$questionId": {
                 ".write": "auth != null && auth.uid === $participantId && root.child('sessions').child($roomId).child('phase').val() === 'live'",
