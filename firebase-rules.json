@@ -1,75 +1,118 @@
 {
   "rules": {
     "users": {
+      ".read": "auth != null && auth.token.platformAdmin === true",
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid",
-        ".validate": "newData.hasChildren(['uid', 'fullName', 'phone', 'email', 'workspaceId', 'status', 'createdAt', 'updatedAt']) && !newData.child('password').exists() && newData.child('uid').val() === $uid && newData.child('fullName').isString() && newData.child('phone').isString() && newData.child('email').isString() && newData.child('workspaceId').isString() && (!data.exists() ? (newData.child('status').val() === 'pending' || (newData.child('status').val() === 'active' && root.child('invites').child(newData.child('inviteCode').val()).child('status').val() === 'active' && (!root.child('invites').child(newData.child('inviteCode').val()).child('expiresAt').exists() || root.child('invites').child(newData.child('inviteCode').val()).child('expiresAt').val() > now))) : newData.child('status').val() === data.child('status').val())"
+        ".read": "auth != null && (auth.uid === $uid || auth.token.platformAdmin === true)",
+        ".write": "auth != null && ((auth.token.platformAdmin === true) || (auth.uid === $uid && newData.exists()))",
+        ".validate": "newData.hasChildren(['uid','fullName','phone','email','workspaceId','status','createdAt','updatedAt']) && !newData.child('password').exists() && newData.child('uid').val() === $uid && newData.child('fullName').isString() && newData.child('phone').isString() && newData.child('email').isString() && newData.child('workspaceId').isString() && (newData.child('status').val() === 'pending' || newData.child('status').val() === 'active' || newData.child('status').val() === 'paused' || newData.child('status').val() === 'revoked') && (!data.exists() ? (newData.child('status').val() === 'pending' || newData.child('status').val() === 'active' && root.child('invites').child(newData.child('inviteCode').val()).child('status').val() === 'active' && (!root.child('invites').child(newData.child('inviteCode').val()).child('expiresAt').exists() || root.child('invites').child(newData.child('inviteCode').val()).child('expiresAt').val() > now)) : (auth.token.platformAdmin === true || (newData.child('uid').val() === data.child('uid').val() && newData.child('workspaceId').val() === data.child('workspaceId').val() && newData.child('status').val() === data.child('status').val())))"
       }
     },
     "workspaces": {
+      ".read": "auth != null && auth.token.platformAdmin === true",
       "$workspaceId": {
-        ".read": "auth != null && (data.child('ownerUid').val() === auth.uid || data.child('members').child(auth.uid).exists())",
-        ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid && newData.child('planId').val() === 'pilot-free' && newData.child('billingStatus').val() === 'pilot' && newData.child('accessEndsAt').val() === 0 && newData.child('accessSource').val() === 'pilot') || (data.exists() && data.child('ownerUid').val() === auth.uid && newData.child('planId').val() === data.child('planId').val() && newData.child('billingStatus').val() === data.child('billingStatus').val() && newData.child('accessEndsAt').val() === data.child('accessEndsAt').val() && newData.child('accessSource').val() === data.child('accessSource').val()))",
-        ".validate": "newData.hasChildren(['id', 'name', 'city', 'ownerUid', 'planId', 'billingStatus', 'accessEndsAt', 'accessSource', 'createdAt', 'updatedAt']) && newData.child('id').val() === $workspaceId && newData.child('name').isString() && newData.child('city').isString() && newData.child('planId').isString() && (newData.child('billingStatus').val() === 'free' || newData.child('billingStatus').val() === 'pilot' || newData.child('billingStatus').val() === 'manual_paid' || newData.child('billingStatus').val() === 'expired' || newData.child('billingStatus').val() === 'disabled') && newData.child('accessEndsAt').isNumber() && (newData.child('accessSource').val() === 'pilot' || newData.child('accessSource').val() === 'manual')"
+        ".read": "auth != null && (data.child('ownerUid').val() === auth.uid || auth.token.platformAdmin === true)",
+        ".write": "auth != null && ((auth.token.platformAdmin === true) || (!data.exists() && newData.exists() && newData.child('ownerUid').val() === auth.uid && (!root.child('users').child(auth.uid).exists() || root.child('users').child(auth.uid).child('workspaceId').val() === $workspaceId)) || (data.exists() && data.child('ownerUid').val() === auth.uid && newData.child('ownerUid').val() === data.child('ownerUid').val() && newData.child('planId').val() === data.child('planId').val() && newData.child('billingStatus').val() === data.child('billingStatus').val() && newData.child('accessEndsAt').val() === data.child('accessEndsAt').val() && newData.child('accessSource').val() === data.child('accessSource').val()))",
+        ".validate": "newData.hasChildren(['id','name','city','ownerUid','planId','billingStatus','accessEndsAt','accessSource','createdAt','updatedAt']) && newData.child('id').val() === $workspaceId && newData.child('name').isString() && newData.child('city').isString() && newData.child('ownerUid').isString() && newData.child('planId').isString() && (newData.child('billingStatus').val() === 'free' || newData.child('billingStatus').val() === 'pilot' || newData.child('billingStatus').val() === 'manual_paid' || newData.child('billingStatus').val() === 'expired' || newData.child('billingStatus').val() === 'disabled') && newData.child('accessEndsAt').isNumber() && (newData.child('accessSource').val() === 'pilot' || newData.child('accessSource').val() === 'manual')"
       }
     },
     "workspaceProducts": {
       "$workspaceId": {
+        ".read": "auth != null && (root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid || auth.token.platformAdmin === true)",
         "$productId": {
-          ".read": "auth != null && root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid",
-          ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid && newData.child('productId').val() === 'youth-atmosphere' && newData.child('enabled').val() === true && newData.child('accessSource').val() === 'pilot' && newData.child('planId').val() === 'pilot-free' && newData.child('expiresAt').val() === 0 && newData.child('testing').val() === false && (!root.child('workspaces').child($workspaceId).exists() || (root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid && !root.child('workspaces').child($workspaceId).child('planId').exists()))) || (data.exists() && root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid && newData.val() === data.val()))",
-          ".validate": "newData.hasChildren(['productId', 'ownerUid', 'enabled', 'accessSource', 'planId', 'startsAt', 'expiresAt', 'testing']) && newData.child('productId').val() === $productId && newData.child('ownerUid').isString() && newData.child('enabled').isBoolean() && (newData.child('accessSource').val() === 'pilot' || newData.child('accessSource').val() === 'manual') && newData.child('planId').isString() && newData.child('startsAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('testing').isBoolean()"
+          ".write": "auth != null && ((auth.token.platformAdmin === true) || (!data.exists() && !root.child('users').child(auth.uid).exists() && newData.child('ownerUid').val() === auth.uid) || (data.exists() && root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid && newData.val() === data.val()))",
+          ".validate": "newData.hasChildren(['productId','ownerUid','enabled','accessSource','planId','startsAt','expiresAt','testing']) && newData.child('productId').val() === $productId && newData.child('ownerUid').isString() && newData.child('enabled').isBoolean() && (newData.child('accessSource').val() === 'pilot' || newData.child('accessSource').val() === 'manual') && newData.child('planId').isString() && newData.child('startsAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('testing').isBoolean()"
         }
       }
     },
     "products": {
       "$productId": {
-        ".read": "auth != null",
-        ".write": false,
-        ".validate": "newData.hasChildren(['productId', 'status']) && newData.child('productId').val() === $productId && (newData.child('status').val() === 'enabled' || newData.child('status').val() === 'maintenance' || newData.child('status').val() === 'testing' || newData.child('status').val() === 'disabled')"
+        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".write": "auth != null && auth.token.platformAdmin === true",
+        ".validate": "newData.hasChildren(['productId','status']) && newData.child('productId').val() === $productId && (newData.child('status').val() === 'enabled' || newData.child('status').val() === 'maintenance' || newData.child('status').val() === 'testing' || newData.child('status').val() === 'disabled')"
       }
     },
     "invites": {
       "$code": {
-        ".read": "auth != null",
-        ".write": false
+        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".write": "auth != null && auth.token.platformAdmin === true"
       }
-    },
-    "sessionArchives": {
-      "$roomId": {
-        ".read": "auth != null",
-        ".write": "auth != null && (!data.exists() ? newData.child('hostUid').val() === auth.uid : data.child('hostUid').val() === auth.uid)"
-      }
-    },
-    "questionBank": {
-      ".read": "auth != null",
-      ".write": "auth != null"
     },
     "globalPacks": {
       "$packId": {
-        ".read": "auth != null",
-        ".write": false
+        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".write": "auth != null && auth.token.platformAdmin === true",
+        ".validate": "newData.hasChildren(['productId','gameTypeId','packId','packVersion','templateOrigin','title','content','settings']) && newData.child('packId').val() === $packId && newData.child('templateOrigin').val() === 'system' && !newData.child('workspaceId').exists() && newData.child('content').child('questions').hasChildren()"
       }
     },
     "workspacePacks": {
       "$workspaceId": {
+        ".read": "auth != null && (root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid || auth.token.platformAdmin === true)",
         "$packId": {
-          ".read": "auth != null && root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid",
-          ".write": "auth != null && root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid"
+          ".write": "auth != null && (root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid || auth.token.platformAdmin === true)",
+          ".validate": "newData.hasChildren(['productId','gameTypeId','packId','packVersion','templateOrigin','workspaceId','title','content','settings']) && newData.child('packId').val() === $packId && newData.child('workspaceId').val() === $workspaceId && newData.child('templateOrigin').val() === 'workspace' && newData.child('content').child('questions').hasChildren()"
         }
       }
     },
-    "sessions": {
+    "questionBank": {
+      ".read": "auth != null && auth.token.platformAdmin === true",
+      ".write": "auth != null && auth.token.platformAdmin === true"
+    },
+    "roomLobbies": {
       "$roomId": {
         ".read": "auth != null",
-        ".write": "auth != null && ((!data.exists() && newData.child('hostUid').val() === auth.uid && newData.child('workspaceId').isString() && newData.child('productId').val() === 'youth-atmosphere' && root.child('users').child(auth.uid).child('status').val() === 'active' && root.child('workspaces').child(newData.child('workspaceId').val()).child('ownerUid').val() === auth.uid && (!root.child('workspaces').child(newData.child('workspaceId').val()).child('billingStatus').exists() || ((root.child('workspaces').child(newData.child('workspaceId').val()).child('billingStatus').val() === 'free' || root.child('workspaces').child(newData.child('workspaceId').val()).child('billingStatus').val() === 'pilot' || root.child('workspaces').child(newData.child('workspaceId').val()).child('billingStatus').val() === 'manual_paid') && (!root.child('workspaces').child(newData.child('workspaceId').val()).child('accessEndsAt').exists() || root.child('workspaces').child(newData.child('workspaceId').val()).child('accessEndsAt').val() === 0 || root.child('workspaces').child(newData.child('workspaceId').val()).child('accessEndsAt').val() > now))) && (!root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').exists() || (root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('enabled').val() === true && root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('planId').val() === root.child('workspaces').child(newData.child('workspaceId').val()).child('planId').val() && (root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('expiresAt').val() === 0 || root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('expiresAt').val() > now))) && (!root.child('products').child('youth-atmosphere').exists() || root.child('products').child('youth-atmosphere').child('status').val() === 'enabled' || (root.child('products').child('youth-atmosphere').child('status').val() === 'testing' && root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('testing').val() === true))) || (data.exists() && data.child('hostUid').val() === auth.uid))",
+        ".write": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && ((auth.token.platformAdmin === true) || (!data.exists() && newData.child('roomId').val() === $roomId && newData.child('hostUid').val() === auth.uid && root.child('workspaces').child(newData.child('workspaceId').val()).child('ownerUid').val() === auth.uid) || (data.exists() && data.child('hostUid').val() === auth.uid && newData.child('hostUid').val() === data.child('hostUid').val() && newData.child('workspaceId').val() === data.child('workspaceId').val()))",
+        ".validate": "newData.hasChildren(['roomId','hostUid','workspaceId','phase','maxParticipants','createdAt']) && newData.child('roomId').val() === $roomId && newData.child('hostUid').isString() && newData.child('workspaceId').isString() && newData.child('maxParticipants').isNumber() && (newData.child('phase').val() === 'lobby' || newData.child('phase').val() === 'live' || newData.child('phase').val() === 'personal' || newData.child('phase').val() === 'resultsIntro' || newData.child('phase').val() === 'resultsReal' || newData.child('phase').val() === 'closed')"
+      }
+    },
+    "sessions": {
+      ".read": "auth != null && auth.token.platformAdmin === true",
+      "$roomId": {
+        ".read": "auth != null && (data.child('hostUid').val() === auth.uid || data.child('participants').child(auth.uid).exists() || auth.token.platformAdmin === true)",
+        ".write": "auth != null && ((auth.token.platformAdmin === true) || (!data.exists() && auth.token.firebase.sign_in_provider !== 'anonymous' && newData.child('roomId').val() === $roomId && newData.child('hostUid').val() === auth.uid && newData.child('workspaceId').isString() && root.child('users').child(auth.uid).child('workspaceId').val() === newData.child('workspaceId').val() && root.child('users').child(auth.uid).child('status').val() === 'active' && root.child('workspaces').child(newData.child('workspaceId').val()).child('ownerUid').val() === auth.uid && (!root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').exists() || (root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('enabled').val() === true && (root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('expiresAt').val() === 0 || root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('expiresAt').val() > now))) && (!root.child('products').child('youth-atmosphere').exists() || root.child('products').child('youth-atmosphere').child('status').val() === 'enabled' || (root.child('products').child('youth-atmosphere').child('status').val() === 'testing' && root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('testing').val() === true))) || (data.exists() && data.child('hostUid').val() === auth.uid && newData.child('hostUid').val() === data.child('hostUid').val() && newData.child('workspaceId').val() === data.child('workspaceId').val()))",
+        ".validate": "newData.hasChildren(['roomId','createdAt','phase','maxParticipants','hostUid','participants']) && newData.child('roomId').val() === $roomId && newData.child('hostUid').isString() && newData.child('maxParticipants').isNumber() && (newData.child('phase').val() === 'lobby' || newData.child('phase').val() === 'live' || newData.child('phase').val() === 'personal' || newData.child('phase').val() === 'resultsIntro' || newData.child('phase').val() === 'resultsReal' || newData.child('phase').val() === 'closed')",
         "participants": {
-          ".write": "auth != null && root.child('sessions').child($roomId).child('phase').val() !== 'closed' && (root.child('sessions').child($roomId).child('hostUid').val() === auth.uid || (data.child(auth.uid).exists() === false && newData.child(auth.uid).exists() && newData.child(auth.uid).child('id').val() === auth.uid))",
           "$participantId": {
-            ".write": "auth != null && (auth.uid === $participantId || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)",
-            ".validate": "newData.child('id').val() === $participantId && newData.child('nickname').isString() && root.child('sessions').child($roomId).child('phase').val() !== 'closed'"
+            ".read": "auth != null && (auth.uid === $participantId || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid || auth.token.platformAdmin === true)",
+            ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && !data.exists() && root.child('sessions').child($roomId).exists() && root.child('sessions').child($roomId).child('phase').val() !== 'closed' && newData.child('id').val() === auth.uid",
+            ".validate": "newData.hasChildren(['id','nickname','joinedAt','status','currentQuestionIndex','answers']) && newData.child('id').val() === $participantId && newData.child('nickname').isString() && newData.child('joinedAt').isNumber() && (newData.child('status').val() === 'waiting' || newData.child('status').val() === 'answering' || newData.child('status').val() === 'finished') && newData.child('currentQuestionIndex').isNumber()",
+            "answers": {
+              "$questionId": {
+                ".write": "auth != null && auth.uid === $participantId && root.child('sessions').child($roomId).child('phase').val() === 'live'",
+                ".validate": "newData.val() === 'A' || newData.val() === 'B' || newData.val() === 'C' || newData.val() === 'D' || newData.val() === 'SKIP'"
+              }
+            },
+            "currentQuestionIndex": {
+              ".write": "auth != null && auth.uid === $participantId && root.child('sessions').child($roomId).child('phase').val() === 'live'",
+              ".validate": "newData.isNumber()"
+            },
+            "status": {
+              ".write": "auth != null && auth.uid === $participantId && root.child('sessions').child($roomId).child('phase').val() === 'live'",
+              ".validate": "newData.val() === 'waiting' || newData.val() === 'answering' || newData.val() === 'finished'"
+            },
+            "completedAt": {
+              ".write": "auth != null && auth.uid === $participantId && root.child('sessions').child($roomId).child('phase').val() === 'live'",
+              ".validate": "newData.isNumber()"
+            },
+            "personalViewedAt": {
+              ".write": "auth != null && auth.uid === $participantId && root.child('sessions').child($roomId).child('phase').val() !== 'closed'",
+              ".validate": "newData.isNumber()"
+            }
           }
+        }
+      }
+    },
+    "sessionArchives": {
+      "$roomId": {
+        ".read": "auth != null && (data.child('hostUid').val() === auth.uid || auth.token.platformAdmin === true)",
+        ".write": "auth != null && (auth.token.platformAdmin === true || ((!data.exists() && newData.child('hostUid').val() === auth.uid) || (data.exists() && data.child('hostUid').val() === auth.uid)))"
+      }
+    },
+    "workspaceArchives": {
+      "$workspaceId": {
+        ".read": "auth != null && (root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid || auth.token.platformAdmin === true)",
+        "$roomId": {
+          ".write": "auth != null && (auth.token.platformAdmin === true || (root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid && newData.child('hostUid').val() === auth.uid && newData.child('workspaceId').val() === $workspaceId))"
         }
       }
     }

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
-import { archiveSession, createSession, createSessionRecord, ensureAuth, firebaseReady, joinSession, loginLeader, logoutLeader, markPersonalViewed, registerLeader, saveAnswer, saveQuestionBank, saveSessionQuestions, subscribeAuthUser, subscribeLeaderProfile, subscribeQuestionBank, subscribeSession, subscribeSessionArchives, subscribeWorkspace, updatePhase } from './lib/firebase'
+import { archiveSession, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, diagnosticPackId, ensureAuth, firebaseReady, joinSession, loginLeader, logoutLeader, markPersonalViewed, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeGlobalPack, subscribeLeaderProfile, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, updatePhase } from './lib/firebase'
 import { scoreAnswers } from './lib/scoring'
 import { downloadWishPng, printWish } from './lib/export'
 import { StageDashboard } from './StageDashboard'
 import { MobileParticipantFlow } from './MobileParticipantFlow'
-import { getSessionQuestions, type Answer, type LeaderProfile, type Participant, type Question, type Scores, type Session, type SessionArchive, type SessionPhase, type Workspace } from './types'
+import { getSessionQuestions, type Answer, type LeaderProfile, type Participant, type Question, type Scores, type Session, type SessionArchive, type SessionPhase, type TemplateSelection, type Workspace } from './types'
 import { appBasePath as getAppBasePath, createJoinUrl } from './lib/urls'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
@@ -193,6 +193,15 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [resultRoom, setResultRoom] = useState(() => initialTab === 'results' ? initialRoom || '' : '')
   const [archives, setArchives] = useState<Record<string, SessionArchive>>({})
   const [questionBank, setQuestionBank] = useState<Question[]>(questions)
+  const templateKey = `atmosphere-template-selection-${leader.workspaceId}`
+  const [templateSelection, setTemplateSelection] = useState<TemplateSelection>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(templateKey) || 'null') as TemplateSelection | null
+      return saved?.selectedPackId && (saved.templateSource === 'system' || saved.templateSource === 'workspace') ? saved : defaultDiagnosticTemplateSelection
+    } catch { return defaultDiagnosticTemplateSelection }
+  })
+  const [systemPack, setSystemPack] = useState<Question[] | null>(null)
+  const [workspacePack, setWorkspacePack] = useState<Question[] | null>(null)
   const [questionDraft, setQuestionDraft] = useState({ category: 'communication' as Question['category'], title: '', options: ['', '', '', ''] })
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [questionSaving, setQuestionSaving] = useState(false)
@@ -235,43 +244,34 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     }
     let unsubscribe: () => void = () => undefined
     void ensureAuth().then(() => {
-      unsubscribe = subscribeSessionArchives(value => {
-        setArchives(Object.fromEntries(Object.entries(value).filter(([, archived]) => archived.hostUid === leader.uid && (!archived.workspaceId || archived.workspaceId === leader.workspaceId))))
-      })
+      unsubscribe = subscribeSessionArchives(leader.workspaceId, value => setArchives(value))
     }).catch(() => undefined)
     return () => unsubscribe()
-  }, [leader.uid])
+  }, [leader.uid, leader.workspaceId])
   useEffect(() => {
-    const stored = JSON.parse(localStorage.getItem('atmosphere-question-bank') || 'null') as Question[] | null
-    // Старый браузерный кэш на 16 вопросов не должен перекрывать новый встроенный банк.
-    const localQuestions = stored?.length && stored.length >= questions.length ? stored : null
     if (!firebaseReady) {
-      setQuestionBank(localQuestions || questions)
+      const stored = JSON.parse(localStorage.getItem(`atmosphere-question-bank-${leader.workspaceId}`) || 'null') as Question[] | null
+      setQuestionBank(stored?.length ? stored : questions)
       return
     }
-    let unsubscribe: () => void = () => undefined
-    const applyRemoteBank = (value: Question[] | null) => {
-      if (value?.length && value.length >= questions.length) {
-        setQuestionBank(value)
-        localStorage.setItem('atmosphere-question-bank', JSON.stringify(value))
-        return
-      }
-      // Если в Firebase осталась старая версия на 16 вопросов, один раз заменяем её актуальным банком.
-      if (value?.length && value.length < questions.length) {
-        setQuestionBank(questions)
-        void saveQuestionBank(questions).catch(() => undefined)
-        return
-      }
-      setQuestionBank(localQuestions || questions)
-    }
-    void ensureAuth().then(() => { unsubscribe = subscribeQuestionBank(applyRemoteBank, () => setQuestionBank(localQuestions || questions)) }).catch(() => setQuestionBank(localQuestions || questions))
-    return () => unsubscribe()
-  }, [])
+    let stopSystem: () => void = () => undefined
+    let stopWorkspace: () => void = () => undefined
+    void ensureAuth().then(() => {
+      stopSystem = subscribeGlobalPack(diagnosticPackId, pack => setSystemPack(pack?.content.questions || null), () => setSystemPack(null))
+      stopWorkspace = subscribeWorkspacePack(leader.workspaceId, diagnosticPackId, pack => setWorkspacePack(pack?.content.questions || null), () => setWorkspacePack(null))
+    }).catch(() => { setSystemPack(null); setWorkspacePack(null) })
+    return () => { stopSystem(); stopWorkspace() }
+  }, [leader.workspaceId])
+  useEffect(() => {
+    const selected = templateSelection.templateSource === 'workspace' ? workspacePack : systemPack
+    setQuestionBank(selected?.length ? selected : questions)
+  }, [systemPack, templateSelection.templateSource, workspacePack])
+  useEffect(() => { localStorage.setItem(templateKey, JSON.stringify(templateSelection)) }, [templateKey, templateSelection])
   const create = async () => {
     setBusy(true); setActionError(''); setCreateError('')
     const newRoom = makeRoom()
     try {
-      if (firebaseReady) { const user = await ensureAuth(); if (!user) throw new Error('Не удалось войти в Firebase'); await createSession(newRoom, user.uid, questionBank, leader.workspaceId) }
+      if (firebaseReady) { const user = await ensureAuth(); if (!user) throw new Error('Не удалось войти в Firebase'); await createSession(newRoom, user.uid, questionBank, leader.workspaceId, templateSelection) }
       else setDemo(createSessionRecord(newRoom, 'demo-host', questionBank, leader.workspaceId))
       localStorage.setItem(roomKey, newRoom); localStorage.setItem(lastRoomKey, newRoom); localStorage.removeItem('atmosphere-host-room'); setLastClosedRoom(''); setResultRoom(''); setRoom(newRoom); navigate('overview')
     } catch (error) {
@@ -365,25 +365,13 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const persistQuestionBank = async (nextBank: Question[]) => {
     setQuestionError('')
     if (firebaseReady) {
-      let globalError: unknown = null
       try {
-        await saveQuestionBank(nextBank)
-        localStorage.removeItem('atmosphere-question-bank')
+        await saveWorkspacePack(leader.workspaceId, nextBank)
+        setTemplateSelection({ selectedPackId: diagnosticPackId, templateSource: 'workspace' })
       } catch (error) {
-        globalError = error
-        localStorage.setItem('atmosphere-question-bank', JSON.stringify(nextBank))
+        throw new Error(`Не удалось сохранить личную копию вопросника: ${error instanceof Error ? error.message : 'проверьте Firebase Rules'}`)
       }
-      if (session && session.phase !== 'closed') {
-        try {
-          await saveSessionQuestions(room, nextBank)
-        } catch (error) {
-          if (!globalError) globalError = error
-        }
-      }
-      if (globalError) {
-        setQuestionError(`Вопрос сохранён локально${session && session.phase !== 'closed' ? ' и в текущую комнату' : ''}. Firebase пока недоступен: ${globalError instanceof Error ? globalError.message : 'проверьте Rules'}`)
-      }
-    } else localStorage.setItem('atmosphere-question-bank', JSON.stringify(nextBank))
+    } else localStorage.setItem(`atmosphere-question-bank-${leader.workspaceId}`, JSON.stringify(nextBank))
     setQuestionBank(nextBank)
   }
   const saveQuestion = async () => {

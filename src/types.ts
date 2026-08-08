@@ -26,6 +26,10 @@ export interface ContentPack {
   content: PackContent
   settings: PackSettings
   workspaceId?: string
+  /** Audit metadata. System packs are maintained only by the platform owner. */
+  createdAt?: number
+  updatedAt?: number
+  createdBy?: string
 }
 export interface TemplateSnapshot extends ContentPack { capturedAt: number }
 export interface Participant { id: string; nickname: string; joinedAt: number; status: 'waiting' | 'answering' | 'finished'; currentQuestionIndex: number; answers: Record<string, ResponseValue>; completedAt?: number; personalViewedAt?: number }
@@ -79,6 +83,16 @@ export interface Session {
   participants: Record<string, Participant>
 }
 export interface SessionArchive extends Session { archivedAt: number }
+/** Public, deliberately minimal join metadata. It never contains questions or answers. */
+export interface RoomLobby {
+  roomId: string
+  hostUid: string
+  workspaceId: string
+  phase: SessionPhase
+  maxParticipants: number
+  createdAt: number
+  closedAt?: number
+}
 export interface Scores { total: number; categories: Record<CategoryId, number> }
 
 export const getSessionQuestions = (session: Pick<Session, 'templateSnapshot' | 'questions'> | null | undefined, fallback: Question[]) => {

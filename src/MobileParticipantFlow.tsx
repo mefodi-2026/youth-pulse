@@ -1,27 +1,39 @@
 import { useEffect, useState } from 'react'
 import { categories, questions } from './data/questions'
-import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeSession, waitForAuthPersistence } from './lib/firebase'
+import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeRoomLobby, subscribeSession, waitForAuthPersistence } from './lib/firebase'
 import { scoreAnswers } from './lib/scoring'
 import { downloadWishPng, printWish } from './lib/export'
-import { getSessionQuestions, type Answer, type Participant, type ResponseValue, type Scores, type Session } from './types'
+import { getSessionQuestions, type Answer, type Participant, type ResponseValue, type RoomLobby, type Scores, type Session } from './types'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
 const setDemo = (session: Session) => { localStorage.setItem(demoKey(session.roomId), JSON.stringify(session)); window.dispatchEvent(new StorageEvent('storage', { key: demoKey(session.roomId) })) }
 
-function useParticipantSession(room: string) {
+function useParticipantSession(room: string, participantId?: string) {
   const [session, setSession] = useState<Session | null>(null)
+  const [lobby, setLobby] = useState<RoomLobby | null>(null)
   useEffect(() => {
     if (!room) return
     if (!firebaseReady) {
-      setSession(getDemo(room)); const sync = (event: StorageEvent) => { if (event.key === demoKey(room)) setSession(getDemo(room)) }
+      const applyDemo = () => {
+        const demo = getDemo(room)
+        setSession(demo)
+        setLobby(demo ? { roomId: demo.roomId, hostUid: demo.hostUid, workspaceId: demo.workspaceId || '', phase: demo.phase, maxParticipants: demo.maxParticipants, createdAt: demo.createdAt, ...(demo.closedAt ? { closedAt: demo.closedAt } : {}) } : null)
+      }
+      applyDemo(); const sync = (event: StorageEvent) => { if (event.key === demoKey(room)) applyDemo() }
       window.addEventListener('storage', sync); return () => window.removeEventListener('storage', sync)
     }
-    let active = true; let unsubscribe: () => void = () => undefined
-    void ensureAuth().then(() => { if (active) unsubscribe = subscribeSession(room, value => { if (active) setSession(value) }) })
-    return () => { active = false; unsubscribe() }
-  }, [room])
-  return [session, setSession] as const
+    let active = true; let stopLobby: () => void = () => undefined; let stopSession: () => void = () => undefined
+    void ensureAuth().then(() => {
+      if (!active) return
+      stopLobby = subscribeRoomLobby(room, value => { if (active) setLobby(value) }, () => { if (active) setLobby(null) })
+      // Full room data is readable only after this anonymous identity has
+      // created its own participant record. This prevents cross-room reads.
+      if (participantId) stopSession = subscribeSession(room, value => { if (active) setSession(value) }, () => { if (active) setSession(null) })
+    })
+    return () => { active = false; stopLobby(); stopSession() }
+  }, [participantId, room])
+  return [session, setSession, lobby] as const
 }
 
 const Shell = ({ children, screen = '' }: { children: React.ReactNode; screen?: string }) => <main className="mobile-wrap mobile-flow"><div className={`mobile-card phone-screen ${screen}`}>{children}</div></main>
@@ -50,10 +62,10 @@ function createPoster(participant: Participant, scores: Scores) {
 }
 
 export function MobileParticipantFlow({ room }: { room: string }) {
-  const [session, setSession] = useParticipantSession(room)
+  const [participant, setParticipant] = useState<Participant | null>(null)
+  const [session, setSession, lobby] = useParticipantSession(room, participant?.id)
   const [screen, setScreen] = useState<'intro' | 'nickname'>('intro')
   const [name, setName] = useState('')
-  const [participant, setParticipant] = useState<Participant | null>(null)
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
   const [reportReady, setReportReady] = useState(false)
@@ -99,8 +111,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   const join = async () => {
     if (!room || name.trim().length < 2) return setNotice('Введите никнейм от 2 до 20 символов.')
     try {
-      if (!session) throw new Error('Проверяем состояние комнаты. Попробуйте ещё раз через секунду.')
-      if (session.phase === 'closed') throw new Error('Сессия завершена ведущим. Подключение больше недоступно.')
+      if (lobby?.phase === 'closed' || session?.phase === 'closed') throw new Error('Сессия завершена ведущим. Подключение больше недоступно.')
       const user = firebaseReady ? await ensureAuth() : null
       const next: Participant = { id: user?.uid || crypto.randomUUID(), nickname: name.trim().slice(0, 20), joinedAt: Date.now(), status: 'waiting', currentQuestionIndex: 0, answers: {} }
       if (firebaseReady) await joinSession(room, next)
@@ -137,7 +148,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
 
   if (!room) return <Shell screen="intro-screen"><p className="flow-label">ОНЛАЙН-ДИАГНОСТИКА</p><h1>Нужен QR-код ведущего</h1><p>Отсканируйте код, чтобы открыть личную ссылку на диагностику.</p></Shell>
   if (firebaseReady && !authReady) return <Shell screen="waiting-screen"><p className="flow-label">ПОДКЛЮЧАЕМ</p><h1>Проверяем подключение</h1><p>Восстанавливаем безопасную сессию участника.</p></Shell>
-  if (session?.phase === 'closed') return <Shell screen="waiting-screen"><div className="ready-spark">✓</div><p className="flow-label">СЕССИЯ ЗАВЕРШЕНА</p><h1>Эта диагностика уже завершена</h1><p>Ведущий закрыл комнату. Ответы больше не принимаются, а подключиться по этой ссылке нельзя.</p></Shell>
+  if (lobby?.phase === 'closed' || session?.phase === 'closed') return <Shell screen="waiting-screen"><div className="ready-spark">✓</div><p className="flow-label">СЕССИЯ ЗАВЕРШЕНА</p><h1>Эта диагностика уже завершена</h1><p>Ведущий закрыл комнату. Ответы больше не принимаются, а подключиться по этой ссылке нельзя.</p></Shell>
   if (!participant && screen === 'intro') return <Shell screen="intro-screen"><p className="flow-label gold">ОНЛАЙН-ДИАГНОСТИКА</p><h1>Атмосфера<br />нашей молодёжи</h1><p>Небольшая анонимная диагностика, которая помогает увидеть сильные стороны и точки роста.</p><div className="intro-info"><b>✦</b><strong>{activeQuestions.length} простых вопросов</strong><small>{Object.keys(categories).length} тем · в своём темпе · без оценок</small><i /><span>В конце ты получишь личную карточку с результатами.</span></div><Action onClick={() => setScreen('nickname')}>Начать диагностику</Action><small className="flow-footnote">Твоя искренность поможет нам стать ближе.</small></Shell>
   if (!participant) return <Shell screen="nickname-screen"><p className="flow-label">ШАГ 1 ИЗ 2</p><h1>Как тебя<br />называть?</h1><p>Можно указать имя или придумать никнейм — результаты всё равно останутся анонимными.</p><input value={name} onChange={event => setName(event.target.value)} placeholder="Например, «Свет»" maxLength={20} /><small className="input-help">Это нужно только для твоей личной карточки.</small><div className="flow-note"><b>Важно</b><p>Нет правильных или неправильных ответов. Главное — отвечать честно.</p></div><Action onClick={() => void join()}>Продолжить</Action>{notice && <p className="flow-error">{notice}</p>}</Shell>
   if (!session || session.phase === 'lobby') return <Shell screen="waiting-screen"><div className="waiting-orbit"><i /><i /><b>✦</b></div><p className="flow-label">ПОДКЛЮЧЕНИЕ ПОДТВЕРЖДЕНО</p><h1>Ждём ведущего</h1><p>Ты уже в комнате. Как только ведущий запустит диагностику, первый вопрос появится автоматически.</p><div className="waiting-status"><span /><div><b>Собираем участников</b><small>Не закрывай эту страницу</small></div></div></Shell>

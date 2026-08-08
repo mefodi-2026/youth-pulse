@@ -1,9 +1,9 @@
 import { initializeApp } from 'firebase/app'
 import { browserLocalPersistence, createUserWithEmailAndPassword, deleteUser, getAuth, onAuthStateChanged, setPersistence, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
-import { get, getDatabase, onValue, push, ref, runTransaction, set, update } from 'firebase/database'
+import { get, getDatabase, onValue, push, ref, set, update } from 'firebase/database'
 import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
-import type { Answer, ContentPack, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, Session, SessionArchive, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
+import type { Answer, ContentPack, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, RoomLobby, Session, SessionArchive, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -33,6 +33,16 @@ export interface RegisterLeaderInput { fullName: string; phone: string; email: s
 
 const copyQuestions = (questionSet: Question[]) => questionSet.map(question => ({ ...question, options: { ...question.options } }))
 const copySettings = (settings: Record<string, boolean | number | string | null>) => ({ ...settings })
+
+const createRoomLobby = (session: Session): RoomLobby => ({
+  roomId: session.roomId,
+  hostUid: session.hostUid,
+  workspaceId: session.workspaceId || '',
+  phase: session.phase,
+  maxParticipants: session.maxParticipants,
+  createdAt: session.createdAt,
+  ...(session.closedAt ? { closedAt: session.closedAt } : {}),
+})
 
 const createPilotWorkspaceAccess = (ownerUid: string, now: number): WorkspaceProduct => ({
   productId: diagnosticProductId,
@@ -81,7 +91,10 @@ export const resolveDiagnosticTemplate = async (workspaceId?: string, fallbackQu
   if (!db) return createDiagnosticTemplateSnapshot(fallbackQuestions)
   const fallback = fallbackQuestions.length ? fallbackQuestions : builtInQuestions
   const candidates: Array<{ path: string; defaults: Partial<ContentPack> }> = selection.templateSource === 'workspace' && workspaceId
-    ? [{ path: `workspacePacks/${workspaceId}/${selection.selectedPackId}`, defaults: { workspaceId, packId: selection.selectedPackId, templateOrigin: 'workspace' } }]
+    ? [
+        { path: `workspacePacks/${workspaceId}/${selection.selectedPackId}`, defaults: { workspaceId, packId: selection.selectedPackId, templateOrigin: 'workspace' } },
+        { path: `globalPacks/${selection.selectedPackId}`, defaults: { packId: selection.selectedPackId, templateOrigin: 'system' } },
+      ]
     : [{ path: `globalPacks/${selection.selectedPackId}`, defaults: { packId: selection.selectedPackId, templateOrigin: 'system' } }]
   for (const candidate of candidates) {
     try {
@@ -223,6 +236,56 @@ export const subscribeSession = (roomId: string, callback: (value: Session | nul
   return onValue(ref(db, `sessions/${roomId}`), snapshot => callback(snapshot.val()), error => onError?.(error))
 }
 
+/** Join-safe metadata: it intentionally contains no questions, participants or answers. */
+export const subscribeRoomLobby = (roomId: string, callback: (value: RoomLobby | null) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, `roomLobbies/${roomId}`), snapshot => callback((snapshot.val() || null) as RoomLobby | null), error => onError?.(error))
+}
+
+export const subscribeGlobalPack = (packId: string, callback: (value: ContentPack | null) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, `globalPacks/${packId}`), snapshot => callback(normalizeContentPack(snapshot.val(), builtInQuestions, { packId, templateOrigin: 'system' })), error => onError?.(error))
+}
+
+export const subscribeWorkspacePack = (workspaceId: string, packId: string, callback: (value: ContentPack | null) => void, onError?: (error: Error) => void) => {
+  if (!db || !workspaceId) return () => undefined
+  return onValue(ref(db, `workspacePacks/${workspaceId}/${packId}`), snapshot => callback(normalizeContentPack(snapshot.val(), builtInQuestions, { workspaceId, packId, templateOrigin: 'workspace' })), error => onError?.(error))
+}
+
+/** Platform-owner-only summary. Rules reject this subscription for ordinary leaders. */
+export const subscribePlatformWorkspaces = (callback: (value: Record<string, Workspace>) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, 'workspaces'), snapshot => callback((snapshot.val() || {}) as Record<string, Workspace>), error => onError?.(error))
+}
+
+/**
+ * Explicit one-time seeding helper for the platform owner. It is never called
+ * automatically for a leader, because leaders may read global packs but may
+ * not modify them under the published Rules.
+ */
+export const seedDefaultGlobalPack = async () => {
+  const services = requireFirebase()
+  await authPersistence
+  const user = services.auth.currentUser
+  if (!user || user.isAnonymous) throw new Error('Для публикации системного набора нужен аккаунт владельца платформы.')
+  const now = Date.now()
+  const pack: ContentPack = {
+    productId: diagnosticProductId,
+    gameTypeId: diagnosticGameTypeId,
+    packId: diagnosticPackId,
+    packVersion: diagnosticPackVersion,
+    templateOrigin: 'system',
+    title: 'Диагностика атмосферы молодёжи',
+    content: { questions: copyQuestions(builtInQuestions) },
+    settings: { maxParticipants: 30, skippedAnswerScore: -1 },
+    createdAt: now,
+    updatedAt: now,
+    createdBy: user.uid,
+  }
+  await set(ref(services.db, `globalPacks/${diagnosticPackId}`), pack)
+  return pack
+}
+
 const assertRoomCreationAccess = async (hostUid: string, workspaceId: string) => {
   const services = requireFirebase()
   const [profileSnapshot, workspaceSnapshot, workspaceProductSnapshot, productSnapshot] = await Promise.all([
@@ -269,7 +332,12 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
   await assertRoomCreationAccess(hostUid, workspaceId)
   const template = await resolveDiagnosticTemplate(workspaceId, questionSet?.length ? questionSet : builtInQuestions, templateSelection)
   const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, templateSelection)
-  await set(ref(db, `sessions/${roomId}`), session)
+  // The lobby is the only pre-join readable record. It contains no questions,
+  // participants, or answers from another workspace.
+  await update(ref(db), {
+    [`sessions/${roomId}`]: session,
+    [`roomLobbies/${roomId}`]: createRoomLobby(session),
+  })
   return session
 }
 
@@ -278,17 +346,21 @@ export const joinSession = async (roomId: string, participant: Participant) => {
   await authPersistence
   if (!services.auth.currentUser) throw new Error('Firebase user is not ready.')
   if (services.auth.currentUser.uid !== participant.id) throw new Error('Participant identity does not match the current Firebase user.')
-  const sessionSnapshot = await get(ref(services.db, `sessions/${roomId}`))
-  const session = sessionSnapshot.val() as Session | null
-  if (!session) throw new Error('Комната не найдена или больше недоступна.')
-  if (session.phase === 'closed') throw new Error('Сессия завершена ведущим. Подключение больше недоступно.')
-  const result = await runTransaction(ref(services.db, `sessions/${roomId}/participants`), current => {
-    const participants = current ?? {}
-    if (participants[participant.id]) return participants
-    if (Object.keys(participants).length >= 30) return
-    return { ...participants, [participant.id]: participant }
-  })
-  if (!result.committed || !result.snapshot.child(participant.id).exists()) throw new Error('Комната недоступна или уже заполнена')
+  if (!services.auth.currentUser.isAnonymous) throw new Error('Откройте ссылку участника в отдельном браузере или в режиме инкогнито.')
+  const [lobbySnapshot, participantSnapshot] = await Promise.all([
+    get(ref(services.db, `roomLobbies/${roomId}`)),
+    get(ref(services.db, `sessions/${roomId}/participants/${participant.id}`)),
+  ])
+  const lobby = lobbySnapshot.val() as RoomLobby | null
+  if (!lobby) throw new Error('Комната не найдена или больше недоступна.')
+  if (lobby.phase === 'closed') throw new Error('Сессия завершена ведущим. Подключение больше недоступно.')
+  if (participantSnapshot.exists()) return
+  try {
+    await set(ref(services.db, `sessions/${roomId}/participants/${participant.id}`), participant)
+  } catch (error) {
+    console.error('participant join rejected', { roomId, participantId: participant.id, error })
+    throw new Error('Не удалось подключиться к комнате. Возможно, она завершена или уже заполнена.')
+  }
 }
 
 const assertCurrentUserIsRoomHost = async (roomId: string, expectedHostUid?: string) => {
@@ -306,7 +378,13 @@ const assertCurrentUserIsRoomHost = async (roomId: string, expectedHostUid?: str
 export const updatePhase = async (roomId: string, phase: SessionPhase, expectedHostUid?: string) => {
   const services = await assertCurrentUserIsRoomHost(roomId, expectedHostUid)
   if (services.session.phase === 'closed' && phase !== 'closed') throw new Error('Завершённую сессию нельзя запустить повторно.')
-  await update(ref(services.db, `sessions/${roomId}`), phase === 'resultsIntro' ? { phase, resultsIntroStartedAt: Date.now() } : phase === 'closed' ? { phase: 'closed', closedAt: Date.now() } : { phase })
+  const timestamp = Date.now()
+  const patch = phase === 'resultsIntro'
+    ? { [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/resultsIntroStartedAt`]: timestamp, [`roomLobbies/${roomId}/phase`]: phase }
+    : phase === 'closed'
+      ? { [`sessions/${roomId}/phase`]: 'closed', [`sessions/${roomId}/closedAt`]: timestamp, [`roomLobbies/${roomId}/phase`]: 'closed', [`roomLobbies/${roomId}/closedAt`]: timestamp }
+      : { [`sessions/${roomId}/phase`]: phase, [`roomLobbies/${roomId}/phase`]: phase }
+  await update(ref(services.db), patch)
 }
 
 /** Writes only an archive. The caller must close the live session first. */
@@ -319,33 +397,56 @@ export const archiveSession = async (session: Session) => {
     closedAt: services.session.closedAt || session.closedAt || Date.now(),
     archivedAt: Date.now(),
   }
-  await set(ref(services.db, `sessionArchives/${session.roomId}`), archived)
+  const patch: Record<string, SessionArchive> = { [`sessionArchives/${session.roomId}`]: archived }
+  if (archived.workspaceId) patch[`workspaceArchives/${archived.workspaceId}/${session.roomId}`] = archived
+  await update(ref(services.db), patch)
   return archived
 }
 
-export const subscribeSessionArchives = (callback: (value: Record<string, SessionArchive>) => void, onError?: (error: Error) => void) => {
-  if (!db) return () => undefined
-  return onValue(ref(db, 'sessionArchives'), snapshot => callback((snapshot.val() || {}) as Record<string, SessionArchive>), error => onError?.(error))
+export const subscribeSessionArchives = (workspaceId: string, callback: (value: Record<string, SessionArchive>) => void, onError?: (error: Error) => void) => {
+  if (!db || !workspaceId) return () => undefined
+  return onValue(ref(db, `workspaceArchives/${workspaceId}`), snapshot => callback((snapshot.val() || {}) as Record<string, SessionArchive>), error => onError?.(error))
 }
 
-export const saveQuestionBank = async (questionSet: Question[]) => {
-  if (!db) throw new Error('Firebase is not configured')
-  const user = await ensureAuth()
-  if (!user) throw new Error('Не удалось войти в Firebase для сохранения вопросов')
-  await set(ref(db, 'questionBank'), questionSet)
+export const saveWorkspacePack = async (workspaceId: string, questionSet: Question[], title = 'Диагностика атмосферы молодёжи') => {
+  const services = requireFirebase()
+  await authPersistence
+  const user = services.auth.currentUser
+  if (!user || user.isAnonymous) throw new Error('Для сохранения вопросов войдите в аккаунт ведущего.')
+  if (!workspaceId) throw new Error('Не найдено рабочее пространство ведущего.')
+  const packPath = `workspacePacks/${workspaceId}/${diagnosticPackId}`
+  const currentSnapshot = await get(ref(services.db, packPath))
+  const current = normalizeContentPack(currentSnapshot.val(), builtInQuestions, { workspaceId, packId: diagnosticPackId, templateOrigin: 'workspace' })
+  const now = Date.now()
+  const pack: ContentPack = {
+    productId: diagnosticProductId,
+    gameTypeId: diagnosticGameTypeId,
+    packId: diagnosticPackId,
+    packVersion: Math.max(diagnosticPackVersion, (current?.packVersion || diagnosticPackVersion - 1) + 1),
+    templateOrigin: 'workspace',
+    workspaceId,
+    title: current?.title || title,
+    content: { questions: copyQuestions(questionSet) },
+    settings: copySettings(current?.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
+    createdAt: current?.createdAt || now,
+    updatedAt: now,
+    createdBy: current?.createdBy || user.uid,
+  }
+  await set(ref(services.db, packPath), pack)
+  return pack
 }
 
 export const saveSessionQuestions = async (roomId: string, questionSet: Question[]) => {
   if (!db) throw new Error('Firebase is not configured')
-  const user = await ensureAuth()
-  if (!user) throw new Error('Не удалось войти в Firebase для сохранения вопросов комнаты')
-  await update(ref(db, `sessions/${roomId}`), { questions: questionSet })
+  const services = await assertCurrentUserIsRoomHost(roomId)
+  const snapshot = createDiagnosticTemplateSnapshot(questionSet, services.session.templateSnapshot)
+  await update(ref(db, `sessions/${roomId}`), { questions: copyQuestions(questionSet), templateSnapshot: snapshot, packVersion: snapshot.packVersion })
 }
 
-export const subscribeQuestionBank = (callback: (value: Question[] | null) => void, onError?: (error: Error) => void) => {
-  if (!db) return () => undefined
-  return onValue(ref(db, 'questionBank'), snapshot => callback((snapshot.val() || null) as Question[] | null), error => onError?.(error))
-}
+/** @deprecated Legacy questionBank is intentionally no longer read by the host UI. */
+export const saveQuestionBank = async () => { throw new Error('questionBank is deprecated; save a workspace pack instead.') }
+/** @deprecated Legacy questionBank is intentionally no longer read by the host UI. */
+export const subscribeQuestionBank = (_callback: (value: Question[] | null) => void) => () => undefined
 
 export const saveAnswer = async (roomId: string, participant: Participant, questionId: string, answer: ResponseValue, nextIndex: number, totalQuestions = 16) => {
   const services = requireFirebase()
@@ -365,9 +466,13 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
     answers: { ...storedParticipant.answers, [questionId]: answer }, currentQuestionIndex: nextIndex,
     status: finished ? 'finished' : 'answering', ...(finished ? { completedAt: Date.now() } : {})
   }
-  await update(ref(services.db, `sessions/${roomId}/participants/${participant.id}`), {
-    answers: next.answers, currentQuestionIndex: next.currentQuestionIndex,
-    status: next.status, ...(next.completedAt ? { completedAt: next.completedAt } : {})
+  // Write the owned leaves directly. The Rules grant a participant access only
+  // to their own answer/status fields, never the participant collection.
+  await update(ref(services.db), {
+    [`sessions/${roomId}/participants/${participant.id}/answers/${questionId}`]: answer,
+    [`sessions/${roomId}/participants/${participant.id}/currentQuestionIndex`]: next.currentQuestionIndex,
+    [`sessions/${roomId}/participants/${participant.id}/status`]: next.status,
+    ...(next.completedAt ? { [`sessions/${roomId}/participants/${participant.id}/completedAt`]: next.completedAt } : {})
   })
   return next
 }
@@ -376,5 +481,5 @@ export const markPersonalViewed = async (roomId: string, participantId: string) 
   const services = requireFirebase()
   await authPersistence
   if (!services.auth.currentUser || services.auth.currentUser.uid !== participantId) throw new Error('Participant identity does not match the current Firebase user.')
-  await update(ref(services.db, `sessions/${roomId}/participants/${participantId}`), { personalViewedAt: Date.now() })
+  await set(ref(services.db, `sessions/${roomId}/participants/${participantId}/personalViewedAt`), Date.now())
 }
