@@ -3,7 +3,7 @@ import { categories, questions } from './data/questions'
 import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeSession } from './lib/firebase'
 import { scoreAnswers } from './lib/scoring'
 import { downloadWishPng, printWish } from './lib/export'
-import type { Answer, Participant, ResponseValue, Scores, Session } from './types'
+import { getSessionQuestions, type Answer, type Participant, type ResponseValue, type Scores, type Session } from './types'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -58,17 +58,21 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   const [saving, setSaving] = useState(false)
   const [reportReady, setReportReady] = useState(false)
   const [showReport, setShowReport] = useState(false)
-  const activeQuestions = session?.questions?.length ? session.questions : questions
+  const activeQuestions = getSessionQuestions(session, questions)
 
   useEffect(() => { const stored = localStorage.getItem(`atmosphere-participant-${room}`); if (stored) setParticipant(JSON.parse(stored)) }, [room])
-  useEffect(() => { if (participant && session?.participants?.[participant.id]) setParticipant(session.participants[participant.id]) }, [session, participant?.id])
+  // Do not render Firebase's optimistic local answer update. Wait for the
+  // server-confirmed write, so a rejected write cannot flash the next question.
+  useEffect(() => { if (!saving && participant && session?.participants?.[participant.id]) setParticipant(session.participants[participant.id]) }, [session, participant?.id, saving])
   useEffect(() => { if (participant?.status !== 'finished' || reportReady || showReport) return; const timer = window.setTimeout(() => setReportReady(true), 2600); return () => window.clearTimeout(timer) }, [participant?.status, reportReady, showReport])
 
   const join = async () => {
     if (!room || name.trim().length < 2) return setNotice('Введите никнейм от 2 до 20 символов.')
-    const user = firebaseReady ? await ensureAuth() : null
-    const next: Participant = { id: user?.uid || crypto.randomUUID(), nickname: name.trim().slice(0, 20), joinedAt: Date.now(), status: 'waiting', currentQuestionIndex: 0, answers: {} }
     try {
+      if (!session) throw new Error('Проверяем состояние комнаты. Попробуйте ещё раз через секунду.')
+      if (session.phase === 'closed') throw new Error('Сессия завершена ведущим. Подключение больше недоступно.')
+      const user = firebaseReady ? await ensureAuth() : null
+      const next: Participant = { id: user?.uid || crypto.randomUUID(), nickname: name.trim().slice(0, 20), joinedAt: Date.now(), status: 'waiting', currentQuestionIndex: 0, answers: {} }
       if (firebaseReady) await joinSession(room, next)
       else { const demo = getDemo(room); if (!demo) throw new Error('Комната не найдена'); setDemo({ ...demo, participants: { ...demo.participants, [next.id]: next } }) }
       localStorage.setItem(`atmosphere-participant-${room}`, JSON.stringify(next)); setParticipant(next)
@@ -76,15 +80,32 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   }
   const answer = async (value: ResponseValue) => {
     if (!participant || !session || saving) return
-    setSaving(true); const question = activeQuestions[participant.currentQuestionIndex]; const nextIndex = participant.currentQuestionIndex + 1
+    if (session.phase !== 'live') return setNotice(session.phase === 'closed' ? 'Сессия завершена ведущим. Ответы больше не принимаются.' : 'Ответы пока не принимаются. Дождитесь запуска диагностики.')
+    const question = activeQuestions[participant.currentQuestionIndex]
+    if (!activeQuestions.length || !question) return setNotice('Не удалось определить текущий вопрос. Обновите страницу или обратитесь к ведущему.')
+    const nextIndex = participant.currentQuestionIndex + 1
+    setNotice(''); setSaving(true)
     try {
-      if (firebaseReady) await saveAnswer(room, participant, question.id, value, nextIndex, activeQuestions.length)
-      else { const next = { ...participant, answers: { ...participant.answers, [question.id]: value }, currentQuestionIndex: nextIndex, status: nextIndex >= activeQuestions.length ? 'finished' as const : 'answering' as const, ...(nextIndex >= activeQuestions.length ? { completedAt: Date.now() } : {}) }; const demo = { ...session, participants: { ...session.participants, [participant.id]: next } }; setDemo(demo); setSession(demo); setParticipant(next) }
+      const next = firebaseReady
+        ? await saveAnswer(room, participant, question.id, value, nextIndex, activeQuestions.length)
+        : { ...participant, answers: { ...participant.answers, [question.id]: value }, currentQuestionIndex: nextIndex, status: nextIndex >= activeQuestions.length ? 'finished' as const : 'answering' as const, ...(nextIndex >= activeQuestions.length ? { completedAt: Date.now() } : {}) }
+      if (!firebaseReady) {
+        const demo = { ...session, participants: { ...session.participants, [participant.id]: next } }
+        setDemo(demo)
+        setSession(demo)
+      }
+      // Only advance after Firebase confirms the write. This keeps the local
+      // question index stable when a rules rejection rolls back the write.
+      localStorage.setItem(`atmosphere-participant-${room}`, JSON.stringify(next))
+      setParticipant(next)
+    } catch (error) {
+      setNotice(error instanceof Error ? `Ответ не сохранён: ${error.message}` : 'Ответ не сохранён. Пожалуйста, попробуйте ещё раз.')
     } finally { setSaving(false) }
   }
   const openReport = async () => { if (!participant) return; try { if (firebaseReady) await markPersonalViewed(room, participant.id); else if (session) { const next = { ...participant, personalViewedAt: Date.now() }; const demo = { ...session, participants: { ...session.participants, [participant.id]: next } }; setDemo(demo); setSession(demo); setParticipant(next) } } finally { setShowReport(true) } }
 
   if (!room) return <Shell screen="intro-screen"><p className="flow-label">ОНЛАЙН-ДИАГНОСТИКА</p><h1>Нужен QR-код ведущего</h1><p>Отсканируйте код, чтобы открыть личную ссылку на диагностику.</p></Shell>
+  if (session?.phase === 'closed') return <Shell screen="waiting-screen"><div className="ready-spark">✓</div><p className="flow-label">СЕССИЯ ЗАВЕРШЕНА</p><h1>Эта диагностика уже завершена</h1><p>Ведущий закрыл комнату. Ответы больше не принимаются, а подключиться по этой ссылке нельзя.</p></Shell>
   if (!participant && screen === 'intro') return <Shell screen="intro-screen"><p className="flow-label gold">ОНЛАЙН-ДИАГНОСТИКА</p><h1>Атмосфера<br />нашей молодёжи</h1><p>Небольшая анонимная диагностика, которая помогает увидеть сильные стороны и точки роста.</p><div className="intro-info"><b>✦</b><strong>{activeQuestions.length} простых вопросов</strong><small>{Object.keys(categories).length} тем · в своём темпе · без оценок</small><i /><span>В конце ты получишь личную карточку с результатами.</span></div><Action onClick={() => setScreen('nickname')}>Начать диагностику</Action><small className="flow-footnote">Твоя искренность поможет нам стать ближе.</small></Shell>
   if (!participant) return <Shell screen="nickname-screen"><p className="flow-label">ШАГ 1 ИЗ 2</p><h1>Как тебя<br />называть?</h1><p>Можно указать имя или придумать никнейм — результаты всё равно останутся анонимными.</p><input value={name} onChange={event => setName(event.target.value)} placeholder="Например, «Свет»" maxLength={20} /><small className="input-help">Это нужно только для твоей личной карточки.</small><div className="flow-note"><b>Важно</b><p>Нет правильных или неправильных ответов. Главное — отвечать честно.</p></div><Action onClick={() => void join()}>Продолжить</Action>{notice && <p className="flow-error">{notice}</p>}</Shell>
   if (!session || session.phase === 'lobby') return <Shell screen="waiting-screen"><div className="waiting-orbit"><i /><i /><b>✦</b></div><p className="flow-label">ПОДКЛЮЧЕНИЕ ПОДТВЕРЖДЕНО</p><h1>Ждём ведущего</h1><p>Ты уже в комнате. Как только ведущий запустит диагностику, первый вопрос появится автоматически.</p><div className="waiting-status"><span /><div><b>Собираем участников</b><small>Не закрывай эту страницу</small></div></div></Shell>
@@ -92,6 +113,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   if (participant.status === 'finished' && !showReport) return <Shell screen="report-ready"><div className="ready-spark">✓</div><p className="flow-label">ТВОЙ ОТЧЁТ ГОТОВ</p><h1>{participant.nickname}, спасибо!</h1><p>Ты ответил(а) на все вопросы. Твоя личная карточка готова и доступна только тебе.</p><Action onClick={() => void openReport()}>Открыть личный отчёт <span>→</span></Action></Shell>
   if (participant.status === 'finished') return <PersonalReport participant={participant} scores={scoreAnswers(participant.answers || {}, activeQuestions)} onClose={() => setShowReport(false)} />
   const question = activeQuestions[participant.currentQuestionIndex]
+  if (!question) return <Shell screen="waiting-screen"><p className="flow-label">ВОПРОС НЕДОСТУПЕН</p><h1>Не удалось открыть текущий вопрос</h1><p>Обновите страницу. Если проблема останется, обратитесь к ведущему.</p>{notice && <p className="flow-error">{notice}</p>}</Shell>
   const done = Math.round(participant.currentQuestionIndex / activeQuestions.length * 100)
-  return <Shell screen="question-screen"><div className="question-top"><div><span>ВОПРОС {participant.currentQuestionIndex + 1} / {activeQuestions.length}</span><small>{categories[question.category]}</small></div><b>{done}%</b></div><div className="question-progress"><i style={{ width: `${done}%` }} /></div><h1 className="question">{question.title}</h1><p>Выбери вариант, который ближе всего к тебе.</p><div className="options answer-options">{(['A', 'B', 'C', 'D'] as Answer[]).map(letter => <button className="option" disabled={saving} key={letter} onClick={() => void answer(letter)}><b>{letter}</b><span>{question.options[letter]}</span></button>)}</div><div className="question-footer"><Action secondary disabled={saving} onClick={() => void answer('SKIP')}>Пропустить вопрос</Action><small>Но это может стоить вам <b>баллов.</b></small></div></Shell>
+  return <Shell screen="question-screen"><div className="question-top"><div><span>ВОПРОС {participant.currentQuestionIndex + 1} / {activeQuestions.length}</span><small>{categories[question.category]}</small></div><b>{done}%</b></div><div className="question-progress"><i style={{ width: `${done}%` }} /></div><h1 className="question">{question.title}</h1><p>Выбери вариант, который ближе всего к тебе.</p><div className="options answer-options">{(['A', 'B', 'C', 'D'] as Answer[]).map(letter => <button className="option" disabled={saving} key={letter} onClick={() => void answer(letter)}><b>{letter}</b><span>{question.options[letter]}</span></button>)}</div><div className="question-footer"><Action secondary disabled={saving} onClick={() => void answer('SKIP')}>Пропустить вопрос</Action><small>Но это может стоить вам <b>баллов.</b></small></div>{notice && <p className="flow-error">{notice}</p>}</Shell>
 }

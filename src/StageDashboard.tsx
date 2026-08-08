@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { questions } from './data/questions'
 import { ensureAuth, firebaseReady, subscribeSession, updatePhase } from './lib/firebase'
-import type { Participant, Session } from './types'
+import { getSessionQuestions, type Participant, type Session } from './types'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -36,7 +36,7 @@ export function StageDashboard({ room }: { room: string }) {
   const [session, setSession, state] = useStageSession(room)
   const [opening, setOpening] = useState(false)
   const people = Object.values(session?.participants || {}) as Participant[]
-  const activeQuestionCount = session?.questions?.length || questions.length
+  const activeQuestionCount = getSessionQuestions(session, questions).length
   const answered = people.reduce((sum, participant) => sum + Object.keys(participant.answers || {}).length, 0)
   const totalAnswers = Math.max(people.length * activeQuestionCount, 1)
   const finished = people.filter(person => person.status === 'finished').length

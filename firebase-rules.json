@@ -10,8 +10,24 @@
     "workspaces": {
       "$workspaceId": {
         ".read": "auth != null && (data.child('ownerUid').val() === auth.uid || data.child('members').child(auth.uid).exists())",
-        ".write": "auth != null && (!data.exists() ? newData.child('ownerUid').val() === auth.uid : data.child('ownerUid').val() === auth.uid)",
-        ".validate": "newData.hasChildren(['id', 'name', 'city', 'ownerUid', 'createdAt', 'updatedAt']) && newData.child('id').val() === $workspaceId && newData.child('name').isString() && newData.child('city').isString()"
+        ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid && newData.child('planId').val() === 'pilot-free' && newData.child('billingStatus').val() === 'pilot' && newData.child('accessEndsAt').val() === 0 && newData.child('accessSource').val() === 'pilot') || (data.exists() && data.child('ownerUid').val() === auth.uid && newData.child('planId').val() === data.child('planId').val() && newData.child('billingStatus').val() === data.child('billingStatus').val() && newData.child('accessEndsAt').val() === data.child('accessEndsAt').val() && newData.child('accessSource').val() === data.child('accessSource').val()))",
+        ".validate": "newData.hasChildren(['id', 'name', 'city', 'ownerUid', 'planId', 'billingStatus', 'accessEndsAt', 'accessSource', 'createdAt', 'updatedAt']) && newData.child('id').val() === $workspaceId && newData.child('name').isString() && newData.child('city').isString() && newData.child('planId').isString() && (newData.child('billingStatus').val() === 'free' || newData.child('billingStatus').val() === 'pilot' || newData.child('billingStatus').val() === 'manual_paid' || newData.child('billingStatus').val() === 'expired' || newData.child('billingStatus').val() === 'disabled') && newData.child('accessEndsAt').isNumber() && (newData.child('accessSource').val() === 'pilot' || newData.child('accessSource').val() === 'manual')"
+      }
+    },
+    "workspaceProducts": {
+      "$workspaceId": {
+        "$productId": {
+          ".read": "auth != null && root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid",
+          ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid && newData.child('productId').val() === 'youth-atmosphere' && newData.child('enabled').val() === true && newData.child('accessSource').val() === 'pilot' && newData.child('planId').val() === 'pilot-free' && newData.child('expiresAt').val() === 0 && newData.child('testing').val() === false && (!root.child('workspaces').child($workspaceId).exists() || (root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid && !root.child('workspaces').child($workspaceId).child('planId').exists()))) || (data.exists() && root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid && newData.val() === data.val()))",
+          ".validate": "newData.hasChildren(['productId', 'ownerUid', 'enabled', 'accessSource', 'planId', 'startsAt', 'expiresAt', 'testing']) && newData.child('productId').val() === $productId && newData.child('ownerUid').isString() && newData.child('enabled').isBoolean() && (newData.child('accessSource').val() === 'pilot' || newData.child('accessSource').val() === 'manual') && newData.child('planId').isString() && newData.child('startsAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('testing').isBoolean()"
+        }
+      }
+    },
+    "products": {
+      "$productId": {
+        ".read": "auth != null",
+        ".write": false,
+        ".validate": "newData.hasChildren(['productId', 'status']) && newData.child('productId').val() === $productId && (newData.child('status').val() === 'enabled' || newData.child('status').val() === 'maintenance' || newData.child('status').val() === 'testing' || newData.child('status').val() === 'disabled')"
       }
     },
     "invites": {
@@ -30,12 +46,26 @@
       ".read": "auth != null",
       ".write": "auth != null"
     },
+    "globalPacks": {
+      "$packId": {
+        ".read": "auth != null",
+        ".write": false
+      }
+    },
+    "workspacePacks": {
+      "$workspaceId": {
+        "$packId": {
+          ".read": "auth != null && root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid",
+          ".write": "auth != null && root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid"
+        }
+      }
+    },
     "sessions": {
       "$roomId": {
         ".read": "auth != null",
-        ".write": "auth != null && (!data.exists() ? newData.child('hostUid').val() === auth.uid : data.child('hostUid').val() === auth.uid)",
+        ".write": "auth != null && ((!data.exists() && newData.child('hostUid').val() === auth.uid && newData.child('workspaceId').isString() && newData.child('productId').val() === 'youth-atmosphere' && root.child('users').child(auth.uid).child('status').val() === 'active' && root.child('workspaces').child(newData.child('workspaceId').val()).child('ownerUid').val() === auth.uid && (!root.child('workspaces').child(newData.child('workspaceId').val()).child('billingStatus').exists() || ((root.child('workspaces').child(newData.child('workspaceId').val()).child('billingStatus').val() === 'free' || root.child('workspaces').child(newData.child('workspaceId').val()).child('billingStatus').val() === 'pilot' || root.child('workspaces').child(newData.child('workspaceId').val()).child('billingStatus').val() === 'manual_paid') && (!root.child('workspaces').child(newData.child('workspaceId').val()).child('accessEndsAt').exists() || root.child('workspaces').child(newData.child('workspaceId').val()).child('accessEndsAt').val() === 0 || root.child('workspaces').child(newData.child('workspaceId').val()).child('accessEndsAt').val() > now))) && (!root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').exists() || (root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('enabled').val() === true && root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('planId').val() === root.child('workspaces').child(newData.child('workspaceId').val()).child('planId').val() && (root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('expiresAt').val() === 0 || root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('expiresAt').val() > now))) && (!root.child('products').child('youth-atmosphere').exists() || root.child('products').child('youth-atmosphere').child('status').val() === 'enabled' || (root.child('products').child('youth-atmosphere').child('status').val() === 'testing' && root.child('workspaceProducts').child(newData.child('workspaceId').val()).child('youth-atmosphere').child('testing').val() === true))) || (data.exists() && data.child('hostUid').val() === auth.uid))",
         "participants": {
-          ".write": "auth != null && (root.child('sessions').child($roomId).child('hostUid').val() === auth.uid || (data.child(auth.uid).exists() === false && newData.child(auth.uid).exists() && newData.child(auth.uid).child('id').val() === auth.uid))",
+          ".write": "auth != null && root.child('sessions').child($roomId).child('phase').val() !== 'closed' && (root.child('sessions').child($roomId).child('hostUid').val() === auth.uid || (data.child(auth.uid).exists() === false && newData.child(auth.uid).exists() && newData.child(auth.uid).child('id').val() === auth.uid))",
           "$participantId": {
             ".write": "auth != null && (auth.uid === $participantId || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)",
             ".validate": "newData.child('id').val() === $participantId && newData.child('nickname').isString() && root.child('sessions').child($roomId).child('phase').val() !== 'closed'"
@@ -45,4 +75,3 @@
     }
   }
 }
-
