@@ -66,7 +66,7 @@ function App() {
   }
   if (path.endsWith('/join')) return <MobileParticipantFlow room={queryRoom()} />
   if (path.endsWith('/stage')) return <StageDashboard room={queryRoom()} />
-  return <Landing />
+  return <AuthPage mode="login" />
 }
 
 function AuthRedirect({ to }: { to: string }) {
@@ -152,13 +152,24 @@ function AccountPage({ profile }: { profile: LeaderProfile }) {
   return <main className="auth-page"><Glass className="auth-card account-card"><p className="eyebrow">АККАУНТ ВЕДУЩЕГО</p><h1>{profile.fullName}</h1><p className={`account-status ${profile.status}`}>{labels[profile.status]}</p><dl><div><dt>Молодёжка</dt><dd>{workspace?.name || profile.workspaceId}</dd></div>{workspace?.city && <div><dt>Город</dt><dd>{workspace.city}</dd></div>}<div><dt>Email</dt><dd>{profile.email}</dd></div><div><dt>Телефон</dt><dd>{profile.phone}</dd></div></dl>{profile.status === 'pending' && <p>Заявка сохранена. Доступ к панели появится после активации или регистрации по действующей invite-ссылке.</p>}{profile.status === 'paused' && <p>Доступ к панели временно приостановлен.</p>}{profile.status === 'revoked' && <p>Доступ к панели отозван. Обратитесь к администратору.</p>}{profile.status === 'active' && <Button onClick={() => go('/host')}>Открыть панель ведущего</Button>}<Button secondary onClick={() => void logoutLeader().then(() => go('/login'))}>Выйти</Button></Glass></main>
 }
 
-function Landing() {
-  const leader = useLeaderProfile()
-  const workspaceRoute = leader.profile?.status === 'active' ? '/host' : leader.userUid ? '/account' : '/login'
-  return <main className="landing landing-product"><div className="orb orb-a" /><div className="orb orb-b" /><div className="landing-grid"><section className="landing-copy"><p className="eyebrow">МОЛОДЁЖНАЯ ПРОГРАММА</p><h1>Добро пожаловать<br />в «Атмосферу»</h1><p className="landing-lead">Пространство для живых встреч, где ведущий легко запускает диагностики, викторины и интерактивы для молодёжной группы.</p><div className="landing-actions"><Button onClick={() => go(workspaceRoute)}>{leader.loading ? 'Проверяем доступ…' : 'Начать диагностику'}</Button><Button secondary disabled>Библейская викторина · скоро</Button><Button secondary onClick={() => document.getElementById('landing-rules')?.scrollIntoView({ behavior: 'smooth' })}>Ознакомиться с правилами</Button></div><p className="landing-feedback">Сейчас продукт развивается вместе с первыми командами. Протестируйте доступные возможности и поделитесь впечатлением — это поможет сделать «Атмосферу» лучше.</p></section><Glass className="landing-visual"><div className="landing-visual-glow" /><p className="eyebrow">ЭТАП РАЗРАБОТКИ</p><h2>Диагностика уже доступна. Викторина — на подходе.</h2><div className="landing-feature-list"><article><span>01</span><div><b>Диагностика атмосферы</b><small>{questions.length} вопросов · {Object.keys(categories).length} тем · личные и общие результаты</small></div></article><article><span>02</span><div><b>Библия: викторина</b><small>Скоро появится в «Атмосфере». Сейчас она показана только как следующий модуль.</small></div></article></div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section id="landing-rules" className="landing-steps"><p className="eyebrow">КАК НАЧАТЬ РАБОТУ</p><div><article><b>1</b><h3>Откройте диагностику</h3><p>Нажмите «Начать диагностику» и перейдите в рабочее пространство ведущего.</p></article><article><b>2</b><h3>Создайте комнату</h3><p>Ведущий получает QR-код и одну ссылку для безопасного подключения участников.</p></article><article><b>3</b><h3>Запустите встречу</h3><p>Следите за прогрессом, открывайте общий результат и сохраняйте итоги.</p></article></div></section></main>
+function HomePanel({ name, onStart }: { name: string; onStart: () => void }) {
+  return <div className="home-panel"><div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><div className="control-actions"><Button onClick={onStart}>Перейти к созданию комнаты</Button><Button secondary disabled>Библейская викторина · скоро</Button></div><p className="home-feedback">Сейчас продукт находится на этапе разработки. Доступны две функции для тестирования: диагностика уже работает, а викторина готовится к запуску. Пожалуйста, протестируйте сервис и поделитесь обратной связью.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ЭТАП РАЗРАБОТКИ</p><h3>Диагностика уже доступна. Викторина — на подходе.</h3><div className="landing-feature-list"><article><span>01</span><div><b>Диагностика атмосферы</b><small>{questions.length} вопросов · {Object.keys(categories).length} тем · личные и общие результаты</small></div></article><article><span>02</span><div><b>Библия: викторина</b><small>Следующий модуль «Атмосферы». Сейчас он показан как функция в разработке.</small></div></article></div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Откройте обзор и создайте новую комнату для своей встречи.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Выберите диагностику или в будущем — игру, затем начните встречу.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте общую картину, библиотеку результатов и экспорт.</p></article></div></section></div>
 }
 
-type HostTab = 'overview' | 'rooms' | 'results' | 'questions' | 'export' | 'settings'
+function RulesPanel({ onStart }: { onStart: () => void }) {
+  const rules = [
+    ['Создать комнату', 'Откройте «Обзор» и создайте комнату. Код комнаты и QR-код появятся автоматически.'],
+    ['Запустить диагностику или игру', 'Когда участники подключатся, запустите диагностику. Викторина появится здесь после следующего этапа разработки.'],
+    ['Подключить участников', 'Участники сканируют QR-код или открывают ту же ссылку под ним. Оба способа ведут в одну комнату.'],
+    ['Завершить комнату', 'Нажмите «Завершить комнату» в обзоре или настройках. После этого новые ответы не принимаются.'],
+    ['Посмотреть результаты', 'Откройте раздел «Результаты»: там хранится общая картина завершённых встреч.'],
+    ['Экспортировать данные', 'В разделе «Экспорт» скачивается файл с никнеймами, вопросами и полными текстами ответов.'],
+    ['Библиотека встреч', 'После завершения участники, ответы и результаты остаются в библиотеке вашей молодёжной группы.']
+  ] as const
+  return <div className="rules-panel"><div className="rules-intro"><p className="eyebrow">ПРАВИЛА РАБОТЫ</p><h2>Краткая инструкция ведущего</h2><p>Этот раздел рассчитан на дальнейшее расширение: сюда можно добавлять иллюстрации, подробные сценарии и пошаговые инструкции, не меняя навигацию.</p><Button onClick={onStart}>Перейти к обзору</Button></div><div className="rules-list">{rules.map(([title, description], index) => <Glass className="rule-card" key={title}><span>{String(index + 1).padStart(2, '0')}</span><div><h3>{title}</h3><p>{description}</p></div></Glass>)}</div></div>
+}
+
+type HostTab = 'main' | 'overview' | 'rooms' | 'results' | 'questions' | 'export' | 'settings' | 'rules'
 type HostMenuItem = [HostTab, string, string]
 
 function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, setMenuOpen, children, resultsMode = false }: { menu: HostMenuItem[]; tab: HostTab; onTab: (tab: HostTab) => void; room: string; session: Session | null; participants: number; menuOpen: boolean; setMenuOpen: (value: boolean) => void; children: React.ReactNode; resultsMode?: boolean }) {
@@ -177,7 +188,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [createError, setCreateError] = useState('')
   const [lastClosedRoom, setLastClosedRoom] = useState('')
   const tabKey = `atmosphere-host-tab-${leader.uid}`
-  const [tab, setTab] = useState<HostTab>(() => initialTab || (localStorage.getItem(tabKey) as HostTab) || 'overview')
+  const [tab, setTab] = useState<HostTab>(() => initialTab || (localStorage.getItem(tabKey) as HostTab) || 'main')
   const [menuOpen, setMenuOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1080)
   const [resultRoom, setResultRoom] = useState(() => initialTab === 'results' ? initialRoom || '' : '')
   const [archives, setArchives] = useState<Record<string, SessionArchive>>({})
@@ -193,7 +204,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const finished = participants.filter(p => p.status === 'finished').length
   const answering = participants.filter(p => p.status === 'answering').length
   const allFinished = participants.length > 0 && finished === participants.length
-  const menu: HostMenuItem[] = [['overview', 'Обзор', '⌁'], ['rooms', 'Комнаты', '◫'], ['results', 'Результаты', '◉'], ['questions', 'Вопросы', '◌'], ['export', 'Экспорт', '↓'], ['settings', 'Настройки', '⚙']]
+  const menu: HostMenuItem[] = [['main', 'Главное', '✦'], ['overview', 'Обзор', '⌁'], ['rooms', 'Комнаты', '◫'], ['results', 'Результаты', '◉'], ['questions', 'Вопросы', '◌'], ['export', 'Экспорт', '↓'], ['settings', 'Настройки', '⚙'], ['rules', 'Правила', '?']]
   const archiveEntries = useMemo(() => Object.values(archives).filter(archived => archived.hostUid === leader.uid && (!archived.workspaceId || archived.workspaceId === leader.workspaceId)).sort((a, b) => b.archivedAt - a.archivedAt), [archives, leader.uid, leader.workspaceId])
   const navigate = (next: HostTab) => {
     setTab(next)
@@ -338,6 +349,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     setMenuOpen(false)
   }
   const resultSession = resultRoom === room ? session : archives[resultRoom] || null
+  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} onStart={() => navigate('overview')} /></HostLayout>
+  if (tab === 'rules') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ПОДСКАЗКИ ДЛЯ ВЕДУЩЕГО</p><h1>Правила</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><RulesPanel onStart={() => navigate('overview')} /></HostLayout>
   if (tab === 'results' && resultRoom && resultSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={resultSession} participants={Object.keys(resultSession.participants).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode><header className="host-header host-results-header"><div><p className="eyebrow">РЕЗУЛЬТАТЫ · {resultRoom}</p><h1>Общая картина</h1></div><span className="status">СОХРАНЕНО</span></header><Results room={resultRoom} sessionOverride={resultSession} embedded /></HostLayout>
   const resetQuestionDraft = (category: Question['category'] = 'communication') => {
     setEditingQuestionId(null)
