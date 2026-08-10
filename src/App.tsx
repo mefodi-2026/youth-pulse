@@ -12,6 +12,14 @@ import { appBasePath as getAppBasePath, createJoinUrl } from './lib/urls'
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
 const setDemo = (session: Session) => { localStorage.setItem(demoKey(session.roomId), JSON.stringify(session)); window.dispatchEvent(new StorageEvent('storage', { key: demoKey(session.roomId) })) }
+// Порядок массива важен для диагностики: участник проходит вопросы в том же
+// порядке, в каком они записаны в pack. Новый вопрос остаётся в своей категории.
+const orderQuestionsByCategory = (questionSet: Question[]) => {
+  const categoryOrder = Object.keys(categories) as Question['category'][]
+  const knownQuestions = categoryOrder.flatMap(category => questionSet.filter(question => question.category === category))
+  const unknownQuestions = questionSet.filter(question => !categoryOrder.includes(question.category))
+  return [...knownQuestions, ...unknownQuestions]
+}
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
 const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, '')
 const currentPath = () => window.location.pathname.replace(/\/+$/, '') || '/'
@@ -399,16 +407,17 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
   const persistQuestionBank = async (nextBank: Question[]) => {
+    const orderedBank = orderQuestionsByCategory(nextBank)
     setQuestionError('')
     if (firebaseReady) {
       try {
-        await saveWorkspacePack(leader.workspaceId, nextBank)
+        await saveWorkspacePack(leader.workspaceId, orderedBank)
         setTemplateSelection({ selectedPackId: diagnosticPackId, templateSource: 'workspace' })
       } catch (error) {
         throw new Error(`Не удалось сохранить личную копию вопросника: ${error instanceof Error ? error.message : 'проверьте Firebase Rules'}`)
       }
-    } else localStorage.setItem(`atmosphere-question-bank-${leader.workspaceId}`, JSON.stringify(nextBank))
-    setQuestionBank(nextBank)
+    } else localStorage.setItem(`atmosphere-question-bank-${leader.workspaceId}`, JSON.stringify(orderedBank))
+    setQuestionBank(orderedBank)
   }
   const saveQuestion = async () => {
     if (!questionDraft.title.trim() || questionDraft.options.some(option => !option.trim())) {
