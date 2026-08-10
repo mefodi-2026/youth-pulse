@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
 import { archiveSession, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, firebaseReady, joinSession, loginLeader, logoutLeader, markPersonalViewed, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeGlobalPack, subscribeLeaderProfile, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, updatePhase, updateRoomTitle } from './lib/firebase'
-import { scoreAnswers } from './lib/scoring'
+import { getGameModule } from './lib/gameRegistry'
 import { downloadWishPng, printWish } from './lib/export'
 import { StageDashboard } from './StageDashboard'
 import { MobileParticipantFlow } from './MobileParticipantFlow'
-import { getSessionQuestions, type Answer, type LeaderProfile, type Participant, type Question, type Scores, type Session, type SessionArchive, type SessionPhase, type TemplateSelection, type Workspace } from './types'
+import { type Answer, type ContentPack, type LeaderProfile, type Participant, type Question, type Scores, type Session, type SessionArchive, type SessionPhase, type TemplateSelection, type Workspace } from './types'
 import { appBasePath as getAppBasePath, createJoinUrl } from './lib/urls'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
@@ -152,8 +152,8 @@ function AccountPage({ profile }: { profile: LeaderProfile }) {
   return <main className="auth-page"><Glass className="auth-card account-card"><p className="eyebrow">АККАУНТ ВЕДУЩЕГО</p><h1>{profile.fullName}</h1><p className={`account-status ${profile.status}`}>{labels[profile.status]}</p><dl><div><dt>Молодёжка</dt><dd>{workspace?.name || profile.workspaceId}</dd></div>{workspace?.city && <div><dt>Город</dt><dd>{workspace.city}</dd></div>}<div><dt>Email</dt><dd>{profile.email}</dd></div><div><dt>Телефон</dt><dd>{profile.phone}</dd></div></dl>{profile.status === 'pending' && <p>Заявка сохранена. Доступ к панели появится после активации или регистрации по действующей invite-ссылке.</p>}{profile.status === 'paused' && <p>Доступ к панели временно приостановлен.</p>}{profile.status === 'revoked' && <p>Доступ к панели отозван. Обратитесь к администратору.</p>}{profile.status === 'active' && <Button onClick={() => go('/host')}>Открыть панель ведущего</Button>}<Button secondary onClick={() => void logoutLeader().then(() => go('/login'))}>Выйти</Button></Glass></main>
 }
 
-function HomePanel({ name, onStart }: { name: string; onStart: () => void }) {
-  return <div className="home-panel"><div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><div className="control-actions"><Button onClick={onStart}>Перейти к созданию комнаты</Button><Button secondary disabled>Библейская викторина · скоро</Button></div><p className="home-feedback">Сейчас продукт находится на этапе разработки. Доступны две функции для тестирования: диагностика уже работает, а викторина готовится к запуску. Пожалуйста, протестируйте сервис и поделитесь обратной связью.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ЭТАП РАЗРАБОТКИ</p><h3>Диагностика уже доступна. Викторина — на подходе.</h3><div className="landing-feature-list"><article><span>01</span><div><b>Диагностика атмосферы</b><small>{questions.length} вопросов · {Object.keys(categories).length} тем · личные и общие результаты</small></div></article><article><span>02</span><div><b>Библия: викторина</b><small>Следующий модуль «Атмосферы». Сейчас он показан как функция в разработке.</small></div></article></div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Откройте обзор и создайте новую комнату для своей встречи.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Выберите диагностику или в будущем — игру, затем начните встречу.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте общую картину, библиотеку результатов и экспорт.</p></article></div></section></div>
+function HomePanel({ name, onStart, questionCount }: { name: string; onStart: () => void; questionCount: number }) {
+  return <div className="home-panel"><div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><div className="control-actions"><Button onClick={onStart}>Перейти к созданию комнаты</Button><Button secondary disabled>Библейская викторина · скоро</Button></div><p className="home-feedback">Сейчас продукт находится на этапе разработки. Доступны две функции для тестирования: диагностика уже работает, а викторина готовится к запуску. Пожалуйста, протестируйте сервис и поделитесь обратной связью.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ЭТАП РАЗРАБОТКИ</p><h3>Диагностика уже доступна. Викторина — на подходе.</h3><div className="landing-feature-list"><article><span>01</span><div><b>Диагностика атмосферы</b><small>{questionCount || '—'} вопросов · {Object.keys(categories).length} тем · личные и общие результаты</small></div></article><article><span>02</span><div><b>Библия: викторина</b><small>Следующий модуль «Атмосферы». Сейчас он показан как функция в разработке.</small></div></article></div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Откройте обзор и создайте новую комнату для своей встречи.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Выберите диагностику или в будущем — игру, затем начните встречу.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте общую картину, библиотеку результатов и экспорт.</p></article></div></section></div>
 }
 
 function RulesPanel({ onStart }: { onStart: () => void }) {
@@ -199,7 +199,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [menuOpen, setMenuOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1080)
   const [resultRoom, setResultRoom] = useState(() => initialTab === 'results' ? initialRoom || '' : '')
   const [archives, setArchives] = useState<Record<string, SessionArchive>>({})
-  const [questionBank, setQuestionBank] = useState<Question[]>(questions)
+  const [questionBank, setQuestionBank] = useState<Question[]>(() => firebaseReady ? [] : questions)
   const templateKey = `atmosphere-template-selection-${leader.workspaceId}`
   const [templateSelection, setTemplateSelection] = useState<TemplateSelection>(() => {
     try {
@@ -207,8 +207,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       return saved?.selectedPackId && (saved.templateSource === 'system' || saved.templateSource === 'workspace') ? saved : defaultDiagnosticTemplateSelection
     } catch { return defaultDiagnosticTemplateSelection }
   })
-  const [systemPack, setSystemPack] = useState<Question[] | null>(null)
-  const [workspacePack, setWorkspacePack] = useState<Question[] | null>(null)
+  const [systemPack, setSystemPack] = useState<ContentPack | null>(null)
+  const [workspacePack, setWorkspacePack] = useState<ContentPack | null>(null)
   const [questionDraft, setQuestionDraft] = useState({ category: 'communication' as Question['category'], title: '', options: ['', '', '', ''] })
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [questionSaving, setQuestionSaving] = useState(false)
@@ -266,14 +266,14 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     let stopSystem: () => void = () => undefined
     let stopWorkspace: () => void = () => undefined
     void ensureAuth().then(() => {
-      stopSystem = subscribeGlobalPack(diagnosticPackId, pack => setSystemPack(pack?.content.questions || null), () => setSystemPack(null))
-      stopWorkspace = subscribeWorkspacePack(leader.workspaceId, diagnosticPackId, pack => setWorkspacePack(pack?.content.questions || null), () => setWorkspacePack(null))
+      stopSystem = subscribeGlobalPack(diagnosticPackId, setSystemPack, () => setSystemPack(null))
+      stopWorkspace = subscribeWorkspacePack(leader.workspaceId, diagnosticPackId, setWorkspacePack, () => setWorkspacePack(null))
     }).catch(() => { setSystemPack(null); setWorkspacePack(null) })
     return () => { stopSystem(); stopWorkspace() }
   }, [leader.workspaceId])
   useEffect(() => {
     const selected = templateSelection.templateSource === 'workspace' ? workspacePack : systemPack
-    setQuestionBank(selected?.length ? selected : questions)
+    setQuestionBank(selected?.content.questions || (firebaseReady ? [] : questions))
   }, [systemPack, templateSelection.templateSource, workspacePack])
   useEffect(() => { localStorage.setItem(templateKey, JSON.stringify(templateSelection)) }, [templateKey, templateSelection])
   useEffect(() => { setRoomTitleDraft(session?.phase === 'lobby' ? session.roomTitle || '' : '') }, [room, session?.phase, session?.roomTitle])
@@ -281,7 +281,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     setBusy(true); setActionError(''); setCreateError('')
     const newRoom = makeRoom()
     try {
-      if (firebaseReady) { const user = await ensureAuth(); if (!user) throw new Error('Не удалось войти в Firebase'); await createSession(newRoom, user.uid, questionBank, leader.workspaceId, templateSelection, title) }
+      if (firebaseReady) { if (!questionBank.length) throw new Error('Выбранный набор ещё не загружен или недоступен. Обновите страницу и попробуйте снова.'); const user = await ensureAuth(); if (!user) throw new Error('Не удалось войти в Firebase'); await createSession(newRoom, user.uid, questionBank, leader.workspaceId, templateSelection, title) }
       else setDemo(createSessionRecord(newRoom, 'demo-host', questionBank, leader.workspaceId, undefined, undefined, title))
       localStorage.setItem(roomKey, newRoom); localStorage.setItem(lastRoomKey, newRoom); localStorage.removeItem('atmosphere-host-room'); setLastClosedRoom(''); setResultRoom(''); setRoom(newRoom); navigate('overview')
     } catch (error) {
@@ -367,7 +367,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     setMenuOpen(false)
   }
   const resultSession = resultRoom === room ? session : archives[resultRoom] || null
-  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} onStart={() => navigate('overview')} /></HostLayout>
+  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} questionCount={questionBank.length} onStart={() => navigate('overview')} /></HostLayout>
   if (tab === 'rules') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ПОДСКАЗКИ ДЛЯ ВЕДУЩЕГО</p><h1>Правила</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><RulesPanel onStart={() => navigate('overview')} /></HostLayout>
   if (tab === 'profile') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ВАШ АККАУНТ</p><h1>Профиль</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><ProfilePanel profile={leader} /></HostLayout>
   if (tab === 'results' && resultRoom && resultSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={resultSession} participants={Object.keys(resultSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode><header className="host-header host-results-header"><div><p className="eyebrow">РЕЗУЛЬТАТЫ · {resultRoom}</p><h1>Общая картина</h1></div><span className="status">СОХРАНЕНО</span></header><Results room={resultRoom} sessionOverride={resultSession} embedded /></HostLayout>
@@ -432,9 +432,9 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
 }
 
 function exportCsv(session: Session) {
-  const questionSet = getSessionQuestions(session, questions)
+  const questionSet = getGameModule(session?.gameTypeId).getQuestions(session, questions)
   const rows = Object.values(session.participants).map(participant => {
-    const scores = scoreAnswers(participant.answers, questionSet)
+    const scores = getGameModule(session?.gameTypeId).score(participant.answers, questionSet)
     return [participant.id, participant.nickname, participant.status, ...questionSet.flatMap(question => { const selected = participant.answers[question.id]; return [question.title, selected === 'SKIP' ? 'Пропущен (−1 балл)' : selected ? question.options[selected] : ''] }), scores.total, ...Object.values(scores.categories)]
   })
   const headers = ['participantId', 'nickname', 'status', ...questionSet.flatMap((_, index) => [`Вопрос ${index + 1}`, `Ответ ${index + 1}`]), 'total', ...Object.values(categories)]
@@ -467,7 +467,7 @@ function Join({ room }: { room: string }) {
   const answer = async (value: Answer) => {
     if (!session || !participant || saving) return
     setSaving(true)
-    const activeQuestions = getSessionQuestions(session, questions)
+    const activeQuestions = getGameModule(session?.gameTypeId).getQuestions(session, questions)
     const question = activeQuestions[participant.currentQuestionIndex]
     const nextIndex = participant.currentQuestionIndex + 1
     try {
@@ -484,9 +484,10 @@ function Join({ room }: { room: string }) {
     else if (session) { const next = { ...participant, personalViewedAt: Date.now() }; const nextSession = { ...session, participants: { ...session.participants, [participant.id]: next } }; setDemo(nextSession); setSession(nextSession); setParticipant(next) }
     setShowPersonal(true)
   }
-  if (participant.status === 'finished' && showPersonal) return <PersonalResult participant={participant} scores={scoreAnswers(participant.answers || {})} onBack={() => setShowPersonal(false)} />
+  if (participant.status === 'finished' && showPersonal) return <PersonalResult participant={participant} scores={getGameModule(session?.gameTypeId).score(participant.answers || {}, getGameModule(session?.gameTypeId).getQuestions(session, questions))} onBack={() => setShowPersonal(false)} />
   if (participant.status === 'finished') return <Completion participant={participant} onPersonal={() => void openPersonal()} />
-  const question = questions[participant.currentQuestionIndex]
+  const activeQuestions = getGameModule(session?.gameTypeId).getQuestions(session, questions)
+  const question = activeQuestions[participant.currentQuestionIndex]
   return <MobileShell><div className="progress-label"><span>ВОПРОС {participant.currentQuestionIndex + 1} ИЗ {questions.length}</span><span>{Math.round((participant.currentQuestionIndex / questions.length) * 100)}%</span></div><div className="progress"><i style={{ width: `${participant.currentQuestionIndex / questions.length * 100}%` }} /></div><h1 className="question">{question.title}</h1><p>Выбери вариант, который ближе всего к тебе.</p><div className="options">{(['A', 'B', 'C', 'D'] as Answer[]).map(letter => <button key={letter} className="option" disabled={saving} onClick={() => void answer(letter)}><b>{letter}</b><span>{question.options[letter]}</span></button>)}</div></MobileShell>
 }
 
@@ -511,7 +512,7 @@ function Stage({ room }: { room: string }) {
   if (!room) return <main className="stage"><p className="eyebrow">ЭКРАН ПРОГРЕССА</p><h1>Нужен код комнаты</h1><p className="stage-caption">Откройте этот экран из панели ведущего.</p></main>
   if (!session) return <main className="stage"><div className="stage-glow" /><p className="eyebrow">ЭКРАН ПРОГРЕССА</p><h1>{connection === 'error' ? 'Не удалось подключиться' : 'Подключаемся к комнате'}</h1><p className="stage-caption">{connection === 'error' ? 'Проверьте интернет и откройте экран ещё раз.' : 'Это займёт несколько секунд.'}</p>{connection === 'error' ? <Button secondary onClick={() => window.location.reload()}>Повторить подключение</Button> : <div className="waiting-dot" />}</main>
   const people = Object.values(session?.participants || {})
-  const activeQuestionCount = getSessionQuestions(session, questions).length
+  const activeQuestionCount = getGameModule(session?.gameTypeId).getQuestions(session, questions).length
   const answers = people.reduce((sum, participant) => sum + Object.keys(participant.answers || {}).length, 0)
   const total = Math.max(people.length * activeQuestionCount, 1)
   const progress = Math.round(answers / total * 100)
@@ -526,7 +527,7 @@ function Results({ room, sessionOverride, embedded = false }: { room: string; se
   const elapsed = session?.resultsIntroStartedAt ? now - session.resultsIntroStartedAt : 0
   const showReal = session?.phase === 'resultsReal' || elapsed >= 20000
   const people = Object.values(session?.participants || {})
-  const real = useMemo(() => { if (!people.length) return { communication: 84, forgiveness: 71, service: 79, care: 68, honesty: 76 }; const values = people.map(person => scoreAnswers(person.answers || {}, getSessionQuestions(session, questions)).categories); return Object.fromEntries(Object.keys(categories).map(key => [key, Math.round(values.reduce((sum, item) => sum + item[key as keyof typeof item], 0) / values.length)])) as Record<keyof typeof categories, number> }, [people, session?.questions, session?.templateSnapshot])
+  const real = useMemo(() => { if (!people.length) return { communication: 84, forgiveness: 71, service: 79, care: 68, honesty: 76 }; const game = getGameModule(session?.gameTypeId); const values = people.map(person => game.score(person.answers || {}, game.getQuestions(session, questions)).categories); return Object.fromEntries(Object.keys(categories).map(key => [key, Math.round(values.reduce((sum, item) => sum + item[key as keyof typeof item], 0) / values.length)])) as Record<keyof typeof categories, number> }, [people, session?.gameTypeId, session?.questions, session?.templateSnapshot])
   const shown = showReal ? real : { communication: 96, forgiveness: 94, service: 97, care: 93, honesty: 95 }
   const overall = Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)
   const countdown = Math.max(0, Math.ceil((20000 - elapsed) / 1000))

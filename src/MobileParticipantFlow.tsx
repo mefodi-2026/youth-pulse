@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { categories, questions } from './data/questions'
 import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeRoomLobby, subscribeSession, waitForAuthPersistence } from './lib/firebase'
-import { scoreAnswers } from './lib/scoring'
+import { getGameModule } from './lib/gameRegistry'
 import { downloadWishPng, printWish } from './lib/export'
-import { getSessionQuestions, type Answer, type Participant, type ResponseValue, type RoomLobby, type Scores, type Session } from './types'
+import { type Answer, type Participant, type ResponseValue, type RoomLobby, type Scores, type Session } from './types'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -72,7 +72,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   const [showReport, setShowReport] = useState(false)
   const [authReady, setAuthReady] = useState(!firebaseReady)
   const [authUid, setAuthUid] = useState('')
-  const activeQuestions = getSessionQuestions(session, questions)
+  const activeQuestions = getGameModule(session?.gameTypeId).getQuestions(session, questions)
 
   useEffect(() => {
     let active = true
@@ -154,7 +154,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   if (!session || session.phase === 'lobby') return <Shell screen="waiting-screen"><div className="waiting-orbit"><i /><i /><b>✦</b></div><p className="flow-label">ПОДКЛЮЧЕНИЕ ПОДТВЕРЖДЕНО</p><h1>Ждём ведущего</h1><p>Ты уже в комнате. Как только ведущий запустит диагностику, первый вопрос появится автоматически.</p><div className="waiting-status"><span /><div><b>Собираем участников</b><small>Не закрывай эту страницу</small></div></div></Shell>
   if (participant.status === 'finished' && !reportReady) return <Shell screen="report-loading"><div className="report-loader"><i /><b>✦</b></div><p className="flow-label">ГОТОВО</p><h1>Подготавливаем<br />твой отчёт</h1><p>Собираем твою личную карточку — это займёт всего пару секунд.</p></Shell>
   if (participant.status === 'finished' && !showReport) return <Shell screen="report-ready"><div className="ready-spark">✓</div><p className="flow-label">ТВОЙ ОТЧЁТ ГОТОВ</p><h1>{participant.nickname}, спасибо!</h1><p>Ты ответил(а) на все вопросы. Твоя личная карточка готова и доступна только тебе.</p><Action onClick={() => void openReport()}>Открыть личный отчёт <span>→</span></Action></Shell>
-  if (participant.status === 'finished') return <PersonalReport participant={participant} scores={scoreAnswers(participant.answers || {}, activeQuestions)} onClose={() => setShowReport(false)} />
+  if (participant.status === 'finished') return <PersonalReport participant={participant} scores={getGameModule(session?.gameTypeId).score(participant.answers || {}, activeQuestions)} onClose={() => setShowReport(false)} />
   const question = activeQuestions[participant.currentQuestionIndex]
   if (!question) return <Shell screen="waiting-screen"><p className="flow-label">ВОПРОС НЕДОСТУПЕН</p><h1>Не удалось открыть текущий вопрос</h1><p>Обновите страницу. Если проблема останется, обратитесь к ведущему.</p>{notice && <p className="flow-error">{notice}</p>}</Shell>
   const done = Math.round(participant.currentQuestionIndex / activeQuestions.length * 100)

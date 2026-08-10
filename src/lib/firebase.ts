@@ -3,6 +3,7 @@ import { browserLocalPersistence, createUserWithEmailAndPassword, deleteUser, ge
 import { get, getDatabase, onValue, push, ref, set, update } from 'firebase/database'
 import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
+import { diagnosticGameModule, getGameModule } from './gameRegistry'
 import type { Answer, ContentPack, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, RoomLobby, Session, SessionArchive, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
 
 const config = {
@@ -16,8 +17,8 @@ const config = {
 }
 
 export const firebaseReady = Boolean(config.apiKey && config.databaseURL && config.projectId)
-export const diagnosticProductId = 'youth-atmosphere'
-export const diagnosticGameTypeId = 'diagnostic'
+export const diagnosticProductId = diagnosticGameModule.productId
+export const diagnosticGameTypeId = diagnosticGameModule.gameTypeId
 export const diagnosticPackId = 'youth-atmosphere-diagnostic'
 export const diagnosticPackVersion = 1
 export const defaultDiagnosticTemplateSelection: TemplateSelection = { selectedPackId: diagnosticPackId, templateSource: 'system' }
@@ -61,12 +62,18 @@ export const createDiagnosticTemplateSnapshot = (questionSet: Question[] = built
   productId: source?.productId || diagnosticProductId,
   gameTypeId: source?.gameTypeId || diagnosticGameTypeId,
   packId: source?.packId || diagnosticPackId,
-  packVersion: source?.packVersion || diagnosticPackVersion,
+  version: source?.version || source?.packVersion || diagnosticPackVersion,
+  packVersion: source?.packVersion || source?.version || diagnosticPackVersion,
+  status: source?.status || 'active',
+  ...(source?.sourcePackId ? { sourcePackId: source.sourcePackId } : {}),
   templateOrigin: source?.templateOrigin || 'system',
   title: source?.title || 'Диагностика атмосферы молодёжи',
   content: { questions: copyQuestions(source?.content?.questions?.length ? source.content.questions : questionSet) },
   settings: copySettings(source?.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
+  ruleConfig: getGameModule(source?.gameTypeId).normalizeRuleConfig(source?.ruleConfig),
+  contentSchemaVersion: source?.contentSchemaVersion || getGameModule(source?.gameTypeId).contentSchemaVersion,
   ...(source?.workspaceId ? { workspaceId: source.workspaceId } : {}),
+  ...(source?.updatedAt ? { updatedAt: source.updatedAt } : {}),
   capturedAt: Date.now(),
 })
 
@@ -79,43 +86,39 @@ const normalizeContentPack = (value: unknown, fallbackQuestions: Question[], def
     productId: raw.productId || defaults.productId || diagnosticProductId,
     gameTypeId: raw.gameTypeId || defaults.gameTypeId || diagnosticGameTypeId,
     packId: raw.packId || defaults.packId || diagnosticPackId,
-    packVersion: raw.packVersion || defaults.packVersion || diagnosticPackVersion,
+    version: raw.version || raw.packVersion || defaults.version || defaults.packVersion || diagnosticPackVersion,
+    packVersion: raw.packVersion || raw.version || defaults.packVersion || defaults.version || diagnosticPackVersion,
+    status: raw.status || defaults.status || 'active',
+    ...(raw.sourcePackId || defaults.sourcePackId ? { sourcePackId: raw.sourcePackId || defaults.sourcePackId } : {}),
     templateOrigin: raw.templateOrigin || defaults.templateOrigin || 'system',
     title: raw.title || defaults.title || 'Диагностика атмосферы молодёжи',
     content: { questions: copyQuestions(questionSet.length ? questionSet : fallbackQuestions) },
     settings: copySettings(raw.settings || defaults.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
+    ruleConfig: getGameModule(raw.gameTypeId || defaults.gameTypeId).normalizeRuleConfig(raw.ruleConfig || defaults.ruleConfig),
+    contentSchemaVersion: raw.contentSchemaVersion || defaults.contentSchemaVersion || getGameModule(raw.gameTypeId || defaults.gameTypeId).contentSchemaVersion,
     ...(raw.workspaceId || defaults.workspaceId ? { workspaceId: raw.workspaceId || defaults.workspaceId } : {}),
+    ...(raw.createdAt || defaults.createdAt ? { createdAt: raw.createdAt || defaults.createdAt } : {}),
+    ...(raw.updatedAt || defaults.updatedAt ? { updatedAt: raw.updatedAt || defaults.updatedAt } : {}),
+    ...(raw.createdBy || defaults.createdBy ? { createdBy: raw.createdBy || defaults.createdBy } : {}),
   }
 }
 
-/** Compatibility adapter for an explicitly selected source, with legacy fallbacks. */
-export const resolveDiagnosticTemplate = async (workspaceId?: string, fallbackQuestions: Question[] = builtInQuestions, selection: TemplateSelection = defaultDiagnosticTemplateSelection): Promise<TemplateSnapshot> => {
-  if (!db) return createDiagnosticTemplateSnapshot(fallbackQuestions)
-  const fallback = fallbackQuestions.length ? fallbackQuestions : builtInQuestions
+/** Resolves the selected source for a new room. Legacy fallback is intentionally not used here. */
+export const resolveDiagnosticTemplate = async (workspaceId?: string, selection: TemplateSelection = defaultDiagnosticTemplateSelection): Promise<TemplateSnapshot> => {
+  if (!db) return createDiagnosticTemplateSnapshot(builtInQuestions)
   const candidates: Array<{ path: string; defaults: Partial<ContentPack> }> = selection.templateSource === 'workspace' && workspaceId
-    ? [
-        { path: `workspacePacks/${workspaceId}/${selection.selectedPackId}`, defaults: { workspaceId, packId: selection.selectedPackId, templateOrigin: 'workspace' } },
-        { path: `globalPacks/${selection.selectedPackId}`, defaults: { packId: selection.selectedPackId, templateOrigin: 'system' } },
-      ]
+    ? [{ path: `workspacePacks/${workspaceId}/${selection.selectedPackId}`, defaults: { workspaceId, packId: selection.selectedPackId, templateOrigin: 'workspace' } }]
     : [{ path: `globalPacks/${selection.selectedPackId}`, defaults: { packId: selection.selectedPackId, templateOrigin: 'system' } }]
   for (const candidate of candidates) {
     try {
       const snapshot = await get(ref(db, candidate.path))
-      const pack = normalizeContentPack(snapshot.val(), fallback, candidate.defaults)
-      if (pack) return createDiagnosticTemplateSnapshot(fallback, pack)
+      const pack = normalizeContentPack(snapshot.val(), [], candidate.defaults)
+      if (pack?.status === 'active') return createDiagnosticTemplateSnapshot(pack.content.questions, pack)
     } catch {
-      // Newly introduced pack paths may not be published in Firebase Rules yet.
-      // Continue to the legacy source rather than blocking room creation.
+      // The selected source is unavailable. Do not silently switch pack origins.
     }
   }
-  try {
-    const legacy = await get(ref(db, 'questionBank'))
-    const legacyQuestions = legacy.val()
-    if (Array.isArray(legacyQuestions) && legacyQuestions.length) return createDiagnosticTemplateSnapshot(legacyQuestions as Question[])
-  } catch {
-    // Offline/demo resilience: the bundled diagnostic remains the final fallback.
-  }
-  return createDiagnosticTemplateSnapshot(fallback)
+  throw new Error('Выбранный набор недоступен или не активен. Выберите другой набор и попробуйте ещё раз.')
 }
 
 const requireFirebase = () => {
@@ -275,11 +278,15 @@ export const seedDefaultGlobalPack = async () => {
     productId: diagnosticProductId,
     gameTypeId: diagnosticGameTypeId,
     packId: diagnosticPackId,
+    version: diagnosticPackVersion,
     packVersion: diagnosticPackVersion,
+    status: 'active',
     templateOrigin: 'system',
     title: 'Диагностика атмосферы молодёжи',
     content: { questions: copyQuestions(builtInQuestions) },
     settings: { maxParticipants: 30, skippedAnswerScore: -1 },
+    ruleConfig: diagnosticGameModule.defaultRuleConfig,
+    contentSchemaVersion: diagnosticGameModule.contentSchemaVersion,
     createdAt: now,
     updatedAt: now,
     createdBy: user.uid,
@@ -338,7 +345,7 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
   if (!db) throw new Error('Firebase не настроен')
   if (!workspaceId) throw new Error('Для создания комнаты нужно рабочее пространство.')
   await assertRoomCreationAccess(hostUid, workspaceId)
-  const template = await resolveDiagnosticTemplate(workspaceId, questionSet?.length ? questionSet : builtInQuestions, templateSelection)
+  const template = await resolveDiagnosticTemplate(workspaceId, templateSelection)
   const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, templateSelection, roomTitle)
   // The lobby is the only pre-join readable record. It contains no questions,
   // participants, or answers from another workspace.
@@ -439,12 +446,17 @@ export const saveWorkspacePack = async (workspaceId: string, questionSet: Questi
     productId: diagnosticProductId,
     gameTypeId: diagnosticGameTypeId,
     packId: diagnosticPackId,
-    packVersion: Math.max(diagnosticPackVersion, (current?.packVersion || diagnosticPackVersion - 1) + 1),
+    version: Math.max(diagnosticPackVersion, (current?.version || current?.packVersion || diagnosticPackVersion - 1) + 1),
+    packVersion: Math.max(diagnosticPackVersion, (current?.version || current?.packVersion || diagnosticPackVersion - 1) + 1),
+    status: 'active',
+    sourcePackId: current?.sourcePackId || diagnosticPackId,
     templateOrigin: 'workspace',
     workspaceId,
     title: current?.title || title,
     content: { questions: copyQuestions(questionSet) },
     settings: copySettings(current?.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
+    ruleConfig: diagnosticGameModule.normalizeRuleConfig(current?.ruleConfig),
+    contentSchemaVersion: current?.contentSchemaVersion || diagnosticGameModule.contentSchemaVersion,
     createdAt: current?.createdAt || now,
     updatedAt: now,
     createdBy: current?.createdBy || user.uid,

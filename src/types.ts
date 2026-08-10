@@ -12,6 +12,13 @@ export type PackId = string
 export type PackVersion = number
 export type TemplateOrigin = 'system' | 'workspace'
 export interface TemplateSelection { selectedPackId: PackId; templateSource: TemplateOrigin }
+export type PackStatus = 'draft' | 'active' | 'archived'
+export interface PackRuleConfig {
+  allowSkip: boolean
+  answerMode: 'single-choice'
+  questionOrder: 'fixed' | 'shuffled'
+  scoringMode: 'diagnostic-3-2-1-0'
+}
 
 export interface Question { id: string; category: CategoryId; title: string; options: Record<Answer, string> }
 export interface PackSettings { [key: string]: boolean | number | string | null }
@@ -20,11 +27,19 @@ export interface ContentPack {
   productId: ProductId
   gameTypeId: GameTypeId
   packId: PackId
+  /** `version` is the content version; `packVersion` remains for older sessions. */
+  version?: PackVersion
   packVersion: PackVersion
+  status?: PackStatus
+  /** System pack from which a workspace copy was made, if applicable. */
+  sourcePackId?: PackId
   templateOrigin: TemplateOrigin
   title: string
   content: PackContent
   settings: PackSettings
+  /** Declarative, allow-listed options. It is never interpreted as executable code. */
+  ruleConfig?: PackRuleConfig
+  contentSchemaVersion?: number
   workspaceId?: string
   /** Audit metadata. System packs are maintained only by the platform owner. */
   createdAt?: number
