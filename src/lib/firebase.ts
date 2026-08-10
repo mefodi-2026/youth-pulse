@@ -36,6 +36,8 @@ const copySettings = (settings: Record<string, boolean | number | string | null>
 
 const createRoomLobby = (session: Session): RoomLobby => ({
   roomId: session.roomId,
+  ...(session.roomTitle ? { roomTitle: session.roomTitle } : {}),
+  ...(session.displayCode ? { displayCode: session.displayCode } : {}),
   hostUid: session.hostUid,
   workspaceId: session.workspaceId || '',
   phase: session.phase,
@@ -303,12 +305,18 @@ const assertRoomCreationAccess = async (hostUid: string, workspaceId: string) =>
   if (!decision.allowed) throw new Error(decision.reason || 'Создание комнаты недоступно.')
 }
 
-export const createSessionRecord = (roomId: string, hostUid: string, questionSet: Question[] = builtInQuestions, workspaceId?: string, templateSnapshot?: TemplateSnapshot, templateSelection?: TemplateSelection): Session => {
+export const defaultRoomTitle = (createdAt = Date.now()) => `Встреча молодёжки · ${new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(createdAt))}`
+
+export const createSessionRecord = (roomId: string, hostUid: string, questionSet: Question[] = builtInQuestions, workspaceId?: string, templateSnapshot?: TemplateSnapshot, templateSelection?: TemplateSelection, roomTitle?: string): Session => {
   const template = templateSnapshot || createDiagnosticTemplateSnapshot(questionSet)
   const selection = templateSelection || { selectedPackId: template.packId, templateSource: template.templateOrigin }
+  const createdAt = Date.now()
+  const cleanTitle = roomTitle?.trim().slice(0, 80) || defaultRoomTitle(createdAt)
   return {
     roomId,
-    createdAt: Date.now(),
+    roomTitle: cleanTitle,
+    displayCode: roomId,
+    createdAt,
     phase: 'lobby',
     maxParticipants: 30,
     hostUid,
@@ -326,12 +334,12 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
   }
 }
 
-export const createSession = async (roomId: string, hostUid: string, questionSet?: Question[], workspaceId?: string, templateSelection: TemplateSelection = defaultDiagnosticTemplateSelection) => {
+export const createSession = async (roomId: string, hostUid: string, questionSet?: Question[], workspaceId?: string, templateSelection: TemplateSelection = defaultDiagnosticTemplateSelection, roomTitle?: string) => {
   if (!db) throw new Error('Firebase не настроен')
   if (!workspaceId) throw new Error('Для создания комнаты нужно рабочее пространство.')
   await assertRoomCreationAccess(hostUid, workspaceId)
   const template = await resolveDiagnosticTemplate(workspaceId, questionSet?.length ? questionSet : builtInQuestions, templateSelection)
-  const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, templateSelection)
+  const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, templateSelection, roomTitle)
   // The lobby is the only pre-join readable record. It contains no questions,
   // participants, or answers from another workspace.
   await update(ref(db), {
@@ -385,6 +393,15 @@ export const updatePhase = async (roomId: string, phase: SessionPhase, expectedH
       ? { [`sessions/${roomId}/phase`]: 'closed', [`sessions/${roomId}/closedAt`]: timestamp, [`roomLobbies/${roomId}/phase`]: 'closed', [`roomLobbies/${roomId}/closedAt`]: timestamp }
       : { [`sessions/${roomId}/phase`]: phase, [`roomLobbies/${roomId}/phase`]: phase }
   await update(ref(services.db), patch)
+}
+
+/** The title is editable only while the room is still waiting for participants. */
+export const updateRoomTitle = async (roomId: string, roomTitle: string, expectedHostUid?: string) => {
+  const services = await assertCurrentUserIsRoomHost(roomId, expectedHostUid)
+  if (services.session.phase !== 'lobby') throw new Error('После запуска диагностики название комнаты изменить нельзя.')
+  const cleanTitle = roomTitle.trim().slice(0, 80)
+  if (!cleanTitle) throw new Error('Введите название комнаты.')
+  await update(ref(services.db), { [`sessions/${roomId}/roomTitle`]: cleanTitle, [`roomLobbies/${roomId}/roomTitle`]: cleanTitle })
 }
 
 /** Writes only an archive. The caller must close the live session first. */

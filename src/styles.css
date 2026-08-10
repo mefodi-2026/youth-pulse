@@ -78,11 +78,34 @@
 .results-library-intro h2 { margin:7px 0 10px; font-size:clamp(2rem,4vw,3rem); }
 .results-library-intro p:not(.eyebrow) { font-size:15px; }
 .results-library-card { align-items:center; }
+.return-to-room { margin:0 0 18px; padding:0; border:0; color:var(--mint); background:transparent; font-weight:800; font-size:13px; }
+.return-to-room:hover { color:var(--text); }
+.room-header-title { margin:8px 0 0; color:var(--muted); font-size:14px; }
+.room-title-input { display:grid; gap:8px; margin:22px 0 0; color:var(--text); font-size:12px; font-weight:800; }
+.room-title-input input { width:min(100%,620px); height:52px; padding:0 15px; border:1px solid var(--line); border-radius:13px; color:var(--text); background:rgba(13,62,49,.66); }
+.room-title-input input:focus { border-color:var(--mint); box-shadow:0 0 0 4px rgba(50,206,139,.1); outline:none; }
+.room-title-editor { display:grid; gap:12px; margin:24px 0; padding:18px; border:1px solid var(--line); border-radius:18px; background:rgba(4,32,24,.42); }
+.room-title-editor>div { display:flex; flex-wrap:wrap; gap:10px; }
+.room-title-editor small { font-size:11px; }
+.participants-panel { margin-top:18px; padding:26px; }
+.participants-panel-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; border-bottom:1px solid var(--line); padding-bottom:16px; }
+.participants-panel-header h3 { margin:6px 0 0; font-size:20px; }
+.participants-panel-header>span { color:var(--mint); font-size:12px; font-weight:800; }
+.participant-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; padding:18px 0 0; margin:0; list-style:none; }
+.participant-list li { display:flex; align-items:center; min-width:0; gap:11px; padding:12px; border:1px solid var(--line); border-radius:14px; background:rgba(7,42,32,.5); }
+.participant-list b,.participant-list small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.participant-list b { color:var(--text); font-size:13px; }.participant-list small { margin-top:3px; font-size:11px; }
+.participant-status { flex:0 0 10px; width:10px; height:10px; border-radius:50%; background:var(--gold); }.participant-status.answering { background:var(--mint); box-shadow:0 0 0 5px rgba(50,206,139,.1); }.participant-status.finished { background:#70d8ff; }
+.participants-empty { margin:18px 0 0; color:var(--muted); font-size:13px; }
+.profile-panel { padding:32px; }.profile-panel h2 { margin:8px 0 10px; }.profile-panel dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:24px 0; }.profile-panel dl>div { padding:14px; border:1px solid var(--line); border-radius:14px; background:rgba(5,35,26,.38); }.profile-panel dt { color:var(--muted); font-size:11px; }.profile-panel dd { margin:5px 0 0; overflow-wrap:anywhere; color:var(--text); font-size:14px; }
 
 @media (max-width:980px) {
   .landing-product { padding:28px 18px 52px; }.landing-grid { min-height:0; grid-template-columns:1fr; gap:28px; }.landing-copy h1 { font-size:clamp(3rem,14vw,5.2rem); }.landing-visual { min-height:455px; }.landing-steps { padding:34px 0 0; }.landing-steps>div { grid-template-columns:1fr; gap:16px; }.landing-steps article { padding-right:0; }
   .host-shell,.host-shell.is-menu-open { display:block; }.host-menu { position:fixed; inset:0 auto 0 0; width:min(300px,82vw); transform:none; box-shadow:24px 0 60px rgba(0,0,0,.32); }.host-shell.is-menu-collapsed .host-menu { transform:translateX(-105%); }.host-menu-toggle { top:14px; left:14px; }.host-shell.is-menu-open .host-menu-toggle { left:calc(min(300px,82vw) + 14px); }.host-menu-backdrop { display:block; position:fixed; z-index:10; inset:0; border:0; background:rgba(0,0,0,.45); }.host-edge-trigger { display:none; }.host-content { padding-top:76px; }.results-mode .host-results-header { top:74px; left:20px; right:20px; }.results-mode .results { padding-top:176px; }.archive-card { align-items:flex-start; flex-direction:column; }.archive-actions { justify-content:flex-start; width:100%; }.archive-actions .button { flex:1; min-width:160px; }
+  .participant-list { grid-template-columns:1fr 1fr; }.profile-panel dl { grid-template-columns:1fr; }
 }
+
+@media (max-width:560px) { .participant-list { grid-template-columns:1fr; }.participants-panel { padding:20px; } }
 
 /* Authenticated product home and expandable host rules. */
 .home-panel { position:relative; overflow:hidden; }

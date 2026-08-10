@@ -63,6 +63,10 @@ export interface ProductConfig { productId: ProductId; status: ProductStatus }
 export interface Invite { status: 'active' | 'disabled'; expiresAt?: number }
 export interface Session {
   roomId: string
+  /** Human-readable meeting name. Older rooms may not have it. */
+  roomTitle?: string
+  /** Immutable code shown to the host; defaults to roomId for legacy rooms. */
+  displayCode?: string
   createdAt: number
   phase: SessionPhase
   maxParticipants: number
@@ -86,6 +90,8 @@ export interface SessionArchive extends Session { archivedAt: number }
 /** Public, deliberately minimal join metadata. It never contains questions or answers. */
 export interface RoomLobby {
   roomId: string
+  roomTitle?: string
+  displayCode?: string
   hostUid: string
   workspaceId: string
   phase: SessionPhase
