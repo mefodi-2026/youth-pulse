@@ -213,6 +213,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [questionSaving, setQuestionSaving] = useState(false)
   const [questionError, setQuestionError] = useState('')
+  const [questionEditorOpen, setQuestionEditorOpen] = useState(false)
   const [roomTitleDraft, setRoomTitleDraft] = useState('')
   const [roomTitleSaving, setRoomTitleSaving] = useState(false)
   const [publicOrigin, setPublicOrigin] = useState(() => localStorage.getItem('atmosphere-public-origin') || import.meta.env.VITE_PUBLIC_ORIGIN || window.location.origin)
@@ -276,6 +277,10 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     setQuestionBank(selected?.content.questions || (firebaseReady ? [] : questions))
   }, [systemPack, templateSelection.templateSource, workspacePack])
   useEffect(() => { localStorage.setItem(templateKey, JSON.stringify(templateSelection)) }, [templateKey, templateSelection])
+  useEffect(() => {
+    document.documentElement.classList.toggle('question-editor-open', questionEditorOpen)
+    return () => document.documentElement.classList.remove('question-editor-open')
+  }, [questionEditorOpen])
   useEffect(() => { setRoomTitleDraft(session?.phase === 'lobby' ? session.roomTitle || '' : '') }, [room, session?.phase, session?.roomTitle])
   const create = async (title = roomTitleDraft) => {
     setBusy(true); setActionError(''); setCreateError('')
@@ -372,12 +377,24 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   if (tab === 'profile') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ВАШ АККАУНТ</p><h1>Профиль</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><ProfilePanel profile={leader} /></HostLayout>
   if (tab === 'results' && resultRoom && resultSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={resultSession} participants={Object.keys(resultSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode><header className="host-header host-results-header"><div><p className="eyebrow">РЕЗУЛЬТАТЫ · {resultRoom}</p><h1>Общая картина</h1></div><span className="status">СОХРАНЕНО</span></header><Results room={resultRoom} sessionOverride={resultSession} embedded /></HostLayout>
   const resetQuestionDraft = (category: Question['category'] = 'communication') => {
+    const wasEditing = Boolean(editingQuestionId)
     setEditingQuestionId(null)
     setQuestionDraft({ category, title: '', options: ['', '', '', ''] })
+    setQuestionError('')
+    setQuestionEditorOpen(!wasEditing)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const closeQuestionEditor = () => {
+    setEditingQuestionId(null)
+    setQuestionDraft({ category: 'communication', title: '', options: ['', '', '', ''] })
+    setQuestionError('')
+    setQuestionEditorOpen(false)
   }
   const editQuestion = (question: Question) => {
     setEditingQuestionId(question.id)
     setQuestionDraft({ category: question.category, title: question.title, options: [question.options.A, question.options.B, question.options.C, question.options.D] })
+    setQuestionError('')
+    setQuestionEditorOpen(true)
     setTab('questions')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -394,13 +411,16 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     setQuestionBank(nextBank)
   }
   const saveQuestion = async () => {
-    if (!questionDraft.title.trim() || questionDraft.options.some(option => !option.trim())) return
+    if (!questionDraft.title.trim() || questionDraft.options.some(option => !option.trim())) {
+      setQuestionError('Заполните текст вопроса и все четыре варианта ответа.')
+      return
+    }
     setQuestionSaving(true)
     const nextQuestion: Question = { id: editingQuestionId || `${questionDraft.category}-${Date.now()}`, category: questionDraft.category, title: questionDraft.title.trim(), options: { A: questionDraft.options[0].trim(), B: questionDraft.options[1].trim(), C: questionDraft.options[2].trim(), D: questionDraft.options[3].trim() } }
     const nextBank = editingQuestionId ? questionBank.map(question => question.id === editingQuestionId ? nextQuestion : question) : [...questionBank, nextQuestion]
     try {
       await persistQuestionBank(nextBank)
-      resetQuestionDraft()
+      closeQuestionEditor()
     } catch (error) {
       setQuestionError(error instanceof Error ? error.message : 'Не удалось сохранить вопрос')
     } finally { setQuestionSaving(false) }
@@ -410,7 +430,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     setQuestionSaving(true)
     try {
       await persistQuestionBank(questionBank.filter(item => item.id !== question.id))
-      if (editingQuestionId === question.id) resetQuestionDraft()
+      if (editingQuestionId === question.id) closeQuestionEditor()
     } catch (error) {
       setQuestionError(error instanceof Error ? error.message : 'Не удалось удалить вопрос')
     } finally { setQuestionSaving(false) }

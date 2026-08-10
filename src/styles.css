@@ -154,8 +154,9 @@
    creation form out of the interface while retaining the existing list. */
 .question-admin { display:block; }
 .question-admin > .question-editor { display:none; }
+:root.question-editor-open .question-admin > .question-editor { display:grid; }
 .question-admin-list { width:100%; max-width:1100px; }
-.question-group-header > .button { display:none; }
+.question-group-header > .button { display:inline-flex; }
 
 /* Result score alignment and report-ready layout */
 .score-list>div,
