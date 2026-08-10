@@ -4,6 +4,7 @@ import { get, getDatabase, onValue, push, ref, set, update } from 'firebase/data
 import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
 import { diagnosticGameModule, getGameModule } from './gameRegistry'
+import { orderQuestionsByCategory } from './questionOrder'
 import type { Answer, ContentPack, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, RoomLobby, Session, SessionArchive, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
 
 const config = {
@@ -68,7 +69,7 @@ export const createDiagnosticTemplateSnapshot = (questionSet: Question[] = built
   ...(source?.sourcePackId ? { sourcePackId: source.sourcePackId } : {}),
   templateOrigin: source?.templateOrigin || 'system',
   title: source?.title || 'Диагностика атмосферы молодёжи',
-  content: { questions: copyQuestions(source?.content?.questions?.length ? source.content.questions : questionSet) },
+  content: { questions: copyQuestions(orderQuestionsByCategory(source?.content?.questions?.length ? source.content.questions : questionSet)) },
   settings: copySettings(source?.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
   ruleConfig: getGameModule(source?.gameTypeId).normalizeRuleConfig(source?.ruleConfig),
   contentSchemaVersion: source?.contentSchemaVersion || getGameModule(source?.gameTypeId).contentSchemaVersion,
@@ -92,7 +93,7 @@ const normalizeContentPack = (value: unknown, fallbackQuestions: Question[], def
     ...(raw.sourcePackId || defaults.sourcePackId ? { sourcePackId: raw.sourcePackId || defaults.sourcePackId } : {}),
     templateOrigin: raw.templateOrigin || defaults.templateOrigin || 'system',
     title: raw.title || defaults.title || 'Диагностика атмосферы молодёжи',
-    content: { questions: copyQuestions(questionSet.length ? questionSet : fallbackQuestions) },
+    content: { questions: copyQuestions(orderQuestionsByCategory(questionSet.length ? questionSet : fallbackQuestions)) },
     settings: copySettings(raw.settings || defaults.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
     ruleConfig: getGameModule(raw.gameTypeId || defaults.gameTypeId).normalizeRuleConfig(raw.ruleConfig || defaults.ruleConfig),
     contentSchemaVersion: raw.contentSchemaVersion || defaults.contentSchemaVersion || getGameModule(raw.gameTypeId || defaults.gameTypeId).contentSchemaVersion,
@@ -453,7 +454,7 @@ export const saveWorkspacePack = async (workspaceId: string, questionSet: Questi
     templateOrigin: 'workspace',
     workspaceId,
     title: current?.title || title,
-    content: { questions: copyQuestions(questionSet) },
+    content: { questions: copyQuestions(orderQuestionsByCategory(questionSet)) },
     settings: copySettings(current?.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
     ruleConfig: diagnosticGameModule.normalizeRuleConfig(current?.ruleConfig),
     contentSchemaVersion: current?.contentSchemaVersion || diagnosticGameModule.contentSchemaVersion,

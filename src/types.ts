@@ -20,7 +20,14 @@ export interface PackRuleConfig {
   scoringMode: 'diagnostic-3-2-1-0'
 }
 
-export interface Question { id: string; category: CategoryId; title: string; options: Record<Answer, string> }
+export interface Question {
+  id: string
+  category: CategoryId
+  /** Position inside the category. Legacy questions without it use their existing order as a fallback. */
+  categoryOrder?: number
+  title: string
+  options: Record<Answer, string>
+}
 export interface PackSettings { [key: string]: boolean | number | string | null }
 export interface PackContent { questions: Question[] }
 export interface ContentPack {

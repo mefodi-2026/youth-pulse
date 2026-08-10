@@ -8,18 +8,11 @@ import { StageDashboard } from './StageDashboard'
 import { MobileParticipantFlow } from './MobileParticipantFlow'
 import { type Answer, type ContentPack, type LeaderProfile, type Participant, type Question, type Scores, type Session, type SessionArchive, type SessionPhase, type TemplateSelection, type Workspace } from './types'
 import { appBasePath as getAppBasePath, createJoinUrl } from './lib/urls'
+import { nextCategoryQuestionOrder, orderQuestionsByCategory } from './lib/questionOrder'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
 const setDemo = (session: Session) => { localStorage.setItem(demoKey(session.roomId), JSON.stringify(session)); window.dispatchEvent(new StorageEvent('storage', { key: demoKey(session.roomId) })) }
-// Порядок массива важен для диагностики: участник проходит вопросы в том же
-// порядке, в каком они записаны в pack. Новый вопрос остаётся в своей категории.
-const orderQuestionsByCategory = (questionSet: Question[]) => {
-  const categoryOrder = Object.keys(categories) as Question['category'][]
-  const knownQuestions = categoryOrder.flatMap(category => questionSet.filter(question => question.category === category))
-  const unknownQuestions = questionSet.filter(question => !categoryOrder.includes(question.category))
-  return [...knownQuestions, ...unknownQuestions]
-}
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
 const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, '')
 const currentPath = () => window.location.pathname.replace(/\/+$/, '') || '/'
@@ -425,8 +418,17 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       return
     }
     setQuestionSaving(true)
-    const nextQuestion: Question = { id: editingQuestionId || `${questionDraft.category}-${Date.now()}`, category: questionDraft.category, title: questionDraft.title.trim(), options: { A: questionDraft.options[0].trim(), B: questionDraft.options[1].trim(), C: questionDraft.options[2].trim(), D: questionDraft.options[3].trim() } }
-    const nextBank = editingQuestionId ? questionBank.map(question => question.id === editingQuestionId ? nextQuestion : question) : [...questionBank, nextQuestion]
+    const currentQuestion = editingQuestionId ? questionBank.find(question => question.id === editingQuestionId) : undefined
+    const categoryChanged = Boolean(currentQuestion && currentQuestion.category !== questionDraft.category)
+    const categoryOrder = currentQuestion && !categoryChanged && currentQuestion.categoryOrder
+      ? currentQuestion.categoryOrder
+      : nextCategoryQuestionOrder(questionBank, questionDraft.category, editingQuestionId || undefined)
+    const nextQuestion: Question = { id: editingQuestionId || `${questionDraft.category}-${Date.now()}`, category: questionDraft.category, categoryOrder, title: questionDraft.title.trim(), options: { A: questionDraft.options[0].trim(), B: questionDraft.options[1].trim(), C: questionDraft.options[2].trim(), D: questionDraft.options[3].trim() } }
+    const nextBank = editingQuestionId
+      ? categoryChanged
+        ? [...questionBank.filter(question => question.id !== editingQuestionId), nextQuestion]
+        : questionBank.map(question => question.id === editingQuestionId ? nextQuestion : question)
+      : [...questionBank, nextQuestion]
     try {
       await persistQuestionBank(nextBank)
       closeQuestionEditor()
