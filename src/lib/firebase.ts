@@ -5,7 +5,7 @@ import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
 import { diagnosticGameModule, getGameModule } from './gameRegistry'
 import { orderQuestionsByCategory } from './questionOrder'
-import type { Answer, ContentPack, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, RoomLobby, Session, SessionArchive, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
+import type { Answer, ContentPack, FeedbackItem, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, RoomLobby, Session, SessionArchive, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -151,6 +151,15 @@ export const waitForAuthPersistence = async () => {
   return auth?.currentUser || null
 }
 
+/** Platform access is determined only by a Firebase-issued Custom Claim. */
+export const isPlatformOwner = async () => {
+  await authPersistence
+  const user = auth?.currentUser
+  if (!user || user.isAnonymous) return false
+  const token = await user.getIdTokenResult(true)
+  return token.claims.platformAdmin === true
+}
+
 export const subscribeLeaderProfile = (uid: string, callback: (value: LeaderProfile | null) => void, onError?: (error: Error) => void) => {
   if (!db) { callback(null); return () => undefined }
   return onValue(ref(db, `users/${uid}`), snapshot => callback((snapshot.val() || null) as LeaderProfile | null), error => onError?.(error))
@@ -192,6 +201,7 @@ export const registerLeader = async (input: RegisterLeaderInput) => {
       ...(cleanInviteCode ? { inviteCode: cleanInviteCode } : {}),
       createdAt: now,
       updatedAt: now,
+      lastActiveAt: now,
     }
     const workspace: Workspace = {
       id: workspaceId,
@@ -221,7 +231,17 @@ export const registerLeader = async (input: RegisterLeaderInput) => {
 export const loginLeader = async (email: string, password: string) => {
   const services = requireFirebase()
   await authPersistence
-  return signInWithEmailAndPassword(services.auth, email.trim(), password)
+  const credential = await signInWithEmailAndPassword(services.auth, email.trim(), password)
+  const profileSnapshot = await get(ref(services.db, `users/${credential.user.uid}`))
+  const profile = profileSnapshot.val() as LeaderProfile | null
+  if (profile?.status === 'paused' || profile?.status === 'revoked') {
+    await signOut(services.auth)
+    throw new Error(profile.status === 'paused'
+      ? 'Доступ к кабинету временно приостановлен владельцем платформы.'
+      : 'Доступ к кабинету отозван владельцем платформы.')
+  }
+  if (profile) await update(ref(services.db, `users/${credential.user.uid}`), { lastActiveAt: Date.now(), updatedAt: Date.now() })
+  return credential
 }
 
 export const logoutLeader = async () => {
@@ -262,6 +282,97 @@ export const subscribeWorkspacePack = (workspaceId: string, packId: string, call
 export const subscribePlatformWorkspaces = (callback: (value: Record<string, Workspace>) => void, onError?: (error: Error) => void) => {
   if (!db) return () => undefined
   return onValue(ref(db, 'workspaces'), snapshot => callback((snapshot.val() || {}) as Record<string, Workspace>), error => onError?.(error))
+}
+
+/** The following subscriptions are owner-only; Realtime Database Rules enforce this. */
+export const subscribePlatformLeaders = (callback: (value: Record<string, LeaderProfile>) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, 'users'), snapshot => callback((snapshot.val() || {}) as Record<string, LeaderProfile>), error => onError?.(error))
+}
+
+export const subscribePlatformSessions = (callback: (value: Record<string, Session>) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, 'sessions'), snapshot => callback((snapshot.val() || {}) as Record<string, Session>), error => onError?.(error))
+}
+
+export const subscribePlatformArchives = (callback: (value: Record<string, SessionArchive>) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, 'sessionArchives'), snapshot => callback((snapshot.val() || {}) as Record<string, SessionArchive>), error => onError?.(error))
+}
+
+export const subscribePlatformGlobalPacks = (callback: (value: Record<string, ContentPack>) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, 'globalPacks'), snapshot => {
+    const raw = (snapshot.val() || {}) as Record<string, unknown>
+    const packs = Object.fromEntries(Object.entries(raw).flatMap(([packId, value]) => {
+      const pack = normalizeContentPack(value, builtInQuestions, { packId, templateOrigin: 'system' })
+      return pack ? [[packId, pack]] : []
+    })) as Record<string, ContentPack>
+    callback(packs)
+  }, error => onError?.(error))
+}
+
+export const subscribePlatformFeedback = (callback: (value: Record<string, FeedbackItem>) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, 'feedback'), snapshot => callback((snapshot.val() || {}) as Record<string, FeedbackItem>), error => onError?.(error))
+}
+
+export const setLeaderStatusAsOwner = async (uid: string, status: UserStatus) => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
+  const profileSnapshot = await get(ref(services.db, `users/${uid}`))
+  const profile = profileSnapshot.val() as LeaderProfile | null
+  if (!profile) throw new Error('Профиль лидера не найден.')
+  const now = Date.now()
+  const patch: Record<string, unknown> = {
+    [`users/${uid}/status`]: status,
+    [`users/${uid}/updatedAt`]: now,
+  }
+  // Paused/revoked leaders keep all history. Their open rooms are closed so
+  // participants cannot continue writing answers to a disabled workspace.
+  if (status === 'paused' || status === 'revoked') {
+    const sessionsSnapshot = await get(ref(services.db, 'sessions'))
+    const sessions = (sessionsSnapshot.val() || {}) as Record<string, Session>
+    Object.values(sessions).filter(session => session.hostUid === uid && session.phase !== 'closed').forEach(session => {
+      const closed: SessionArchive = { ...session, phase: 'closed', closedAt: now, archivedAt: now }
+      patch[`sessions/${session.roomId}/phase`] = 'closed'
+      patch[`sessions/${session.roomId}/closedAt`] = now
+      patch[`roomLobbies/${session.roomId}/phase`] = 'closed'
+      patch[`roomLobbies/${session.roomId}/closedAt`] = now
+      patch[`sessionArchives/${session.roomId}`] = closed
+      if (session.workspaceId) patch[`workspaceArchives/${session.workspaceId}/${session.roomId}`] = closed
+    })
+  }
+  await update(ref(services.db), patch)
+}
+
+export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
+  const now = Date.now()
+  const existingSnapshot = await get(ref(services.db, `globalPacks/${draft.packId}`))
+  const existing = normalizeContentPack(existingSnapshot.val(), builtInQuestions, { packId: draft.packId, templateOrigin: 'system' })
+  const nextVersion = Math.max(1, (existing?.version || existing?.packVersion || 0) + 1)
+  const pack: ContentPack = {
+    ...draft,
+    productId: draft.productId || diagnosticProductId,
+    gameTypeId: draft.gameTypeId || diagnosticGameTypeId,
+    packId: draft.packId,
+    version: nextVersion,
+    packVersion: nextVersion,
+    templateOrigin: 'system',
+    content: { questions: copyQuestions(orderQuestionsByCategory(draft.content.questions)) },
+    settings: copySettings(draft.settings),
+    ruleConfig: getGameModule(draft.gameTypeId || diagnosticGameTypeId).normalizeRuleConfig(draft.ruleConfig),
+    contentSchemaVersion: draft.contentSchemaVersion || diagnosticGameModule.contentSchemaVersion,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    createdBy: existing?.createdBy || services.auth.currentUser?.uid,
+  }
+  await set(ref(services.db, `globalPacks/${pack.packId}`), pack)
+  return pack
 }
 
 /**

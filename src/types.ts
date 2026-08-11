@@ -55,7 +55,7 @@ export interface ContentPack {
 }
 export interface TemplateSnapshot extends ContentPack { capturedAt: number }
 export interface Participant { id: string; nickname: string; joinedAt: number; status: 'waiting' | 'answering' | 'finished'; currentQuestionIndex: number; answers: Record<string, ResponseValue>; completedAt?: number; personalViewedAt?: number }
-export interface LeaderProfile { uid: string; fullName: string; phone: string; email: string; workspaceId: string; status: UserStatus; inviteCode?: string; createdAt: number; updatedAt: number }
+export interface LeaderProfile { uid: string; fullName: string; phone: string; email: string; workspaceId: string; status: UserStatus; inviteCode?: string; createdAt: number; updatedAt: number; lastActiveAt?: number }
 export interface Workspace {
   id: string
   name: string
@@ -109,6 +109,14 @@ export interface Session {
   participants: Record<string, Participant>
 }
 export interface SessionArchive extends Session { archivedAt: number }
+/** Feedback belongs to a leader workspace and is visible only to the platform owner. */
+export interface FeedbackItem {
+  id: string
+  uid: string
+  workspaceId: string
+  message: string
+  createdAt: number
+}
 /** Public, deliberately minimal join metadata. It never contains questions or answers. */
 export interface RoomLobby {
   roomId: string

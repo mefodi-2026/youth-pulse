@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
-import { archiveSession, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, firebaseReady, joinSession, loginLeader, logoutLeader, markPersonalViewed, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeGlobalPack, subscribeLeaderProfile, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, updatePhase, updateRoomTitle } from './lib/firebase'
+import { archiveSession, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeGlobalPack, subscribeLeaderProfile, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, updatePhase, updateRoomTitle } from './lib/firebase'
 import { getGameModule } from './lib/gameRegistry'
 import { downloadWishPng, printWish } from './lib/export'
 import { StageDashboard } from './StageDashboard'
@@ -9,6 +9,7 @@ import { MobileParticipantFlow } from './MobileParticipantFlow'
 import { type Answer, type ContentPack, type LeaderProfile, type Participant, type Question, type Scores, type Session, type SessionArchive, type SessionPhase, type TemplateSelection, type Workspace } from './types'
 import { appBasePath as getAppBasePath, createJoinUrl } from './lib/urls'
 import { nextCategoryQuestionOrder, orderQuestionsByCategory } from './lib/questionOrder'
+import { OwnerAdmin } from './OwnerAdmin'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -58,6 +59,7 @@ function useRoom(room: string) {
 
 function App() {
   const path = useRoute()
+  if (path.endsWith('/owner')) return <OwnerAdmin />
   if (path.endsWith('/login')) return <AuthPage mode="login" />
   if (path.endsWith('/register')) return <AuthPage mode="register" />
   if (path.endsWith('/account')) return <LeaderRoute allowInactive>{profile => <AccountPage profile={profile} />}</LeaderRoute>
@@ -139,7 +141,7 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         go(profile.status === 'active' ? '/host' : '/account')
       } else {
         await loginLeader(email, password)
-        go('/host')
+        go(await isPlatformOwner() ? '/owner' : '/host')
       }
     } catch (reason) { setError(authErrorText(reason)) } finally { setBusy(false) }
   }
