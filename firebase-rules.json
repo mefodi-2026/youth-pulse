@@ -17,11 +17,12 @@
       }
     },
     "workspaceProducts": {
+      ".read": "auth != null && auth.token.platformAdmin === true",
       "$workspaceId": {
         ".read": "auth != null && (root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid || auth.token.platformAdmin === true)",
         "$productId": {
           ".write": "auth != null && ((auth.token.platformAdmin === true) || (!data.exists() && !root.child('users').child(auth.uid).exists() && newData.child('ownerUid').val() === auth.uid) || (data.exists() && root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid && newData.val() === data.val()))",
-          ".validate": "newData.hasChildren(['productId','ownerUid','enabled','accessSource','planId','startsAt','expiresAt','testing']) && newData.child('productId').val() === $productId && newData.child('ownerUid').isString() && newData.child('enabled').isBoolean() && (newData.child('accessSource').val() === 'pilot' || newData.child('accessSource').val() === 'manual') && newData.child('planId').isString() && newData.child('startsAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('testing').isBoolean()"
+          ".validate": "newData.hasChildren(['productId','ownerUid','enabled','accessSource','planId','startsAt','expiresAt','testing']) && newData.child('productId').val() === $productId && newData.child('ownerUid').isString() && newData.child('enabled').isBoolean() && (newData.child('accessSource').val() === 'pilot' || newData.child('accessSource').val() === 'manual') && (!newData.child('plan').exists() || newData.child('plan').isString()) && newData.child('planId').isString() && newData.child('startsAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('testing').isBoolean()"
         }
       }
     },
@@ -29,7 +30,7 @@
       "$productId": {
         ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
         ".write": "auth != null && auth.token.platformAdmin === true",
-        ".validate": "newData.hasChildren(['productId','status']) && newData.child('productId').val() === $productId && (newData.child('status').val() === 'enabled' || newData.child('status').val() === 'maintenance' || newData.child('status').val() === 'testing' || newData.child('status').val() === 'disabled')"
+        ".validate": "newData.hasChildren(['productId','name','description','type','status','version','updatedAt']) && newData.child('productId').val() === $productId && newData.child('name').isString() && newData.child('description').isString() && (newData.child('type').val() === 'diagnostic' || newData.child('type').val() === 'quiz' || newData.child('type').val() === 'game') && (newData.child('status').val() === 'enabled' || newData.child('status').val() === 'maintenance' || newData.child('status').val() === 'testing' || newData.child('status').val() === 'disabled') && newData.child('version').isNumber() && newData.child('updatedAt').isNumber() && (!newData.child('maintenanceMessage').exists() || newData.child('maintenanceMessage').isString()) && (!newData.child('publishedAt').exists() || newData.child('publishedAt').isNumber())"
       }
     },
     "invites": {

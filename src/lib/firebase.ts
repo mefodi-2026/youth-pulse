@@ -25,6 +25,33 @@ export const diagnosticPackVersion = 1
 export const defaultDiagnosticTemplateSelection: TemplateSelection = { selectedPackId: diagnosticPackId, templateSource: 'system' }
 export const pilotPlanId = 'pilot-free'
 export const pilotAccessSource = 'pilot' as const
+
+/**
+ * A stable catalogue used by the owner UI. Values in `products/{productId}`
+ * override these defaults after the owner explicitly publishes a setting.
+ */
+export const platformProductDefaults: Record<string, ProductConfig> = {
+  [diagnosticProductId]: {
+    productId: diagnosticProductId,
+    name: 'Диагностика атмосферы',
+    description: 'Интерактивная диагностика для молодёжных групп.',
+    type: 'diagnostic',
+    status: 'enabled',
+    version: 1,
+    maintenanceMessage: '',
+    updatedAt: 0,
+  },
+  'bible-quiz': {
+    productId: 'bible-quiz',
+    name: 'Библейская викторина',
+    description: 'Будущий игровой модуль для командных викторин.',
+    type: 'quiz',
+    status: 'disabled',
+    version: 1,
+    maintenanceMessage: 'Викторина пока находится в разработке.',
+    updatedAt: 0,
+  },
+}
 const app = firebaseReady ? initializeApp(config) : null
 const auth = app ? getAuth(app) : null
 const db = app ? getDatabase(app) : null
@@ -53,6 +80,7 @@ const createPilotWorkspaceAccess = (ownerUid: string, now: number): WorkspacePro
   ownerUid,
   enabled: true,
   accessSource: pilotAccessSource,
+  plan: pilotPlanId,
   planId: pilotPlanId,
   startsAt: now,
   expiresAt: 0,
@@ -178,6 +206,18 @@ export const subscribeWorkspaceProduct = (workspaceId: string, productId: string
 export const subscribeProduct = (productId: string, callback: (value: ProductConfig | null) => void, onError?: (error: Error) => void) => {
   if (!db) { callback(null); return () => undefined }
   return onValue(ref(db, `products/${productId}`), snapshot => callback((snapshot.val() || null) as ProductConfig | null), error => onError?.(error))
+}
+
+/** Owner-only catalogue subscription. Rules reject it for regular leaders. */
+export const subscribePlatformProducts = (callback: (value: Record<string, ProductConfig>) => void, onError?: (error: Error) => void) => {
+  if (!db) { callback({}); return () => undefined }
+  return onValue(ref(db, 'products'), snapshot => callback((snapshot.val() || {}) as Record<string, ProductConfig>), error => onError?.(error))
+}
+
+/** Owner-only access matrix; it is never loaded by a leader dashboard. */
+export const subscribePlatformWorkspaceProducts = (callback: (value: Record<string, Record<string, WorkspaceProduct>>) => void, onError?: (error: Error) => void) => {
+  if (!db) { callback({}); return () => undefined }
+  return onValue(ref(db, 'workspaceProducts'), snapshot => callback((snapshot.val() || {}) as Record<string, Record<string, WorkspaceProduct>>), error => onError?.(error))
 }
 
 export const registerLeader = async (input: RegisterLeaderInput) => {
@@ -347,6 +387,59 @@ export const setLeaderStatusAsOwner = async (uid: string, status: UserStatus) =>
   await update(ref(services.db), patch)
 }
 
+/** Publishes operational product availability. Draft form state is local until this call. */
+export const saveProductAsOwner = async (draft: ProductConfig) => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
+  const now = Date.now()
+  const currentSnapshot = await get(ref(services.db, `products/${draft.productId}`))
+  const current = currentSnapshot.val() as ProductConfig | null
+  const product: ProductConfig = {
+    ...platformProductDefaults[draft.productId],
+    ...current,
+    ...draft,
+    productId: draft.productId,
+    name: draft.name.trim(),
+    description: draft.description.trim(),
+    maintenanceMessage: draft.maintenanceMessage?.trim() || '',
+    version: Math.max(1, Number(current?.version || draft.version || 1) + 1),
+    updatedAt: now,
+    publishedAt: now,
+  }
+  if (!product.name || !product.description) throw new Error('Укажите название и описание продукта.')
+  await set(ref(services.db, `products/${product.productId}`), product)
+  return product
+}
+
+/** Owner-controlled access for one workspace. Existing leader history stays intact. */
+export const saveWorkspaceProductAsOwner = async (workspaceId: string, productId: string, patch: Pick<WorkspaceProduct, 'enabled' | 'testing' | 'planId' | 'expiresAt'> & { plan?: string }) => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
+  const [workspaceSnapshot, currentSnapshot] = await Promise.all([
+    get(ref(services.db, `workspaces/${workspaceId}`)),
+    get(ref(services.db, `workspaceProducts/${workspaceId}/${productId}`)),
+  ])
+  const workspace = workspaceSnapshot.val() as Workspace | null
+  if (!workspace) throw new Error('Рабочее пространство не найдено.')
+  const current = currentSnapshot.val() as WorkspaceProduct | null
+  const now = Date.now()
+  const next: WorkspaceProduct = {
+    productId,
+    ownerUid: workspace.ownerUid,
+    enabled: patch.enabled,
+    accessSource: current?.accessSource || 'manual',
+    plan: patch.plan || patch.planId,
+    planId: patch.planId,
+    startsAt: current?.startsAt || now,
+    expiresAt: Math.max(0, Number(patch.expiresAt) || 0),
+    testing: patch.testing,
+  }
+  await set(ref(services.db, `workspaceProducts/${workspaceId}/${productId}`), next)
+  return next
+}
+
 export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
   const services = requireFirebase()
   await authPersistence
@@ -409,6 +502,7 @@ export const seedDefaultGlobalPack = async () => {
 
 const assertRoomCreationAccess = async (hostUid: string, workspaceId: string) => {
   const services = requireFirebase()
+  const platformOwner = await isPlatformOwner()
   const [profileSnapshot, workspaceSnapshot, workspaceProductSnapshot, productSnapshot] = await Promise.all([
     get(ref(services.db, `users/${hostUid}`)),
     get(ref(services.db, `workspaces/${workspaceId}`)),
@@ -420,6 +514,7 @@ const assertRoomCreationAccess = async (hostUid: string, workspaceId: string) =>
     workspace: workspaceSnapshot.val() as Workspace | null,
     workspaceProduct: workspaceProductSnapshot.val() as WorkspaceProduct | null,
     product: productSnapshot.val() as ProductConfig | null,
+    isPlatformOwner: platformOwner,
   })
   if (!decision.allowed) throw new Error(decision.reason || 'Создание комнаты недоступно.')
 }

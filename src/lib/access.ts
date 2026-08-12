@@ -7,6 +7,8 @@ export interface ProductAccessInput {
   workspace: Workspace | null | undefined
   workspaceProduct: WorkspaceProduct | null | undefined
   product: ProductConfig | null | undefined
+  /** Firebase Custom Claim verified by the caller; never a UI toggle. */
+  isPlatformOwner?: boolean
   now?: number
 }
 
@@ -43,8 +45,8 @@ export const canUseProduct = (_productId: ProductId, input: ProductAccessInput):
   // A missing record means the existing free MVP is still allowed. Once a
   // product record is created, its operational status becomes authoritative.
   const status = input.product?.status ?? 'enabled'
-  if (status === 'disabled' || status === 'maintenance') return { allowed: false, reason: 'Создание новых комнат временно недоступно.' }
-  if (status === 'testing' && !input.workspaceProduct?.testing) return { allowed: false, reason: 'Продукт доступен только для тестовых рабочих пространств.' }
+  if (status === 'disabled' || status === 'maintenance') return { allowed: false, reason: input.product?.maintenanceMessage || 'Создание новых комнат временно недоступно.' }
+  if (status === 'testing' && !input.isPlatformOwner && !input.workspaceProduct?.testing) return { allowed: false, reason: 'Продукт доступен только для тестовых рабочих пространств.' }
   return { allowed: true }
 }
 

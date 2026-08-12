@@ -75,13 +75,30 @@ export interface WorkspaceProduct {
   ownerUid: string
   enabled: boolean
   accessSource: AccessSource
+  /** Human-readable plan marker. `planId` is retained for existing records. */
+  plan?: string
   planId: string
   startsAt: number
   /** Unix milliseconds; 0 means access has no scheduled end. */
   expiresAt: number
   testing: boolean
 }
-export interface ProductConfig { productId: ProductId; status: ProductStatus }
+export type ProductType = 'diagnostic' | 'quiz' | 'game'
+/**
+ * Published operational configuration. Draft edits intentionally stay in the
+ * owner UI until they are explicitly published by the platform owner.
+ */
+export interface ProductConfig {
+  productId: ProductId
+  name: string
+  description: string
+  type: ProductType
+  status: ProductStatus
+  version: number
+  maintenanceMessage?: string
+  updatedAt: number
+  publishedAt?: number
+}
 export interface Invite { status: 'active' | 'disabled'; expiresAt?: number }
 export interface Session {
   roomId: string
