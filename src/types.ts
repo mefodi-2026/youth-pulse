@@ -2,6 +2,9 @@ export type CategoryId = 'communication' | 'forgiveness' | 'service' | 'care' | 
 export type Answer = 'A' | 'B' | 'C' | 'D'
 export type ResponseValue = Answer | 'SKIP'
 export type SessionPhase = 'lobby' | 'live' | 'personal' | 'resultsIntro' | 'resultsReal' | 'closed'
+/** A session format selected by a leader. Quiz is reserved for the future game module. */
+export type RoomMode = 'diagnostic' | 'quiz'
+export type SessionEventType = 'room_created' | 'room_started' | 'participant_joined' | 'participant_finished' | 'report_viewed' | 'room_closed'
 export type UserStatus = 'pending' | 'active' | 'paused' | 'revoked'
 export type BillingStatus = 'free' | 'pilot' | 'manual_paid' | 'expired' | 'disabled'
 export type AccessSource = 'pilot' | 'manual'
@@ -68,6 +71,16 @@ export interface ContentPack {
 }
 export interface TemplateSnapshot extends ContentPack { capturedAt: number }
 export interface Participant { id: string; nickname: string; joinedAt: number; status: 'waiting' | 'answering' | 'finished'; currentQuestionIndex: number; answers: Record<string, ResponseValue>; completedAt?: number; personalViewedAt?: number }
+/** Operational event log. It intentionally contains IDs and nicknames only, never participant real names or answers. */
+export interface SessionEvent {
+  id: string
+  type: SessionEventType
+  roomId: string
+  workspaceId?: string
+  hostUid: string
+  participantId?: string
+  createdAt: number
+}
 export interface LeaderProfile { uid: string; fullName: string; phone: string; email: string; workspaceId: string; status: UserStatus; inviteCode?: string; createdAt: number; updatedAt: number; lastActiveAt?: number }
 export interface Workspace {
   id: string
@@ -124,6 +137,16 @@ export interface Session {
   maxParticipants: number
   hostUid: string
   workspaceId?: string
+  /** Pilot-analysis metadata; optional to keep old rooms readable. */
+  groupName?: string
+  city?: string
+  mode?: RoomMode
+  startedAt?: number
+  /** Expected number stated by the leader when a room is created. */
+  estimatedParticipants?: number
+  /** Current aggregate counts. Participant nicknames and answers remain separate. */
+  participantCount?: number
+  completedCount?: number
   selectedPackId?: PackId
   templateSource?: TemplateOrigin
   productId?: ProductId
@@ -142,6 +165,7 @@ export interface Session {
   /** Legacy mirror retained so existing rooms continue to work during migration. */
   questions?: Question[]
   participants: Record<string, Participant>
+  events?: Record<string, SessionEvent>
 }
 export interface SessionArchive extends Session { archivedAt: number }
 /** Feedback belongs to a leader workspace and is visible only to the platform owner. */
@@ -174,3 +198,4 @@ export const getSessionQuestions = (session: Pick<Session, 'templateSnapshot' | 
   if (Array.isArray(session?.questions)) return session.questions
   return fallback
 }
+

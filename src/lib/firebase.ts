@@ -5,7 +5,7 @@ import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
 import { diagnosticGameModule, getGameModule } from './gameRegistry'
 import { orderQuestionsByCategory } from './questionOrder'
-import type { Answer, ContentPack, FeedbackItem, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, RoomLobby, Session, SessionArchive, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
+import type { Answer, ContentPack, FeedbackItem, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, RoomLobby, RoomMode, Session, SessionArchive, SessionEvent, SessionEventType, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -59,6 +59,12 @@ let pendingAnonymousSignIn: Promise<NonNullable<typeof auth>['currentUser']> | n
 const authPersistence = auth ? setPersistence(auth, browserLocalPersistence) : Promise.resolve()
 
 export interface RegisterLeaderInput { fullName: string; phone: string; email: string; password: string; workspaceName: string; city: string; inviteCode?: string }
+export interface RoomPilotDetails {
+  groupName: string
+  city: string
+  mode: RoomMode
+  estimatedParticipants: number
+}
 
 const copyQuestions = (questionSet: Question[]) => questionSet.map(question => ({ ...question, options: { ...question.options } }))
 const copySettings = (settings: Record<string, boolean | number | string | null>) => ({ ...settings })
@@ -358,177 +364,39 @@ export const subscribePlatformLeaders = (callback: (value: Record<string, Leader
   return onValue(ref(db, 'users'), snapshot => callback((snapshot.val() || {}) as Record<string, LeaderProfile>), error => onError?.(error))
 }
 
-export const subscribePlatformSessions = (callback: (value: Record<string, Session>) => void, onError?: (error: Error) => void) => {
-  if (!db) return () => undefined
-  return onValue(ref(db, 'sessions'), snapshot => callback((snapshot.val() || {}) as Record<string, Session>), error => onError?.(error))
-}
-
-export const subscribePlatformArchives = (callback: (value: Record<string, SessionArchive>) => void, onError?: (error: Error) => void) => {
-  if (!db) return () => undefined
-  return onValue(ref(db, 'sessionArchives'), snapshot => callback((snapshot.val() || {}) as Record<string, SessionArchive>), error => onError?.(error))
-}
-
-export const subscribePlatformGlobalPacks = (callback: (value: Record<string, ContentPack>) => void, onError?: (error: Error) => void) => {
-  if (!db) return () => undefined
-  return onValue(ref(db, 'globalPacks'), snapshot => {
-    const raw = (snapshot.val() || {}) as Record<string, unknown>
-    const packs = Object.fromEntries(Object.entries(raw).flatMap(([packId, value]) => {
-      const pack = normalizeContentPack(value, builtInQuestions, { packId, templateOrigin: 'system' })
-      return pack ? [[packId, pack]] : []
-    })) as Record<string, ContentPack>
-    callback(packs)
-  }, error => onError?.(error))
-}
-
-export const subscribePlatformFeedback = (callback: (value: Record<string, FeedbackItem>) => void, onError?: (error: Error) => void) => {
-  if (!db) return () => undefined
-  return onValue(ref(db, 'feedback'), snapshot => callback((snapshot.val() || {}) as Record<string, FeedbackItem>), error => onError?.(error))
-}
-
-export const setLeaderStatusAsOwner = async (uid: string, status: UserStatus) => {
-  const services = requireFirebase()
-  await authPersistence
-  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
-  const profileSnapshot = await get(ref(services.db, `users/${uid}`))
-  const profile = profileSnapshot.val() as LeaderProfile | null
-  if (!profile) throw new Error('Профиль лидера не найден.')
-  const now = Date.now()
-  const patch: Record<string, unknown> = {
-    [`users/${uid}/status`]: status,
-    [`users/${uid}/updatedAt`]: now,
-  }
-  // Paused/revoked leaders keep all history. Their open rooms are closed so
-  // participants cannot continue writing answers to a disabled workspace.
-  if (status === 'paused' || status === 'revoked') {
-    const sessionsSnapshot = await get(ref(services.db, 'sessions'))
-    const sessions = (sessionsSnapshot.val() || {}) as Record<string, Session>
-    Object.values(sessions).filter(session => session.hostUid === uid && session.phase !== 'closed').forEach(session => {
-      const closed: SessionArchive = { ...session, phase: 'closed', closedAt: now, archivedAt: now }
-      patch[`sessions/${session.roomId}/phase`] = 'closed'
-      patch[`sessions/${session.roomId}/closedAt`] = now
-      patch[`roomLobbies/${session.roomId}/phase`] = 'closed'
-      patch[`roomLobbies/${session.roomId}/closedAt`] = now
-      patch[`sessionArchives/${session.roomId}`] = closed
-      if (session.workspaceId) patch[`workspaceArchives/${session.workspaceId}/${session.roomId}`] = closed
-    })
-  }
-  await update(ref(services.db), patch)
-}
-
-/** Publishes operational product availability. Draft form state is local until this call. */
-export const saveProductAsOwner = async (draft: ProductConfig) => {
-  const services = requireFirebase()
-  await authPersistence
-  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
-  const now = Date.now()
-  const currentSnapshot = await get(ref(services.db, `products/${draft.productId}`))
-  const current = currentSnapshot.val() as ProductConfig | null
-  const product: ProductConfig = {
-    ...platformProductDefaults[draft.productId],
-    ...current,
-    ...draft,
-    productId: draft.productId,
-    name: draft.name.trim(),
-    description: draft.description.trim(),
-    maintenanceMessage: draft.maintenanceMessage?.trim() || '',
-    version: Math.max(1, Number(current?.version || draft.version || 1) + 1),
-    updatedAt: now,
-    publishedAt: now,
-  }
-  if (!product.name || !product.description) throw new Error('Укажите название и описание продукта.')
-  await set(ref(services.db, `products/${product.productId}`), product)
-  return product
-}
-
-/** Owner-controlled access for one workspace. Existing leader history stays intact. */
-export const saveWorkspaceProductAsOwner = async (workspaceId: string, productId: string, patch: Pick<WorkspaceProduct, 'enabled' | 'testing' | 'planId' | 'expiresAt'> & { plan?: string }) => {
-  const services = requireFirebase()
-  await authPersistence
-  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
-  const [workspaceSnapshot, currentSnapshot] = await Promise.all([
-    get(ref(services.db, `workspaces/${workspaceId}`)),
-    get(ref(services.db, `workspaceProducts/${workspaceId}/${productId}`)),
-  ])
-  const workspace = workspaceSnapshot.val() as Workspace | null
-  if (!workspace) throw new Error('Рабочее пространство не найдено.')
-  const current = currentSnapshot.val() as WorkspaceProduct | null
-  const now = Date.now()
-  const next: WorkspaceProduct = {
-    productId,
-    ownerUid: workspace.ownerUid,
-    enabled: patch.enabled,
-    accessSource: current?.accessSource || 'manual',
-    plan: patch.plan || patch.planId,
-    planId: patch.planId,
-    startsAt: current?.startsAt || now,
-    expiresAt: Math.max(0, Number(patch.expiresAt) || 0),
-    testing: patch.testing,
-  }
-  await set(ref(services.db, `workspaceProducts/${workspaceId}/${productId}`), next)
-  return next
-}
-
-export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
-  const services = requireFirebase()
-  await authPersistence
-  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
-  const now = Date.now()
-  const existingSnapshot = await get(ref(services.db, `globalPacks/${draft.packId}`))
-  const existing = normalizeContentPack(existingSnapshot.val(), builtInQuestions, { packId: draft.packId, templateOrigin: 'system' })
-  const nextVersion = Math.max(1, (existing?.version || existing?.packVersion || 0) + 1)
+export const subscribePlatformSessions = (callback: (value: Record<string, Session>) => void, o…2149 tokens truncated…existingQuestions) ? null : await get(ref(services.db, 'questionBank'))
+  const legacyRaw = legacySnapshot?.val()
+  const legacyQuestions = Array.isArray(legacyRaw)
+    ? legacyRaw as Question[]
+    : legacyRaw && typeof legacyRaw === 'object' && Array.isArray((legacyRaw as { questions?: unknown }).questions)
+      ? (legacyRaw as { questions: Question[] }).questions
+      : []
+  const sourceQuestions = Array.isArray(existingQuestions) && existingQuestions.length
+    ? existingQuestions
+    : legacyQuestions.length
+      ? legacyQuestions
+      : builtInQuestions
+  const version = Math.max(1, Number(existingRaw?.version || existingRaw?.packVersion || diagnosticPackVersion))
   const pack: ContentPack = {
-    ...draft,
-    productId: draft.productId || diagnosticProductId,
-    gameTypeId: draft.gameTypeId || diagnosticGameTypeId,
-    packId: draft.packId,
-    version: nextVersion,
-    packVersion: nextVersion,
-    templateOrigin: 'system',
-    sourcePackId: draft.sourcePackId || draft.packId,
-    content: { questions: copyQuestions(orderQuestionsByCategory(draft.content.questions)) },
-    questions: copyQuestions(orderQuestionsByCategory(draft.content.questions)),
-    description: draft.description.trim() || defaultPackDescription,
-    settings: copySettings(draft.settings),
-    ruleConfig: getGameModule(draft.gameTypeId || diagnosticGameTypeId).normalizeRuleConfig(draft.ruleConfig),
-    contentSchemaVersion: draft.contentSchemaVersion || diagnosticGameModule.contentSchemaVersion,
-    createdAt: existing?.createdAt || now,
-    updatedAt: now,
-    createdBy: existing?.createdBy || services.auth.currentUser?.uid,
-  }
-  await set(ref(services.db, `globalPacks/${pack.packId}`), pack)
-  return pack
-}
-
-/**
- * Explicit one-time seeding helper for the platform owner. It is never called
- * automatically for a leader, because leaders may read global packs but may
- * not modify them under the published Rules.
- */
-export const seedDefaultGlobalPack = async () => {
-  const services = requireFirebase()
-  await authPersistence
-  const user = services.auth.currentUser
-  if (!user || user.isAnonymous) throw new Error('Для публикации системного набора нужен аккаунт владельца платформы.')
-  const now = Date.now()
-  const pack: ContentPack = {
+    ...existingRaw,
     productId: diagnosticProductId,
     gameTypeId: diagnosticGameTypeId,
     packId: diagnosticPackId,
-    version: diagnosticPackVersion,
-    packVersion: diagnosticPackVersion,
-    status: 'active',
+    version,
+    packVersion: version,
+    status: existingStatus,
     sourcePackId: diagnosticPackId,
     templateOrigin: 'system',
-    title: 'Диагностика атмосферы молодёжи',
-    description: defaultPackDescription,
-    questions: copyQuestions(builtInQuestions),
-    content: { questions: copyQuestions(builtInQuestions) },
-    settings: { maxParticipants: 30, skippedAnswerScore: -1 },
-    ruleConfig: diagnosticGameModule.defaultRuleConfig,
-    contentSchemaVersion: diagnosticGameModule.contentSchemaVersion,
-    createdAt: now,
+    title: existingRaw?.title?.trim() || 'Диагностика атмосферы молодёжи',
+    description: existingRaw?.description?.trim() || defaultPackDescription,
+    questions: copyQuestions(orderQuestionsByCategory(sourceQuestions)),
+    content: { questions: copyQuestions(orderQuestionsByCategory(sourceQuestions)) },
+    settings: copySettings(existingRaw?.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
+    ruleConfig: diagnosticGameModule.normalizeRuleConfig(existingRaw?.ruleConfig),
+    contentSchemaVersion: existingRaw?.contentSchemaVersion || diagnosticGameModule.contentSchemaVersion,
+    createdAt: existingRaw?.createdAt || now,
     updatedAt: now,
-    createdBy: user.uid,
+    createdBy: existingRaw?.createdBy || user.uid,
   }
   await set(ref(services.db, `globalPacks/${diagnosticPackId}`), pack)
   return pack
@@ -555,11 +423,18 @@ const assertRoomCreationAccess = async (hostUid: string, workspaceId: string) =>
 
 export const defaultRoomTitle = (createdAt = Date.now()) => `Встреча молодёжки · ${new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(createdAt))}`
 
-export const createSessionRecord = (roomId: string, hostUid: string, questionSet: Question[] = builtInQuestions, workspaceId?: string, templateSnapshot?: TemplateSnapshot, templateSelection?: TemplateSelection, roomTitle?: string): Session => {
+export const createSessionRecord = (roomId: string, hostUid: string, questionSet: Question[] = builtInQuestions, workspaceId?: string, templateSnapshot?: TemplateSnapshot, templateSelection?: TemplateSelection, roomTitle?: string, pilotDetails?: Partial<RoomPilotDetails>): Session => {
   const template = templateSnapshot || createDiagnosticTemplateSnapshot(questionSet)
   const selection = templateSelection || { selectedPackId: template.packId, templateSource: template.templateOrigin }
   const createdAt = Date.now()
   const cleanTitle = roomTitle?.trim().slice(0, 80) || defaultRoomTitle(createdAt)
+  const details: RoomPilotDetails = {
+    groupName: pilotDetails?.groupName?.trim() || '',
+    city: pilotDetails?.city?.trim() || '',
+    mode: pilotDetails?.mode || 'diagnostic',
+    estimatedParticipants: Math.max(1, Math.min(30, Math.round(Number(pilotDetails?.estimatedParticipants) || 30))),
+  }
+  const createdEvent: SessionEvent = { id: 'room_created', type: 'room_created', roomId, ...(workspaceId ? { workspaceId } : {}), hostUid, createdAt }
   return {
     roomId,
     roomTitle: cleanTitle,
@@ -569,6 +444,12 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
     maxParticipants: 30,
     hostUid,
     ...(workspaceId ? { workspaceId } : {}),
+    groupName: details.groupName,
+    city: details.city,
+    mode: details.mode,
+    estimatedParticipants: details.estimatedParticipants,
+    participantCount: 0,
+    completedCount: 0,
     selectedPackId: selection.selectedPackId,
     templateSource: selection.templateSource,
     productId: template.productId,
@@ -587,15 +468,16 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
     templateSnapshot: template,
     questions: copyQuestions(template.content.questions),
     participants: {},
+    events: { [createdEvent.id]: createdEvent },
   }
 }
 
-export const createSession = async (roomId: string, hostUid: string, questionSet?: Question[], workspaceId?: string, templateSelection: TemplateSelection = defaultDiagnosticTemplateSelection, roomTitle?: string) => {
+export const createSession = async (roomId: string, hostUid: string, questionSet?: Question[], workspaceId?: string, templateSelection: TemplateSelection = defaultDiagnosticTemplateSelection, roomTitle?: string, pilotDetails?: Partial<RoomPilotDetails>) => {
   if (!db) throw new Error('Firebase не настроен')
   if (!workspaceId) throw new Error('Для создания комнаты нужно рабочее пространство.')
   await assertRoomCreationAccess(hostUid, workspaceId)
   const template = await resolveDiagnosticTemplate(workspaceId, templateSelection)
-  const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, templateSelection, roomTitle)
+  const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, templateSelection, roomTitle, pilotDetails)
   // The lobby is the only pre-join readable record. It contains no questions,
   // participants, or answers from another workspace.
   await update(ref(db), {
@@ -621,6 +503,7 @@ export const joinSession = async (roomId: string, participant: Participant) => {
   if (participantSnapshot.exists()) return
   try {
     await set(ref(services.db, `sessions/${roomId}/participants/${participant.id}`), participant)
+    await recordParticipantEvent(roomId, participant.id, 'participant_joined')
   } catch (error) {
     console.error('participant join rejected', { roomId, participantId: participant.id, error })
     throw new Error('Не удалось подключиться к комнате. Возможно, она завершена или уже заполнена.')
@@ -643,12 +526,27 @@ export const updatePhase = async (roomId: string, phase: SessionPhase, expectedH
   const services = await assertCurrentUserIsRoomHost(roomId, expectedHostUid)
   if (services.session.phase === 'closed' && phase !== 'closed') throw new Error('Завершённую сессию нельзя запустить повторно.')
   const timestamp = Date.now()
+  const participantCount = Object.keys(services.session.participants || {}).length
+  const completedCount = Object.values(services.session.participants || {}).filter(participant => participant.status === 'finished').length
+  const eventType: SessionEventType | null = phase === 'live' ? 'room_started' : phase === 'closed' ? 'room_closed' : null
+  const event: SessionEvent | null = eventType ? { id: eventType, type: eventType, roomId, ...(services.session.workspaceId ? { workspaceId: services.session.workspaceId } : {}), hostUid: services.session.hostUid, createdAt: timestamp } : null
   const patch = phase === 'resultsIntro'
     ? { [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/resultsIntroStartedAt`]: timestamp, [`roomLobbies/${roomId}/phase`]: phase }
     : phase === 'closed'
-      ? { [`sessions/${roomId}/phase`]: 'closed', [`sessions/${roomId}/closedAt`]: timestamp, [`roomLobbies/${roomId}/phase`]: 'closed', [`roomLobbies/${roomId}/closedAt`]: timestamp }
-      : { [`sessions/${roomId}/phase`]: phase, [`roomLobbies/${roomId}/phase`]: phase }
+      ? { [`sessions/${roomId}/phase`]: 'closed', [`sessions/${roomId}/closedAt`]: timestamp, [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount, [`sessions/${roomId}/events/${event?.id}`]: event, [`roomLobbies/${roomId}/phase`]: 'closed', [`roomLobbies/${roomId}/closedAt`]: timestamp }
+      : phase === 'live'
+        ? { [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/startedAt`]: services.session.startedAt || timestamp, [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount, [`sessions/${roomId}/events/${event?.id}`]: event, [`roomLobbies/${roomId}/phase`]: phase }
+        : { [`sessions/${roomId}/phase`]: phase, [`roomLobbies/${roomId}/phase`]: phase }
   await update(ref(services.db), patch)
+}
+
+/** Keeps aggregate pilot counters current without exposing answers or participant names. */
+export const updateSessionPilotCounts = async (roomId: string, expectedHostUid?: string) => {
+  const services = await assertCurrentUserIsRoomHost(roomId, expectedHostUid)
+  const participantCount = Object.keys(services.session.participants || {}).length
+  const completedCount = Object.values(services.session.participants || {}).filter(participant => participant.status === 'finished').length
+  if (services.session.participantCount === participantCount && services.session.completedCount === completedCount) return
+  await update(ref(services.db), { [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount })
 }
 
 /** The title is editable only while the room is still waiting for participants. */
@@ -754,7 +652,23 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
     [`sessions/${roomId}/participants/${participant.id}/status`]: next.status,
     ...(next.completedAt ? { [`sessions/${roomId}/participants/${participant.id}/completedAt`]: next.completedAt } : {})
   })
+  if (finished) await recordParticipantEvent(roomId, participant.id, 'participant_finished')
   return next
+}
+
+const recordParticipantEvent = async (roomId: string, participantId: string, type: Extract<SessionEventType, 'participant_joined' | 'participant_finished' | 'report_viewed'>) => {
+  try {
+    const services = requireFirebase()
+    const sessionSnapshot = await get(ref(services.db, `sessions/${roomId}`))
+    const session = sessionSnapshot.val() as Session | null
+    if (!session?.participants?.[participantId]) return
+    const id = `${type}-${participantId}`
+    const event: SessionEvent = { id, type, roomId, ...(session.workspaceId ? { workspaceId: session.workspaceId } : {}), hostUid: session.hostUid, participantId, createdAt: Date.now() }
+    await set(ref(services.db, `sessions/${roomId}/events/${id}`), event)
+  } catch (error) {
+    // Analytics must never roll back a successful participant action.
+    console.warn('pilot event was not saved', { roomId, participantId, type, error })
+  }
 }
 
 export const markPersonalViewed = async (roomId: string, participantId: string) => {
@@ -762,4 +676,6 @@ export const markPersonalViewed = async (roomId: string, participantId: string) 
   await authPersistence
   if (!services.auth.currentUser || services.auth.currentUser.uid !== participantId) throw new Error('Participant identity does not match the current Firebase user.')
   await set(ref(services.db, `sessions/${roomId}/participants/${participantId}/personalViewedAt`), Date.now())
+  await recordParticipantEvent(roomId, participantId, 'report_viewed')
 }
+
