@@ -60,6 +60,7 @@ function useRoom(room: string) {
 function App() {
   const path = useRoute()
   if (path.endsWith('/owner')) return <OwnerAdmin />
+  if (path.endsWith('/owner-login')) return <AuthPage mode="owner-login" />
   if (path.endsWith('/login')) return <AuthPage mode="login" />
   if (path.endsWith('/register')) return <AuthPage mode="register" />
   if (path.endsWith('/account')) return <LeaderRoute allowInactive>{profile => <AccountPage profile={profile} />}</LeaderRoute>
@@ -69,7 +70,32 @@ function App() {
   }
   if (path.endsWith('/join')) return <MobileParticipantFlow room={queryRoom()} />
   if (path.endsWith('/stage')) return <StageDashboard room={queryRoom()} />
-  return <AuthPage mode="login" />
+  return <LandingPage />
+}
+
+function LandingPage() {
+  return <main className="landing landing-product">
+    <div className="orb orb-a" /><div className="orb orb-b" />
+    <button type="button" className="landing-owner-login" onClick={() => go('/owner-login')}>Вход владельца</button>
+    <div className="landing-grid">
+      <section className="landing-copy">
+        <p className="eyebrow">МОЛОДЁЖНАЯ ПЛАТФОРМА</p>
+        <h1>Атмосфера<br />нашей молодёжи</h1>
+        <p className="landing-lead">Пространство для бережных диагностик, викторин и интерактивных встреч молодёжных групп.</p>
+        <div className="landing-actions"><Button onClick={() => go('/login')}>Войти</Button><Button secondary onClick={() => go('/register')}>Создать аккаунт</Button></div>
+      </section>
+      <Glass className="landing-visual">
+        <div className="landing-visual-glow" />
+        <p className="eyebrow">АТМОСФЕРА</p>
+        <h2>Встречи, в которых слышен каждый.</h2>
+        <div className="landing-feature-list">
+          <article><span>01</span><div><b>Диагностика</b><small>Соберите честную картину встречи без сравнения участников.</small></div></article>
+          <article><span>02</span><div><b>Интерактивные форматы</b><small>Викторины и другие игровые модули постепенно появятся в платформе.</small></div></article>
+        </div>
+        <div className="landing-orbit"><i /><i /><strong>✦</strong></div>
+      </Glass>
+    </div>
+  </main>
 }
 
 function AuthRedirect({ to }: { to: string }) {
@@ -118,7 +144,7 @@ const authErrorText = (error: unknown) => {
   return error instanceof Error ? error.message : 'Не удалось выполнить операцию. Попробуйте ещё раз.'
 }
 
-function AuthPage({ mode }: { mode: 'login' | 'register' }) {
+function AuthPage({ mode }: { mode: 'login' | 'register' | 'owner-login' }) {
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -129,6 +155,22 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const register = mode === 'register'
+  const ownerLogin = mode === 'owner-login'
+  useEffect(() => {
+    if (!ownerLogin) return
+    let alive = true
+    const unsubscribe = subscribeAuthUser(user => {
+      if (!user || user.isAnonymous) return
+      void isPlatformOwner().then(owner => {
+        if (!alive) return
+        if (owner) go('/owner')
+        else setError('У вас нет доступа к панели владельца.')
+      }).catch(() => {
+        if (alive) setError('Не удалось проверить доступ владельца. Проверьте соединение и попробуйте снова.')
+      })
+    })
+    return () => { alive = false; unsubscribe() }
+  }, [ownerLogin])
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setError('')
     if (!firebaseReady) return setError('Firebase пока не настроен для входа.')
@@ -139,12 +181,20 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
       if (register) {
         const profile = await registerLeader({ fullName, phone, email, password, workspaceName, city, inviteCode })
         go(profile.status === 'active' ? '/host' : '/account')
+      } else if (ownerLogin) {
+        await loginLeader(email, password)
+        if (!await isPlatformOwner()) {
+          setError('У вас нет доступа к панели владельца.')
+          return
+        }
+        go('/owner')
       } else {
         await loginLeader(email, password)
-        go(await isPlatformOwner() ? '/owner' : '/host')
+        go('/host')
       }
     } catch (reason) { setError(authErrorText(reason)) } finally { setBusy(false) }
   }
+  if (ownerLogin) return <main className="auth-page"><div className="orb orb-a" /><div className="orb orb-b" /><Glass className="auth-card"><p className="eyebrow">ВЛАДЕЛЕЦ ПЛАТФОРМЫ</p><h1>Вход владельца</h1><p>После входа Firebase обновит токен и безопасно подтвердит роль владельца через Custom Claim.</p><form className="auth-form" onSubmit={event => void submit(event)}><label>Email<input value={email} onChange={event => setEmail(event.target.value)} autoComplete="email" inputMode="email" type="email" required /></label><label>Пароль<input value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" type="password" minLength={6} required /></label><Button disabled={busy}>{busy ? 'Проверяем…' : 'Проверить и войти'}</Button></form>{error && <p className="auth-error">{error}</p>}<div className="auth-switch">Обычный вход? <button type="button" onClick={() => go('/login')}>Перейти к входу</button></div></Glass></main>
   return <main className="auth-page"><div className="orb orb-a" /><div className="orb orb-b" /><Glass className="auth-card"><p className="eyebrow">ПАНЕЛЬ ВЕДУЩЕГО</p><h1>{register ? 'Создать аккаунт' : 'Войти в аккаунт'}</h1><p>{register ? 'Создайте отдельный аккаунт для вашей молодёжки. Пароль хранится только в Firebase Authentication.' : 'Войдите, чтобы управлять комнатами и вопросами своей молодёжки.'}</p><form className="auth-form" onSubmit={event => void submit(event)}>{register && <><label>Имя и фамилия<input value={fullName} onChange={event => setFullName(event.target.value)} autoComplete="name" /></label><label>Телефон<input value={phone} onChange={event => setPhone(event.target.value)} autoComplete="tel" inputMode="tel" /></label><label>Название молодёжки<input value={workspaceName} onChange={event => setWorkspaceName(event.target.value)} /></label><label>Город<input value={city} onChange={event => setCity(event.target.value)} autoComplete="address-level2" /></label></>}<label>Email<input value={email} onChange={event => setEmail(event.target.value)} autoComplete="email" inputMode="email" type="email" required /></label><label>Пароль<input value={password} onChange={event => setPassword(event.target.value)} autoComplete={register ? 'new-password' : 'current-password'} type="password" minLength={6} required /></label>{register && <label>Код приглашения <small>необязательно</small><input value={inviteCode} onChange={event => setInviteCode(event.target.value.toUpperCase())} /></label>}<Button disabled={busy}>{busy ? 'Подождите…' : register ? 'Зарегистрироваться' : 'Войти'}</Button></form>{error && <p className="auth-error">{error}</p>}<div className="auth-switch">{register ? <>Уже есть аккаунт? <button type="button" onClick={() => go('/login')}>Войти</button></> : <>Нет аккаунта? <button type="button" onClick={() => go('/register')}>Зарегистрироваться</button></>}</div></Glass></main>
 }
 

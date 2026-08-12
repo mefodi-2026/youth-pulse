@@ -27,6 +27,7 @@
       }
     },
     "products": {
+      ".read": "auth != null && auth.token.platformAdmin === true",
       "$productId": {
         ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
         ".write": "auth != null && auth.token.platformAdmin === true",

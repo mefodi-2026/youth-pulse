@@ -184,6 +184,7 @@ export const isPlatformOwner = async () => {
   await authPersistence
   const user = auth?.currentUser
   if (!user || user.isAnonymous) return false
+  await user.getIdToken(true)
   const token = await user.getIdTokenResult(true)
   return token.claims.platformAdmin === true
 }

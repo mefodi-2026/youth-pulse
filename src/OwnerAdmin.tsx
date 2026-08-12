@@ -24,7 +24,8 @@ const OwnerButton = ({ children, secondary, danger, disabled, onClick }: { child
 const OwnerCard = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => <section className={`glass owner-card ${className}`}>{children}</section>
 
 export function OwnerAdmin() {
-  const [authState, setAuthState] = useState<'checking' | 'owner' | 'denied'>('checking')
+  const [authState, setAuthState] = useState<'checking' | 'owner' | 'denied' | 'error'>('checking')
+  const [authError, setAuthError] = useState('')
   const [dataState, setDataState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [tab, setTab] = useState<OwnerTab>('overview')
   const [leaders, setLeaders] = useState<Record<string, LeaderProfile>>({})
@@ -45,8 +46,13 @@ export function OwnerAdmin() {
   useEffect(() => {
     let alive = true
     const stop = subscribeAuthUser(user => {
-      if (!user || user.isAnonymous) { if (alive) setAuthState('denied'); return }
-      void isPlatformOwner().then(owner => { if (alive) setAuthState(owner ? 'owner' : 'denied') }).catch(() => { if (alive) setAuthState('denied') })
+      if (!user || user.isAnonymous) { if (alive) { setAuthError(''); setAuthState('denied') }; return }
+      if (alive) { setAuthError(''); setAuthState('checking') }
+      void isPlatformOwner().then(owner => { if (alive) setAuthState(owner ? 'owner' : 'denied') }).catch(reason => {
+        if (!alive) return
+        setAuthError(reason instanceof Error ? reason.message : 'Не удалось проверить Custom Claim владельца.')
+        setAuthState('error')
+      })
     })
     return () => { alive = false; stop() }
   }, [])
@@ -152,6 +158,8 @@ export function OwnerAdmin() {
   if (authState === 'denied') return <main className="auth-page"><OwnerCard className="owner-auth-card"><p className="eyebrow">НЕТ ДОСТУПА</p><h1>Панель владельца недоступна</h1><p>Для входа требуется Firebase Custom Claim <code>platformAdmin: true</code>. URL и интерфейсные кнопки не дают этот доступ.</p><OwnerButton onClick={() => void logoutLeader().then(() => { window.location.assign(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/login`) })}>Выйти</OwnerButton></OwnerCard></main>
 
   const tabs: Array<[OwnerTab, string]> = [['overview', 'Обзор'], ['leaders', 'Лидеры'], ['products', 'Продукты'], ['packs', 'Глобальная библиотека'], ['sessions', 'Сессии'], ['feedback', 'Feedback']]
+  if (authState === 'error') return <main className="auth-page"><OwnerCard className="owner-auth-card"><p className="eyebrow">ОШИБКА ПРОВЕРКИ</p><h1>Не удалось открыть панель владельца</h1><p>{authError || 'Проверьте интернет-соединение и обновите страницу.'}</p><OwnerButton onClick={() => window.location.reload()}>Повторить проверку</OwnerButton><OwnerButton secondary onClick={() => void logoutLeader().then(() => { window.location.assign(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/login`) })}>Выйти</OwnerButton></OwnerCard></main>
+
   const filteredSessions = sessionList.filter(session => {
     const leader = leaders[session.hostUid]
     const workspace = workspaces[session.workspaceId || leader?.workspaceId || '']
