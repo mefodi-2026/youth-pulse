@@ -198,4 +198,3 @@ export const getSessionQuestions = (session: Pick<Session, 'templateSnapshot' | 
   if (Array.isArray(session?.questions)) return session.questions
   return fallback
 }
-

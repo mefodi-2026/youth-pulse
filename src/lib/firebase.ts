@@ -371,8 +371,7 @@ export const subscribePlatformSessions = (callback: (value: Record<string, Sessi
 
 export const subscribePlatformArchives = (callback: (value: Record<string, SessionArchive>) => void, onError?: (error: Error) => void) => {
   if (!db) return () => undefined
-  return onValue(ref(db, 'sessionArchives'), snapshot => callback((snapshot.val() || {}) as Record<string
-, SessionArchive>), error => onError?.(error))
+  return onValue(ref(db, 'sessionArchives'), snapshot => callback((snapshot.val() || {}) as Record<string, SessionArchive>), error => onError?.(error))
 }
 
 export const subscribePlatformGlobalPacks = (callback: (value: Record<string, ContentPack>) => void, onError?: (error: Error) => void) => {
@@ -730,8 +729,7 @@ export const archiveSession = async (session: Session) => {
     closedAt: services.session.closedAt || session.closedAt || Date.now(),
     archivedAt: Date.now(),
   }
-  const patch: Recor
-d<string, SessionArchive> = { [`sessionArchives/${session.roomId}`]: archived }
+  const patch: Record<string, SessionArchive> = { [`sessionArchives/${session.roomId}`]: archived }
   if (archived.workspaceId) patch[`workspaceArchives/${archived.workspaceId}/${session.roomId}`] = archived
   await update(ref(services.db), patch)
   return archived
@@ -841,4 +839,3 @@ export const markPersonalViewed = async (roomId: string, participantId: string) 
   await set(ref(services.db, `sessions/${roomId}/participants/${participantId}/personalViewedAt`), Date.now())
   await recordParticipantEvent(roomId, participantId, 'report_viewed')
 }
-
