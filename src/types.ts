@@ -30,6 +30,16 @@ export interface Question {
 }
 export interface PackSettings { [key: string]: boolean | number | string | null }
 export interface PackContent { questions: Question[] }
+/**
+ * The compact immutable record copied into a room. It intentionally excludes
+ * owner-only audit fields and any future editor-only draft metadata.
+ */
+export interface PackSnapshot {
+  title: string
+  description: string
+  questions: Question[]
+  settings: PackSettings
+}
 export interface ContentPack {
   productId: ProductId
   gameTypeId: GameTypeId
@@ -42,6 +52,9 @@ export interface ContentPack {
   sourcePackId?: PackId
   templateOrigin: TemplateOrigin
   title: string
+  description: string
+  /** Canonical content field for global packs. `content.questions` stays as a legacy mirror. */
+  questions: Question[]
   content: PackContent
   settings: PackSettings
   /** Declarative, allow-listed options. It is never interpreted as executable code. */
@@ -116,7 +129,12 @@ export interface Session {
   productId?: ProductId
   gameTypeId?: GameTypeId
   packId?: PackId
+  sourcePackId?: PackId
   packVersion?: PackVersion
+  /** Source-pack modification time captured during room creation. */
+  packUpdatedAt?: number
+  /** Compact immutable snapshot required by the room contract. */
+  packSnapshot?: PackSnapshot
   templateOrigin?: TemplateOrigin
   templateSnapshot?: TemplateSnapshot
   resultsIntroStartedAt?: number
@@ -148,8 +166,11 @@ export interface RoomLobby {
 }
 export interface Scores { total: number; categories: Record<CategoryId, number> }
 
-export const getSessionQuestions = (session: Pick<Session, 'templateSnapshot' | 'questions'> | null | undefined, fallback: Question[]) => {
+export const getSessionQuestions = (session: Pick<Session, 'templateSnapshot' | 'packSnapshot' | 'questions'> | null | undefined, fallback: Question[]) => {
+  const packSnapshotQuestions = session?.packSnapshot?.questions
+  if (Array.isArray(packSnapshotQuestions)) return packSnapshotQuestions
   const snapshotQuestions = session?.templateSnapshot?.content.questions
-  if (snapshotQuestions?.length) return snapshotQuestions
-  return session?.questions?.length ? session.questions : fallback
+  if (Array.isArray(snapshotQuestions)) return snapshotQuestions
+  if (Array.isArray(session?.questions)) return session.questions
+  return fallback
 }

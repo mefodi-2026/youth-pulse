@@ -11,7 +11,7 @@ export interface GameModule {
   contentSchemaVersion: number
   defaultRuleConfig: PackRuleConfig
   normalizeRuleConfig: (value?: Partial<PackRuleConfig>) => PackRuleConfig
-  getQuestions: (session: Pick<Session, 'templateSnapshot' | 'questions' | 'gameTypeId'> | null | undefined, legacyFallback: Question[]) => Question[]
+  getQuestions: (session: Pick<Session, 'templateSnapshot' | 'packSnapshot' | 'questions' | 'gameTypeId'> | null | undefined, legacyFallback: Question[]) => Question[]
   score: (answers: Record<string, ResponseValue>, questionSet: Question[]) => Scores
 }
 

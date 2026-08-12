@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { browserLocalPersistence, createUserWithEmailAndPassword, deleteUser, getAuth, onAuthStateChanged, setPersistence, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
-import { get, getDatabase, onValue, push, ref, set, update } from 'firebase/database'
+import { equalTo, get, getDatabase, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
 import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
 import { diagnosticGameModule, getGameModule } from './gameRegistry'
@@ -62,6 +62,7 @@ export interface RegisterLeaderInput { fullName: string; phone: string; email: s
 
 const copyQuestions = (questionSet: Question[]) => questionSet.map(question => ({ ...question, options: { ...question.options } }))
 const copySettings = (settings: Record<string, boolean | number | string | null>) => ({ ...settings })
+const defaultPackDescription = 'Интерактивная диагностика для молодёжных групп.'
 
 const createRoomLobby = (session: Session): RoomLobby => ({
   roomId: session.roomId,
@@ -94,10 +95,12 @@ export const createDiagnosticTemplateSnapshot = (questionSet: Question[] = built
   version: source?.version || source?.packVersion || diagnosticPackVersion,
   packVersion: source?.packVersion || source?.version || diagnosticPackVersion,
   status: source?.status || 'active',
-  ...(source?.sourcePackId ? { sourcePackId: source.sourcePackId } : {}),
+  sourcePackId: source?.sourcePackId || source?.packId || diagnosticPackId,
   templateOrigin: source?.templateOrigin || 'system',
   title: source?.title || 'Диагностика атмосферы молодёжи',
-  content: { questions: copyQuestions(orderQuestionsByCategory(source?.content?.questions?.length ? source.content.questions : questionSet)) },
+  description: source?.description || defaultPackDescription,
+  questions: copyQuestions(orderQuestionsByCategory(source?.questions?.length ? source.questions : source?.content?.questions?.length ? source.content.questions : questionSet)),
+  content: { questions: copyQuestions(orderQuestionsByCategory(source?.questions?.length ? source.questions : source?.content?.questions?.length ? source.content.questions : questionSet)) },
   settings: copySettings(source?.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
   ruleConfig: getGameModule(source?.gameTypeId).normalizeRuleConfig(source?.ruleConfig),
   contentSchemaVersion: source?.contentSchemaVersion || getGameModule(source?.gameTypeId).contentSchemaVersion,
@@ -106,11 +109,12 @@ export const createDiagnosticTemplateSnapshot = (questionSet: Question[] = built
   capturedAt: Date.now(),
 })
 
-const normalizeContentPack = (value: unknown, fallbackQuestions: Question[], defaults: Partial<ContentPack>): ContentPack | null => {
+const normalizeContentPack = (value: unknown, _fallbackQuestions: Question[], defaults: Partial<ContentPack>): ContentPack | null => {
   if (!value || typeof value !== 'object') return null
   const raw = value as Partial<ContentPack> & { questions?: Question[] }
-  const questionSet = raw.content?.questions || raw.questions
-  if (!Array.isArray(questionSet) || !questionSet.length) return null
+  const questionSet = raw.questions || raw.content?.questions
+  if (!Array.isArray(questionSet)) return null
+  const orderedQuestions = copyQuestions(orderQuestionsByCategory(questionSet))
   return {
     productId: raw.productId || defaults.productId || diagnosticProductId,
     gameTypeId: raw.gameTypeId || defaults.gameTypeId || diagnosticGameTypeId,
@@ -121,7 +125,9 @@ const normalizeContentPack = (value: unknown, fallbackQuestions: Question[], def
     ...(raw.sourcePackId || defaults.sourcePackId ? { sourcePackId: raw.sourcePackId || defaults.sourcePackId } : {}),
     templateOrigin: raw.templateOrigin || defaults.templateOrigin || 'system',
     title: raw.title || defaults.title || 'Диагностика атмосферы молодёжи',
-    content: { questions: copyQuestions(orderQuestionsByCategory(questionSet.length ? questionSet : fallbackQuestions)) },
+    description: raw.description || defaults.description || defaultPackDescription,
+    questions: orderedQuestions,
+    content: { questions: orderedQuestions },
     settings: copySettings(raw.settings || defaults.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
     ruleConfig: getGameModule(raw.gameTypeId || defaults.gameTypeId).normalizeRuleConfig(raw.ruleConfig || defaults.ruleConfig),
     contentSchemaVersion: raw.contentSchemaVersion || defaults.contentSchemaVersion || getGameModule(raw.gameTypeId || defaults.gameTypeId).contentSchemaVersion,
@@ -142,7 +148,10 @@ export const resolveDiagnosticTemplate = async (workspaceId?: string, selection:
     try {
       const snapshot = await get(ref(db, candidate.path))
       const pack = normalizeContentPack(snapshot.val(), [], candidate.defaults)
-      if (pack?.status === 'active') return createDiagnosticTemplateSnapshot(pack.content.questions, pack)
+      if (pack?.status === 'active') {
+        if (!pack.questions.length) throw new Error('В выбранном наборе нет вопросов.')
+        return createDiagnosticTemplateSnapshot(pack.questions, pack)
+      }
     } catch {
       // The selected source is unavailable. Do not silently switch pack origins.
     }
@@ -314,6 +323,24 @@ export const subscribeGlobalPack = (packId: string, callback: (value: ContentPac
   return onValue(ref(db, `globalPacks/${packId}`), snapshot => callback(normalizeContentPack(snapshot.val(), builtInQuestions, { packId, templateOrigin: 'system' })), error => onError?.(error))
 }
 
+/**
+ * Leader-facing catalogue. The query is deliberately fixed to `status=active`;
+ * the matching Rules deny an unfiltered collection read, so drafts and archives
+ * never reach a regular leader's client.
+ */
+export const subscribePublishedGlobalPacks = (callback: (value: Record<string, ContentPack>) => void, onError?: (error: Error) => void) => {
+  if (!db) { callback({}); return () => undefined }
+  const activePacks = query(ref(db, 'globalPacks'), orderByChild('status'), equalTo('active'))
+  return onValue(activePacks, snapshot => {
+    const raw = (snapshot.val() || {}) as Record<string, unknown>
+    const packs = Object.fromEntries(Object.entries(raw).flatMap(([packId, value]) => {
+      const pack = normalizeContentPack(value, [], { packId, templateOrigin: 'system' })
+      return pack ? [[packId, pack]] : []
+    })) as Record<string, ContentPack>
+    callback(packs)
+  }, error => onError?.(error))
+}
+
 export const subscribeWorkspacePack = (workspaceId: string, packId: string, callback: (value: ContentPack | null) => void, onError?: (error: Error) => void) => {
   if (!db || !workspaceId) return () => undefined
   return onValue(ref(db, `workspacePacks/${workspaceId}/${packId}`), snapshot => callback(normalizeContentPack(snapshot.val(), builtInQuestions, { workspaceId, packId, templateOrigin: 'workspace' })), error => onError?.(error))
@@ -457,7 +484,10 @@ export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
     version: nextVersion,
     packVersion: nextVersion,
     templateOrigin: 'system',
+    sourcePackId: draft.sourcePackId || draft.packId,
     content: { questions: copyQuestions(orderQuestionsByCategory(draft.content.questions)) },
+    questions: copyQuestions(orderQuestionsByCategory(draft.content.questions)),
+    description: draft.description.trim() || defaultPackDescription,
     settings: copySettings(draft.settings),
     ruleConfig: getGameModule(draft.gameTypeId || diagnosticGameTypeId).normalizeRuleConfig(draft.ruleConfig),
     contentSchemaVersion: draft.contentSchemaVersion || diagnosticGameModule.contentSchemaVersion,
@@ -487,8 +517,11 @@ export const seedDefaultGlobalPack = async () => {
     version: diagnosticPackVersion,
     packVersion: diagnosticPackVersion,
     status: 'active',
+    sourcePackId: diagnosticPackId,
     templateOrigin: 'system',
     title: 'Диагностика атмосферы молодёжи',
+    description: defaultPackDescription,
+    questions: copyQuestions(builtInQuestions),
     content: { questions: copyQuestions(builtInQuestions) },
     settings: { maxParticipants: 30, skippedAnswerScore: -1 },
     ruleConfig: diagnosticGameModule.defaultRuleConfig,
@@ -542,6 +575,14 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
     gameTypeId: template.gameTypeId,
     packId: template.packId,
     packVersion: template.packVersion,
+    sourcePackId: template.sourcePackId || template.packId,
+    packUpdatedAt: template.updatedAt || template.capturedAt,
+    packSnapshot: {
+      title: template.title,
+      description: template.description,
+      questions: copyQuestions(template.questions),
+      settings: copySettings(template.settings),
+    },
     templateOrigin: template.templateOrigin,
     templateSnapshot: template,
     questions: copyQuestions(template.content.questions),
@@ -661,6 +702,8 @@ export const saveWorkspacePack = async (workspaceId: string, questionSet: Questi
     templateOrigin: 'workspace',
     workspaceId,
     title: current?.title || title,
+    description: current?.description || defaultPackDescription,
+    questions: copyQuestions(orderQuestionsByCategory(questionSet)),
     content: { questions: copyQuestions(orderQuestionsByCategory(questionSet)) },
     settings: copySettings(current?.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
     ruleConfig: diagnosticGameModule.normalizeRuleConfig(current?.ruleConfig),

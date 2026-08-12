@@ -41,11 +41,12 @@
       }
     },
     "globalPacks": {
-      ".read": "auth != null && auth.token.platformAdmin === true",
+      ".indexOn": ["status"],
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && (auth.token.platformAdmin === true || (query.orderByChild === 'status' && query.equalTo === 'active'))",
       "$packId": {
-        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && (auth.token.platformAdmin === true || data.child('status').val() === 'active')",
         ".write": "auth != null && auth.token.platformAdmin === true",
-        ".validate": "newData.hasChildren(['productId','gameTypeId','packId','packVersion','templateOrigin','title','content','settings']) && newData.child('packId').val() === $packId && newData.child('templateOrigin').val() === 'system' && !newData.child('workspaceId').exists() && newData.child('content').child('questions').hasChildren()"
+        ".validate": "newData.hasChildren(['productId','gameTypeId','packId','version','packVersion','templateOrigin','title','description','questions','content','settings','sourcePackId','createdAt','updatedAt','status']) && newData.child('packId').val() === $packId && newData.child('templateOrigin').val() === 'system' && newData.child('sourcePackId').isString() && newData.child('title').isString() && newData.child('description').isString() && !newData.child('workspaceId').exists() && (newData.child('status').val() === 'draft' || newData.child('status').val() === 'active' || newData.child('status').val() === 'archived') && newData.child('version').isNumber() && newData.child('packVersion').isNumber() && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber() && newData.child('content').child('questions').hasChildren()"
       }
     },
     "workspacePacks": {

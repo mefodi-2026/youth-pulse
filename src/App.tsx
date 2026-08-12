@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
-import { archiveSession, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeGlobalPack, subscribeLeaderProfile, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, updatePhase, updateRoomTitle } from './lib/firebase'
+import { archiveSession, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeLeaderProfile, subscribePublishedGlobalPacks, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, updatePhase, updateRoomTitle } from './lib/firebase'
 import { getGameModule } from './lib/gameRegistry'
 import { downloadWishPng, printWish } from './lib/export'
 import { StageDashboard } from './StageDashboard'
@@ -260,7 +260,9 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       return saved?.selectedPackId && (saved.templateSource === 'system' || saved.templateSource === 'workspace') ? saved : defaultDiagnosticTemplateSelection
     } catch { return defaultDiagnosticTemplateSelection }
   })
-  const [systemPack, setSystemPack] = useState<ContentPack | null>(null)
+  const [systemPacks, setSystemPacks] = useState<Record<string, ContentPack>>({})
+  const [systemPacksState, setSystemPacksState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [systemPacksError, setSystemPacksError] = useState('')
   const [workspacePack, setWorkspacePack] = useState<ContentPack | null>(null)
   const [questionDraft, setQuestionDraft] = useState({ category: 'communication' as Question['category'], title: '', options: ['', '', '', ''] })
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
@@ -320,15 +322,29 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     let stopSystem: () => void = () => undefined
     let stopWorkspace: () => void = () => undefined
     void ensureAuth().then(() => {
-      stopSystem = subscribeGlobalPack(diagnosticPackId, setSystemPack, () => setSystemPack(null))
+      setSystemPacksState('loading')
+      stopSystem = subscribePublishedGlobalPacks(value => {
+        setSystemPacks(value)
+        setSystemPacksError('')
+        setSystemPacksState('ready')
+      }, error => {
+        setSystemPacks({})
+        setSystemPacksError(error.message || 'Не удалось загрузить опубликованные наборы.')
+        setSystemPacksState('error')
+      })
       stopWorkspace = subscribeWorkspacePack(leader.workspaceId, diagnosticPackId, setWorkspacePack, () => setWorkspacePack(null))
-    }).catch(() => { setSystemPack(null); setWorkspacePack(null) })
+    }).catch(() => {
+      setSystemPacks({})
+      setSystemPacksState('error')
+      setSystemPacksError('Не удалось подтвердить доступ к библиотеке наборов.')
+      setWorkspacePack(null)
+    })
     return () => { stopSystem(); stopWorkspace() }
   }, [leader.workspaceId])
   useEffect(() => {
-    const selected = templateSelection.templateSource === 'workspace' ? workspacePack : systemPack
+    const selected = templateSelection.templateSource === 'workspace' ? workspacePack : systemPacks[templateSelection.selectedPackId] || null
     setQuestionBank(selected?.content.questions || (firebaseReady ? [] : questions))
-  }, [systemPack, templateSelection.templateSource, workspacePack])
+  }, [systemPacks, templateSelection, workspacePack])
   useEffect(() => { localStorage.setItem(templateKey, JSON.stringify(templateSelection)) }, [templateKey, templateSelection])
   useEffect(() => {
     document.documentElement.classList.toggle('question-editor-open', questionEditorOpen)
@@ -499,9 +515,23 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     } finally { setQuestionSaving(false) }
   }
   const warning = !firebaseReady ? 'Для работы с несколькими устройствами подключите Firebase: демо-режим синхронизируется только в этом браузере.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Этот QR ведёт на адрес компьютера. После публикации сайта здесь будет общий интернет-адрес.' : ''
+  const publishedSystemPacks = Object.values(systemPacks).sort((left, right) => left.title.localeCompare(right.title, 'ru'))
+  const selectedSystemPack = systemPacks[templateSelection.selectedPackId] || null
+  const packSelectionControl = <Glass className="pack-picker">
+    <p className="eyebrow">НАБОР ДЛЯ НОВОЙ КОМНАТЫ</p>
+    {templateSelection.templateSource === 'workspace' && workspacePack
+      ? <><h3>{workspacePack.title}</h3><p>Используется ваша уже созданная личная копия. Глобальные материалы остаются без изменений.</p><Button secondary onClick={() => setTemplateSelection(defaultDiagnosticTemplateSelection)}>Выбрать системный набор</Button></>
+      : systemPacksState === 'loading'
+        ? <p>Загружаем опубликованные наборы…</p>
+        : systemPacksState === 'error'
+          ? <><h3>Библиотека недоступна</h3><p>{systemPacksError}</p></>
+          : !publishedSystemPacks.length
+            ? <><h3>Нет опубликованных наборов</h3><p>Владелец платформы пока не опубликовал материал для запуска.</p></>
+            : <><label>Выберите опубликованный набор<select value={templateSelection.selectedPackId} onChange={event => setTemplateSelection({ selectedPackId: event.target.value, templateSource: 'system' })}>{publishedSystemPacks.map(pack => <option key={pack.packId} value={pack.packId}>{pack.title} · {pack.questions.length} вопросов · v{pack.packVersion}</option>)}</select></label>{selectedSystemPack?.questions.length === 0 ? <p className="connection-warning">В выбранном наборе пока нет вопросов. Его нельзя использовать для создания комнаты.</p> : <p>{selectedSystemPack?.description || 'Описание набора пока не заполнено.'}</p>}</>}
+  </Glass>
   if (!session) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={lastClosedRoom} session={null} participants={0} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">{lastClosedRoom ? `ЗАВЕРШЁННАЯ КОМНАТА · ${lastClosedRoom}` : 'ВЕДУЩИЙ · НОВАЯ ВСТРЕЧА'}</p><h1>{lastClosedRoom ? 'Комната завершена' : 'Диагностика атмосферы'}</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{lastClosedRoom ? 'СОХРАНЕНО' : firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
-    <Glass className="start-panel"><p className="eyebrow">{lastClosedRoom ? 'ВСТРЕЧА СОХРАНЕНА' : 'НОВАЯ ДИАГНОСТИКА'}</p><h2>{lastClosedRoom ? 'Эта диагностика завершена' : 'Готовы начать?'}</h2><p>{lastClosedRoom ? 'Участники и ответы сохранены. Чтобы провести новую диагностику или викторину, создайте новую комнату.' : 'Создайте комнату, покажите QR-код участникам и начните, когда все подключатся.'}</p><label className="room-title-input">Название комнаты<input value={roomTitleDraft} onChange={event => setRoomTitleDraft(event.target.value)} placeholder={defaultRoomTitle()} maxLength={80} /></label><div className="control-actions"><Button disabled={busy} onClick={() => void create()}>{busy ? 'Создаём…' : 'Создать новую комнату'}</Button>{lastClosedRoom && <Button secondary onClick={() => navigate('results')}>Посмотреть старые результаты</Button>}{lastClosedRoom && <Button secondary onClick={() => navigate('export')}>Открыть экспорт</Button>}</div>{createError && <p className="connection-warning">{createError}</p>}{actionError && <p className="connection-warning">{actionError}</p>}</Glass>
+    <Glass className="start-panel"><p className="eyebrow">{lastClosedRoom ? 'ВСТРЕЧА СОХРАНЕНА' : 'НОВАЯ ДИАГНОСТИКА'}</p><h2>{lastClosedRoom ? 'Эта диагностика завершена' : 'Готовы начать?'}</h2><p>{lastClosedRoom ? 'Участники и ответы сохранены. Чтобы провести новую диагностику или викторину, создайте новую комнату.' : 'Создайте комнату, покажите QR-код участникам и начните, когда все подключатся.'}</p>{packSelectionControl}<label className="room-title-input">Название комнаты<input value={roomTitleDraft} onChange={event => setRoomTitleDraft(event.target.value)} placeholder={defaultRoomTitle()} maxLength={80} /></label><div className="control-actions"><Button disabled={busy || systemPacksState === 'loading' || (templateSelection.templateSource === 'system' && (!selectedSystemPack || selectedSystemPack.questions.length === 0))} onClick={() => void create()}>{busy ? 'Создаём…' : 'Создать новую комнату'}</Button>{lastClosedRoom && <Button secondary onClick={() => navigate('results')}>Посмотреть старые результаты</Button>}{lastClosedRoom && <Button secondary onClick={() => navigate('export')}>Открыть экспорт</Button>}</div>{createError && <p className="connection-warning">{createError}</p>}{actionError && <p className="connection-warning">{actionError}</p>}</Glass>
   </HostLayout>
   return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">СЕССИЯ · {session.displayCode || room}</p><h1>{tab === 'overview' ? 'Обзор' : tab === 'currentRoom' ? 'Управление сессией' : menu.find(item => item[0] === tab)?.[1]}</h1><p className="room-header-title">{session.roomTitle || `Комната ${room}`}</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
