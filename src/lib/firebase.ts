@@ -364,7 +364,169 @@ export const subscribePlatformLeaders = (callback: (value: Record<string, Leader
   return onValue(ref(db, 'users'), snapshot => callback((snapshot.val() || {}) as Record<string, LeaderProfile>), error => onError?.(error))
 }
 
-export const subscribePlatformSessions = (callback: (value: Record<string, Session>) => void, o…2149 tokens truncated…existingQuestions) ? null : await get(ref(services.db, 'questionBank'))
+export const subscribePlatformSessions = (callback: (value: Record<string, Session>) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, 'sessions'), snapshot => callback((snapshot.val() || {}) as Record<string, Session>), error => onError?.(error))
+}
+
+export const subscribePlatformArchives = (callback: (value: Record<string, SessionArchive>) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, 'sessionArchives'), snapshot => callback((snapshot.val() || {}) as Record<string
+, SessionArchive>), error => onError?.(error))
+}
+
+export const subscribePlatformGlobalPacks = (callback: (value: Record<string, ContentPack>) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, 'globalPacks'), snapshot => {
+    const raw = (snapshot.val() || {}) as Record<string, unknown>
+    const packs = Object.fromEntries(Object.entries(raw).flatMap(([packId, value]) => {
+      const pack = normalizeContentPack(value, builtInQuestions, { packId, templateOrigin: 'system' })
+      return pack ? [[packId, pack]] : []
+    })) as Record<string, ContentPack>
+    callback(packs)
+  }, error => onError?.(error))
+}
+
+export const subscribePlatformFeedback = (callback: (value: Record<string, FeedbackItem>) => void, onError?: (error: Error) => void) => {
+  if (!db) return () => undefined
+  return onValue(ref(db, 'feedback'), snapshot => callback((snapshot.val() || {}) as Record<string, FeedbackItem>), error => onError?.(error))
+}
+
+export const setLeaderStatusAsOwner = async (uid: string, status: UserStatus) => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
+  const profileSnapshot = await get(ref(services.db, `users/${uid}`))
+  const profile = profileSnapshot.val() as LeaderProfile | null
+  if (!profile) throw new Error('Профиль лидера не найден.')
+  const now = Date.now()
+  const patch: Record<string, unknown> = {
+    [`users/${uid}/status`]: status,
+    [`users/${uid}/updatedAt`]: now,
+  }
+  // Paused/revoked leaders keep all history. Their open rooms are closed so
+  // participants cannot continue writing answers to a disabled workspace.
+  if (status === 'paused' || status === 'revoked') {
+    const sessionsSnapshot = await get(ref(services.db, 'sessions'))
+    const sessions = (sessionsSnapshot.val() || {}) as Record<string, Session>
+    Object.values(sessions).filter(session => session.hostUid === uid && session.phase !== 'closed').forEach(session => {
+      const closed: SessionArchive = { ...session, phase: 'closed', closedAt: now, archivedAt: now }
+      patch[`sessions/${session.roomId}/phase`] = 'closed'
+      patch[`sessions/${session.roomId}/closedAt`] = now
+      patch[`roomLobbies/${session.roomId}/phase`] = 'closed'
+      patch[`roomLobbies/${session.roomId}/closedAt`] = now
+      patch[`sessionArchives/${session.roomId}`] = closed
+      if (session.workspaceId) patch[`workspaceArchives/${session.workspaceId}/${session.roomId}`] = closed
+    })
+  }
+  await update(ref(services.db), patch)
+}
+
+/** Publishes operational product availability. Draft form state is local until this call. */
+export const saveProductAsOwner = async (draft: ProductConfig) => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
+  const now = Date.now()
+  const currentSnapshot = await get(ref(services.db, `products/${draft.productId}`))
+  const current = currentSnapshot.val() as ProductConfig | null
+  const product: ProductConfig = {
+    ...platformProductDefaults[draft.productId],
+    ...current,
+    ...draft,
+    productId: draft.productId,
+    name: draft.name.trim(),
+    description: draft.description.trim(),
+    maintenanceMessage: draft.maintenanceMessage?.trim() || '',
+    version: Math.max(1, Number(current?.version || draft.version || 1) + 1),
+    updatedAt: now,
+    publishedAt: now,
+  }
+  if (!product.name || !product.description) throw new Error('Укажите название и описание продукта.')
+  await set(ref(services.db, `products/${product.productId}`), product)
+  return product
+}
+
+/** Owner-controlled access for one workspace. Existing leader history stays intact. */
+export const saveWorkspaceProductAsOwner = async (workspaceId: string, productId: string, patch: Pick<WorkspaceProduct, 'enabled' | 'testing' | 'planId' | 'expiresAt'> & { plan?: string }) => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
+  const [workspaceSnapshot, currentSnapshot] = await Promise.all([
+    get(ref(services.db, `workspaces/${workspaceId}`)),
+    get(ref(services.db, `workspaceProducts/${workspaceId}/${productId}`)),
+  ])
+  const workspace = workspaceSnapshot.val() as Workspace | null
+  if (!workspace) throw new Error('Рабочее пространство не найдено.')
+  const current = currentSnapshot.val() as WorkspaceProduct | null
+  const now = Date.now()
+  const next: WorkspaceProduct = {
+    productId,
+    ownerUid: workspace.ownerUid,
+    enabled: patch.enabled,
+    accessSource: current?.accessSource || 'manual',
+    plan: patch.plan || patch.planId,
+    planId: patch.planId,
+    startsAt: current?.startsAt || now,
+    expiresAt: Math.max(0, Number(patch.expiresAt) || 0),
+    testing: patch.testing,
+  }
+  await set(ref(services.db, `workspaceProducts/${workspaceId}/${productId}`), next)
+  return next
+}
+
+export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
+  const now = Date.now()
+  const existingSnapshot = await get(ref(services.db, `globalPacks/${draft.packId}`))
+  const existing = normalizeContentPack(existingSnapshot.val(), builtInQuestions, { packId: draft.packId, templateOrigin: 'system' })
+  const nextVersion = Math.max(1, (existing?.version || existing?.packVersion || 0) + 1)
+  const pack: ContentPack = {
+    ...draft,
+    productId: draft.productId || diagnosticProductId,
+    gameTypeId: draft.gameTypeId || diagnosticGameTypeId,
+    packId: draft.packId,
+    version: nextVersion,
+    packVersion: nextVersion,
+    templateOrigin: 'system',
+    sourcePackId: draft.sourcePackId || draft.packId,
+    content: { questions: copyQuestions(orderQuestionsByCategory(draft.content.questions)) },
+    questions: copyQuestions(orderQuestionsByCategory(draft.content.questions)),
+    description: draft.description.trim() || defaultPackDescription,
+    settings: copySettings(draft.settings),
+    ruleConfig: getGameModule(draft.gameTypeId || diagnosticGameTypeId).normalizeRuleConfig(draft.ruleConfig),
+    contentSchemaVersion: draft.contentSchemaVersion || diagnosticGameModule.contentSchemaVersion,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    createdBy: existing?.createdBy || services.auth.currentUser?.uid,
+  }
+  await set(ref(services.db, `globalPacks/${pack.packId}`), pack)
+  return pack
+}
+
+/**
+ * Explicit one-time seeding helper for the platform owner. It is never called
+ * automatically for a leader, because leaders may read global packs but may
+ * not modify them under the published Rules.
+ */
+export const seedDefaultGlobalPack = async () => {
+  const services = requireFirebase()
+  await authPersistence
+  const user = services.auth.currentUser
+  if (!user || user.isAnonymous) throw new Error('Для публикации системного набора нужен аккаунт владельца платформы.')
+  const now = Date.now()
+  const existingSnapshot = await get(ref(services.db, `globalPacks/${diagnosticPackId}`))
+  const existingRaw = (existingSnapshot.val() || null) as Partial<ContentPack> | null
+  const existingQuestions = existingRaw?.questions || existingRaw?.content?.questions
+  const existingStatus = existingRaw?.status === 'draft' || existingRaw?.status === 'active' || existingRaw?.status === 'archived'
+    ? existingRaw.status
+    : 'active'
+  // Older deployments kept the system bank at /questionBank. Read it only for
+  // a one-time owner migration, and only when the canonical pack has no usable
+  // question list. The canonical global pack remains the sole source afterwards.
+  const legacySnapshot = Array.isArray(existingQuestions) ? null : await get(ref(services.db, 'questionBank'))
   const legacyRaw = legacySnapshot?.val()
   const legacyQuestions = Array.isArray(legacyRaw)
     ? legacyRaw as Question[]
@@ -568,7 +730,8 @@ export const archiveSession = async (session: Session) => {
     closedAt: services.session.closedAt || session.closedAt || Date.now(),
     archivedAt: Date.now(),
   }
-  const patch: Record<string, SessionArchive> = { [`sessionArchives/${session.roomId}`]: archived }
+  const patch: Recor
+d<string, SessionArchive> = { [`sessionArchives/${session.roomId}`]: archived }
   if (archived.workspaceId) patch[`workspaceArchives/${archived.workspaceId}/${session.roomId}`] = archived
   await update(ref(services.db), patch)
   return archived
