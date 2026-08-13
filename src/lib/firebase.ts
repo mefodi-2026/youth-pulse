@@ -68,6 +68,11 @@ export interface RoomPilotDetails {
 
 const copyQuestions = (questionSet: Question[]) => questionSet.map(question => ({ ...question, options: { ...question.options } }))
 const copySettings = (settings: Record<string, boolean | number | string | null>) => ({ ...settings })
+const systemDiagnosticPackTitle = 'Диагностика атмосферы молодёжи'
+const normalizePackTitle = (title: unknown) => {
+  const value = typeof title === 'string' ? title.trim() : ''
+  return value && !/^\?+$/.test(value) ? value : systemDiagnosticPackTitle
+}
 const defaultPackDescription = 'Интерактивная диагностика для молодёжных групп.'
 const normalizePackStatus = (status: unknown): ContentPack['status'] => status === 'draft' || status === 'archived' ? status : 'published'
 
@@ -104,7 +109,7 @@ export const createDiagnosticTemplateSnapshot = (questionSet: Question[] = built
   status: normalizePackStatus(source?.status),
   sourcePackId: source?.sourcePackId || source?.packId || diagnosticPackId,
   templateOrigin: source?.templateOrigin || 'system',
-  title: source?.title || 'Диагностика атмосферы молодёжи',
+  title: normalizePackTitle(source?.title),
   description: source?.description || defaultPackDescription,
   questions: copyQuestions(orderQuestionsByCategory(source?.questions?.length ? source.questions : source?.content?.questions?.length ? source.content.questions : questionSet)),
   content: { questions: copyQuestions(orderQuestionsByCategory(source?.questions?.length ? source.questions : source?.content?.questions?.length ? source.content.questions : questionSet)) },
@@ -131,7 +136,7 @@ const normalizeContentPack = (value: unknown, _fallbackQuestions: Question[], de
     status: normalizePackStatus(raw.status || defaults.status),
     ...(raw.sourcePackId || defaults.sourcePackId ? { sourcePackId: raw.sourcePackId || defaults.sourcePackId } : {}),
     templateOrigin: raw.templateOrigin || defaults.templateOrigin || 'system',
-    title: raw.title || defaults.title || 'Диагностика атмосферы молодёжи',
+    title: normalizePackTitle(raw.title || defaults.title),
     description: raw.description || defaults.description || defaultPackDescription,
     questions: orderedQuestions,
     content: { questions: orderedQuestions },
@@ -566,7 +571,7 @@ export const seedDefaultGlobalPack = async () => {
     status: existingStatus,
     sourcePackId: diagnosticPackId,
     templateOrigin: 'system',
-    title: existingRaw?.title?.trim() || 'Диагностика атмосферы молодёжи',
+    title: normalizePackTitle(existingRaw?.title),
     description: existingRaw?.description?.trim() || defaultPackDescription,
     questions: copyQuestions(orderQuestionsByCategory(sourceQuestions)),
     content: { questions: copyQuestions(orderQuestionsByCategory(sourceQuestions)) },
