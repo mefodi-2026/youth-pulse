@@ -449,7 +449,9 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       localStorage.setItem(roomKey, newRoom); localStorage.setItem(lastRoomKey, newRoom); localStorage.removeItem('atmosphere-host-room'); setLastClosedRoom(''); setResultRoom(''); setRoom(newRoom); navigate('overview', newRoom)
     } catch (error) {
       console.error('Не удалось создать комнату', { roomId: newRoom, workspaceId: leader.workspaceId, error })
-      setCreateError(error instanceof Error ? error.message : 'Не удалось создать комнату. Проверьте подключение к Firebase и повторите попытку.')
+      const message = error instanceof Error ? error.message : 'Не удалось создать комнату. Проверьте подключение к Firebase и повторите попытку.'
+      setCreateError(message)
+      setActionError(message)
     } finally { setBusy(false) }
   }
   const changePhase = async (next: SessionPhase) => {
