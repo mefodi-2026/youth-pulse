@@ -15,7 +15,8 @@ export type PackId = string
 export type PackVersion = number
 export type TemplateOrigin = 'system' | 'workspace'
 export interface TemplateSelection { selectedPackId: PackId; templateSource: TemplateOrigin }
-export type PackStatus = 'draft' | 'active' | 'archived'
+/** `active` is a legacy editor alias. Firebase records are always written as `published`. */
+export type PackStatus = 'draft' | 'published' | 'archived' | 'active'
 export interface PackRuleConfig {
   allowSkip: boolean
   answerMode: 'single-choice'
@@ -42,6 +43,8 @@ export interface PackSnapshot {
   description: string
   questions: Question[]
   settings: PackSettings
+  /** Declarative scoring configuration captured with the room. */
+  ruleConfig?: PackRuleConfig
 }
 export interface ContentPack {
   productId: ProductId
@@ -134,8 +137,12 @@ export interface Session {
   displayCode?: string
   createdAt: number
   phase: SessionPhase
+  /** Stable phase mirror for pilot exports and integrations. */
+  status?: SessionPhase
   maxParticipants: number
   hostUid: string
+  /** UID that created the room; optional only for historical sessions. */
+  createdBy?: string
   workspaceId?: string
   /** Pilot-analysis metadata; optional to keep old rooms readable. */
   groupName?: string
@@ -158,6 +165,8 @@ export interface Session {
   packUpdatedAt?: number
   /** Compact immutable snapshot required by the room contract. */
   packSnapshot?: PackSnapshot
+  /** Room-level settings captured from the selected pack at creation. */
+  settings?: PackSettings
   templateOrigin?: TemplateOrigin
   templateSnapshot?: TemplateSnapshot
   resultsIntroStartedAt?: number

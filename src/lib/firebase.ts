@@ -69,6 +69,7 @@ export interface RoomPilotDetails {
 const copyQuestions = (questionSet: Question[]) => questionSet.map(question => ({ ...question, options: { ...question.options } }))
 const copySettings = (settings: Record<string, boolean | number | string | null>) => ({ ...settings })
 const defaultPackDescription = 'Интерактивная диагностика для молодёжных групп.'
+const normalizePackStatus = (status: unknown): ContentPack['status'] => status === 'draft' || status === 'archived' ? status : 'published'
 
 const createRoomLobby = (session: Session): RoomLobby => ({
   roomId: session.roomId,
@@ -100,7 +101,7 @@ export const createDiagnosticTemplateSnapshot = (questionSet: Question[] = built
   packId: source?.packId || diagnosticPackId,
   version: source?.version || source?.packVersion || diagnosticPackVersion,
   packVersion: source?.packVersion || source?.version || diagnosticPackVersion,
-  status: source?.status || 'active',
+  status: normalizePackStatus(source?.status),
   sourcePackId: source?.sourcePackId || source?.packId || diagnosticPackId,
   templateOrigin: source?.templateOrigin || 'system',
   title: source?.title || 'Диагностика атмосферы молодёжи',
@@ -127,7 +128,7 @@ const normalizeContentPack = (value: unknown, _fallbackQuestions: Question[], de
     packId: raw.packId || defaults.packId || diagnosticPackId,
     version: raw.version || raw.packVersion || defaults.version || defaults.packVersion || diagnosticPackVersion,
     packVersion: raw.packVersion || raw.version || defaults.packVersion || defaults.version || diagnosticPackVersion,
-    status: raw.status || defaults.status || 'active',
+    status: normalizePackStatus(raw.status || defaults.status),
     ...(raw.sourcePackId || defaults.sourcePackId ? { sourcePackId: raw.sourcePackId || defaults.sourcePackId } : {}),
     templateOrigin: raw.templateOrigin || defaults.templateOrigin || 'system',
     title: raw.title || defaults.title || 'Диагностика атмосферы молодёжи',
@@ -154,7 +155,7 @@ export const resolveDiagnosticTemplate = async (workspaceId?: string, selection:
     try {
       const snapshot = await get(ref(db, candidate.path))
       const pack = normalizeContentPack(snapshot.val(), [], candidate.defaults)
-      if (pack?.status === 'active') {
+      if (pack?.status === 'published') {
         if (!pack.questions.length) throw new Error('В выбранном наборе нет вопросов.')
         return createDiagnosticTemplateSnapshot(pack.questions, pack)
       }
@@ -330,21 +331,36 @@ export const subscribeGlobalPack = (packId: string, callback: (value: ContentPac
 }
 
 /**
- * Leader-facing catalogue. The query is deliberately fixed to `status=active`;
+ * Leader-facing catalogue. The query is deliberately fixed to `status=published`;
  * the matching Rules deny an unfiltered collection read, so drafts and archives
  * never reach a regular leader's client.
  */
 export const subscribePublishedGlobalPacks = (callback: (value: Record<string, ContentPack>) => void, onError?: (error: Error) => void) => {
   if (!db) { callback({}); return () => undefined }
-  const activePacks = query(ref(db, 'globalPacks'), orderByChild('status'), equalTo('active'))
-  return onValue(activePacks, snapshot => {
+  const toPacks = (snapshot: { val: () => unknown }) => {
     const raw = (snapshot.val() || {}) as Record<string, unknown>
     const packs = Object.fromEntries(Object.entries(raw).flatMap(([packId, value]) => {
       const pack = normalizeContentPack(value, [], { packId, templateOrigin: 'system' })
       return pack ? [[packId, pack]] : []
     })) as Record<string, ContentPack>
     callback(packs)
-  }, error => onError?.(error))
+  }
+  const publishedPacks = query(ref(db, 'globalPacks'), orderByChild('status'), equalTo('published'))
+  let unsubscribeLegacy: () => void = () => undefined
+  const subscribeLegacyActivePacks = () => {
+    const legacyPacks = query(ref(db, 'globalPacks'), orderByChild('status'), equalTo('active'))
+    unsubscribeLegacy = onValue(legacyPacks, toPacks, error => onError?.(error))
+  }
+  const unsubscribePublished = onValue(publishedPacks, snapshot => {
+    if (snapshot.exists()) toPacks(snapshot)
+    else callback({})
+  }, error => {
+    // Compatibility for the already deployed pilot Rules while the canonical
+    // `published` status is being rolled out. New Rules never grant this read.
+    if ((error as { code?: string }).code === 'PERMISSION_DENIED') subscribeLegacyActivePacks()
+    else onError?.(error)
+  })
+  return () => { unsubscribePublished(); unsubscribeLegacy() }
 }
 
 export const subscribeWorkspacePack = (workspaceId: string, packId: string, callback: (value: ContentPack | null) => void, onError?: (error: Error) => void) => {
@@ -380,7 +396,10 @@ export const subscribePlatformGlobalPacks = (callback: (value: Record<string, Co
     const raw = (snapshot.val() || {}) as Record<string, unknown>
     const packs = Object.fromEntries(Object.entries(raw).flatMap(([packId, value]) => {
       const pack = normalizeContentPack(value, builtInQuestions, { packId, templateOrigin: 'system' })
-      return pack ? [[packId, pack]] : []
+      // OwnerAdmin predates the canonical `published` value and exposes this
+      // alias only inside its select control. saveGlobalPackAsOwner converts it
+      // back to `published` before every database write.
+      return pack ? [[packId, pack.status === 'published' ? { ...pack, status: 'active' as const } : pack]] : []
     })) as Record<string, ContentPack>
     callback(packs)
   }, error => onError?.(error))
@@ -489,6 +508,7 @@ export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
     packId: draft.packId,
     version: nextVersion,
     packVersion: nextVersion,
+    status: normalizePackStatus(draft.status),
     templateOrigin: 'system',
     sourcePackId: draft.sourcePackId || draft.packId,
     content: { questions: copyQuestions(orderQuestionsByCategory(draft.content.questions)) },
@@ -519,9 +539,7 @@ export const seedDefaultGlobalPack = async () => {
   const existingSnapshot = await get(ref(services.db, `globalPacks/${diagnosticPackId}`))
   const existingRaw = (existingSnapshot.val() || null) as Partial<ContentPack> | null
   const existingQuestions = existingRaw?.questions || existingRaw?.content?.questions
-  const existingStatus = existingRaw?.status === 'draft' || existingRaw?.status === 'active' || existingRaw?.status === 'archived'
-    ? existingRaw.status
-    : 'active'
+  const existingStatus = normalizePackStatus(existingRaw?.status)
   // Older deployments kept the system bank at /questionBank. Read it only for
   // a one-time owner migration, and only when the canonical pack has no usable
   // question list. The canonical global pack remains the sole source afterwards.
@@ -602,8 +620,10 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
     displayCode: roomId,
     createdAt,
     phase: 'lobby',
+    status: 'lobby',
     maxParticipants: 30,
     hostUid,
+    createdBy: hostUid,
     ...(workspaceId ? { workspaceId } : {}),
     groupName: details.groupName,
     city: details.city,
@@ -624,7 +644,9 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
       description: template.description,
       questions: copyQuestions(template.questions),
       settings: copySettings(template.settings),
+      ruleConfig: template.ruleConfig ? { ...template.ruleConfig } : undefined,
     },
+    settings: copySettings(template.settings),
     templateOrigin: template.templateOrigin,
     templateSnapshot: template,
     questions: copyQuestions(template.content.questions),
@@ -635,16 +657,28 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
 
 export const createSession = async (roomId: string, hostUid: string, questionSet?: Question[], workspaceId?: string, templateSelection: TemplateSelection = defaultDiagnosticTemplateSelection, roomTitle?: string, pilotDetails?: Partial<RoomPilotDetails>) => {
   if (!db) throw new Error('Firebase не настроен')
+  const services = requireFirebase()
+  await authPersistence
+  const currentUser = services.auth.currentUser
+  if (!currentUser || currentUser.isAnonymous || currentUser.uid !== hostUid) throw new Error('Сеанс ведущего не подтверждён. Войдите в аккаунт ещё раз и повторите создание комнаты.')
   if (!workspaceId) throw new Error('Для создания комнаты нужно рабочее пространство.')
   await assertRoomCreationAccess(hostUid, workspaceId)
   const template = await resolveDiagnosticTemplate(workspaceId, templateSelection)
   const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, templateSelection, roomTitle, pilotDetails)
   // The lobby is the only pre-join readable record. It contains no questions,
   // participants, or answers from another workspace.
-  await update(ref(db), {
-    [`sessions/${roomId}`]: session,
-    [`roomLobbies/${roomId}`]: createRoomLobby(session),
-  })
+  try {
+    await update(ref(db), {
+      [`sessions/${roomId}`]: session,
+      [`roomLobbies/${roomId}`]: createRoomLobby(session),
+    })
+  } catch (reason) {
+    const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code) : ''
+    console.error('room creation was rejected by Firebase', { roomId, workspaceId, hostUid, packId: session.packId, code, reason })
+    throw new Error(code === 'PERMISSION_DENIED' || /permission_denied/i.test(String(reason))
+      ? 'Firebase отклонил создание комнаты. Проверьте опубликованные Rules, статус аккаунта и доступ к продукту.'
+      : `Не удалось сохранить комнату в Firebase${code ? ` (${code})` : ''}.`)
+  }
   return session
 }
 
@@ -756,7 +790,7 @@ export const saveWorkspacePack = async (workspaceId: string, questionSet: Questi
     packId: diagnosticPackId,
     version: Math.max(diagnosticPackVersion, (current?.version || current?.packVersion || diagnosticPackVersion - 1) + 1),
     packVersion: Math.max(diagnosticPackVersion, (current?.version || current?.packVersion || diagnosticPackVersion - 1) + 1),
-    status: 'active',
+    status: 'published',
     sourcePackId: current?.sourcePackId || diagnosticPackId,
     templateOrigin: 'workspace',
     workspaceId,
