@@ -34,6 +34,11 @@ export interface Question {
 }
 export interface PackSettings { [key: string]: boolean | number | string | null }
 export interface PackContent { questions: Question[] }
+export interface PackScoringSnapshot {
+  mode: PackRuleConfig['scoringMode']
+  answerScores: Record<Answer, number>
+  skippedAnswerScore: number
+}
 /**
  * The compact immutable record copied into a room. It intentionally excludes
  * owner-only audit fields and any future editor-only draft metadata.
@@ -45,6 +50,8 @@ export interface PackSnapshot {
   settings: PackSettings
   /** Declarative scoring configuration captured with the room. */
   ruleConfig?: PackRuleConfig
+  /** Concrete scoring values captured with the room for stable exports. */
+  scoring?: PackScoringSnapshot
 }
 export interface ContentPack {
   productId: ProductId

@@ -430,13 +430,26 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     setBusy(true); setActionError(''); setCreateError('')
     const newRoom = makeRoom()
     try {
-      if (!roomDetails.groupName.trim() || !roomDetails.city.trim()) throw new Error('Подтвердите название молодёжки и город для анализа пилота.')
       if (roomDetails.mode !== 'diagnostic') throw new Error('Викторина пока готовится к запуску. Для пилота выберите диагностику.')
-      if (firebaseReady) { if (!questionBank.length) throw new Error('Выбранный набор ещё не загружен или недоступен. Обновите страницу и попробуйте снова.'); const user = await ensureAuth(); if (!user) throw new Error('Не удалось войти в Firebase'); await createSession(newRoom, user.uid, questionBank, leader.workspaceId, templateSelection, title, roomDetails) }
-      else setDemo(createSessionRecord(newRoom, 'demo-host', questionBank, leader.workspaceId, undefined, undefined, title, roomDetails))
+      const detailsForRoom: RoomPilotDetails = {
+        ...roomDetails,
+        groupName: workspace?.name?.trim() || roomDetails.groupName.trim(),
+        city: roomDetails.city.trim() || workspace?.city?.trim() || '',
+        mode: 'diagnostic',
+      }
+      if (firebaseReady) {
+        if (!activeDiagnosticPack) throw new Error(systemPacksState === 'error'
+          ? `Не удалось загрузить опубликованный диагностический набор: ${systemPacksError || 'проверьте подключение к Firebase.'}`
+          : 'Опубликованный диагностический набор пока недоступен. Обновите страницу и попробуйте снова.')
+        if (!activeDiagnosticPack.questions.length) throw new Error('В опубликованном диагностическом наборе нет вопросов. Создание комнаты невозможно.')
+        const user = await ensureAuth()
+        if (!user) throw new Error('Не удалось подтвердить вход в Firebase. Войдите в аккаунт ещё раз и повторите создание комнаты.')
+        await createSession(newRoom, user.uid, activeDiagnosticPack.questions, leader.workspaceId, defaultDiagnosticTemplateSelection, title, detailsForRoom)
+      } else setDemo(createSessionRecord(newRoom, 'demo-host', questionBank, leader.workspaceId, undefined, undefined, title, detailsForRoom))
       localStorage.setItem(roomKey, newRoom); localStorage.setItem(lastRoomKey, newRoom); localStorage.removeItem('atmosphere-host-room'); setLastClosedRoom(''); setResultRoom(''); setRoom(newRoom); navigate('overview', newRoom)
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : 'Не удалось создать комнату.')
+      console.error('Не удалось создать комнату', { roomId: newRoom, workspaceId: leader.workspaceId, error })
+      setCreateError(error instanceof Error ? error.message : 'Не удалось создать комнату. Проверьте подключение к Firebase и повторите попытку.')
     } finally { setBusy(false) }
   }
   const changePhase = async (next: SessionPhase) => {
@@ -588,30 +601,32 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     } finally { setQuestionSaving(false) }
   }
   const warning = !firebaseReady ? 'Для работы с несколькими устройствами подключите Firebase: демо-режим синхронизируется только в этом браузере.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Этот QR ведёт на адрес компьютера. После публикации сайта здесь будет общий интернет-адрес.' : ''
-  const publishedSystemPacks = Object.values(systemPacks).sort((left, right) => left.title.localeCompare(right.title, 'ru'))
+  const activeDiagnosticPack = systemPacks[diagnosticPackId] || null
   const selectedSystemPack = systemPacks[templateSelection.selectedPackId] || null
-  const packSelectionControl = <Glass className="pack-picker">
-    <p className="eyebrow">НАБОР ДЛЯ НОВОЙ КОМНАТЫ</p>
-    {templateSelection.templateSource === 'workspace' && workspacePack
-      ? <><h3>{workspacePack.title}</h3><p>Используется ваша уже созданная личная копия. Глобальные материалы остаются без изменений.</p><Button secondary onClick={() => setTemplateSelection(defaultDiagnosticTemplateSelection)}>Выбрать системный набор</Button></>
-      : systemPacksState === 'loading'
-        ? <p>Загружаем опубликованные наборы…</p>
-        : systemPacksState === 'error'
-          ? <><h3>Библиотека недоступна</h3><p>{systemPacksError}</p></>
-          : !publishedSystemPacks.length
-            ? <><h3>Нет опубликованных наборов</h3><p>Владелец платформы пока не опубликовал материал для запуска.</p></>
-            : <><label>Выберите опубликованный набор<select value={templateSelection.selectedPackId} onChange={event => setTemplateSelection({ selectedPackId: event.target.value, templateSource: 'system' })}>{publishedSystemPacks.map(pack => <option key={pack.packId} value={pack.packId}>{pack.title} · {pack.questions.length} вопросов · v{pack.packVersion}</option>)}</select></label>{selectedSystemPack?.questions.length === 0 ? <p className="connection-warning">В выбранном наборе пока нет вопросов. Его нельзя использовать для создания комнаты.</p> : <p>{selectedSystemPack?.description || 'Описание набора пока не заполнено.'}</p>}</>}
-  </Glass>
+  const displayPackTitle = (value?: string) => {
+    const title = value?.trim() || ''
+    return !title || /^\?+$/.test(title) ? 'Диагностика атмосферы молодёжи' : title
+  }
   const roomPilotDetailsControl = <Glass className="room-pilot-details">
-    <p className="eyebrow">ДАННЫЕ ВСТРЕЧИ · ПИЛОТ</p>
-    <h3>Подтвердите параметры комнаты</h3>
-    <p>Эти сведения попадут только в историю и CSV ведущего. Реальные имена участников не собираются.</p>
+    <p className="eyebrow">ПАРАМЕТРЫ КОМНАТЫ</p>
+    <h3>Настройте новую комнату</h3>
+    <p>Название, формат и ожидаемое число участников сохраняются только в истории и экспорте ведущего.</p>
     <div className="room-pilot-fields">
-      <label>Название молодёжки<input value={roomDetails.groupName} onChange={event => setRoomDetails(previous => ({ ...previous, groupName: event.target.value }))} placeholder="Например, Молодёжка «Атмосфера»" maxLength={100} /></label>
-      <label>Город<input value={roomDetails.city} onChange={event => setRoomDetails(previous => ({ ...previous, city: event.target.value }))} placeholder="Например, Алматы" maxLength={80} /></label>
-      <label>Формат<select value={roomDetails.mode} onChange={event => setRoomDetails(previous => ({ ...previous, mode: event.target.value as RoomMode }))}><option value="diagnostic">Диагностика</option><option value="quiz" disabled>Викторина · скоро</option></select></label>
-      <label>Предполагаемое число участников<input type="number" min="1" max="30" value={roomDetails.estimatedParticipants} onChange={event => setRoomDetails(previous => ({ ...previous, estimatedParticipants: Math.max(1, Math.min(30, Number(event.target.value) || 1)) }))} /></label>
+      <label>Формат<select value={roomDetails.mode} onChange={event => setRoomDetails(previous => ({ ...previous, mode: event.target.value as RoomMode }))}><option value="diagnostic">Диагностика</option><option value="quiz" disabled>Библейская викторина · скоро</option></select></label>
+      <label>Предполагаемое количество участников<select value={roomDetails.estimatedParticipants} onChange={event => setRoomDetails(previous => ({ ...previous, estimatedParticipants: Number(event.target.value) }))}>{[10, 15, 20, 25, 30].map(count => <option value={count} key={count}>{count} участников</option>)}</select></label>
+      <label>Шаблон подсчёта<select value="diagnostic-3-2-1-0" disabled><option value="diagnostic-3-2-1-0">Стандартный: 3, 2, 1, 0</option></select></label>
     </div>
+    <p className="room-template-hint">Шаблоны подсчёта будут доступны после запуска приложения.</p>
+  </Glass>
+  const packSelectionControl = <Glass className="pack-picker">
+    <p className="eyebrow">НАБОР ВОПРОСОВ</p>
+    {systemPacksState === 'loading'
+      ? <p>Загружаем опубликованный диагностический набор…</p>
+      : systemPacksState === 'error'
+        ? <><h3>Библиотека недоступна</h3><p className="connection-warning">{systemPacksError || 'Не удалось получить набор из Firebase.'}</p></>
+        : !activeDiagnosticPack
+          ? <><h3>Нет опубликованного диагностического набора</h3><p className="connection-warning">Владелец платформы должен опубликовать системный набор перед созданием комнаты.</p></>
+          : <><h3>{displayPackTitle(activeDiagnosticPack.title)}</h3><p>{activeDiagnosticPack.questions.length} вопросов · версия {activeDiagnosticPack.packVersion}</p><p>{activeDiagnosticPack.description || 'Системный набор вопросов для диагностики атмосферы молодёжи.'}</p>{activeDiagnosticPack.questions.length === 0 && <p className="connection-warning">В этом наборе пока нет вопросов, поэтому его нельзя использовать для создания комнаты.</p>}</>}
   </Glass>
   const feedbackUrl = createFeedbackUrl(feedbackFormUrl, session)
   const historyFiltersControl = <Glass className="history-filters"><p className="eyebrow">ФИЛЬТРЫ ИСТОРИИ</p><div><input value={historyFilters.query} onChange={event => setHistoryFilters(previous => ({ ...previous, query: event.target.value }))} placeholder="Комната, молодёжка, город или код" /><select value={historyFilters.mode} onChange={event => setHistoryFilters(previous => ({ ...previous, mode: event.target.value as 'all' | RoomMode }))}><option value="all">Все форматы</option><option value="diagnostic">Диагностика</option><option value="quiz">Викторина</option></select><label>С<input type="date" value={historyFilters.from} onChange={event => setHistoryFilters(previous => ({ ...previous, from: event.target.value }))} /></label><label>По<input type="date" value={historyFilters.to} onChange={event => setHistoryFilters(previous => ({ ...previous, to: event.target.value }))} /></label></div></Glass>
