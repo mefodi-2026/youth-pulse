@@ -167,6 +167,16 @@ const authErrorText = (error: unknown) => {
   return error instanceof Error ? error.message : 'Не удалось выполнить операцию. Попробуйте ещё раз.'
 }
 
+const packLibraryErrorText = (error: unknown) => {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+  if (code === 'PERMISSION_DENIED' || /permission_denied/i.test(error instanceof Error ? error.message : '')) {
+    return 'Firebase Rules сейчас блокируют доступ к опубликованным наборам. Владельцу нужно опубликовать актуальный firebase-rules.json в Realtime Database → Rules.'
+  }
+  return error instanceof Error && error.message
+    ? error.message
+    : 'Не удалось загрузить опубликованные наборы.'
+}
+
 function AuthPage({ mode }: { mode: 'login' | 'register' | 'owner-login' }) {
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
@@ -396,7 +406,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
         setSystemPacksState('ready')
       }, error => {
         setSystemPacks({})
-        setSystemPacksError(error.message || 'Не удалось загрузить опубликованные наборы.')
+        setSystemPacksError(packLibraryErrorText(error))
         setSystemPacksState('error')
       })
       stopWorkspace = subscribeWorkspacePack(leader.workspaceId, diagnosticPackId, setWorkspacePack, () => setWorkspacePack(null))
