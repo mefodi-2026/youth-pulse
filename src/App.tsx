@@ -11,6 +11,8 @@ import { type Answer, type ContentPack, type LeaderProfile, type Participant, ty
 import { appBasePath as getAppBasePath, createJoinUrl } from './lib/urls'
 import { nextCategoryQuestionOrder, orderQuestionsByCategory } from './lib/questionOrder'
 import { OwnerAdmin } from './OwnerAdmin'
+import { diagnosticMode, diagnosticSelection, isDiagnosticPack } from './modes/diagnostic/contract'
+import { initialQuizSelection, isQuizPack, quizMode, workspaceQuizSelection } from './modes/quiz/contract'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -239,8 +241,8 @@ function AccountPage({ profile }: { profile: LeaderProfile }) {
   return <main className="auth-page"><Glass className="auth-card account-card"><p className="eyebrow">АККАУНТ ВЕДУЩЕГО</p><h1>{profile.fullName}</h1><p className={`account-status ${profile.status}`}>{labels[profile.status]}</p><dl><div><dt>Молодёжка</dt><dd>{workspace?.name || profile.workspaceId}</dd></div>{workspace?.city && <div><dt>Город</dt><dd>{workspace.city}</dd></div>}<div><dt>Email</dt><dd>{profile.email}</dd></div><div><dt>Телефон</dt><dd>{profile.phone}</dd></div></dl>{profile.status === 'pending' && <p>Заявка сохранена. Доступ к панели появится после активации или регистрации по действующей invite-ссылке.</p>}{profile.status === 'paused' && <p>Доступ к панели временно приостановлен.</p>}{profile.status === 'revoked' && <p>Доступ к панели отозван. Обратитесь к администратору.</p>}{profile.status === 'active' && <Button onClick={() => go('/host')}>Открыть панель ведущего</Button>}<Button secondary onClick={() => void logoutLeader().then(() => go('/login'))}>Выйти</Button></Glass></main>
 }
 
-function HomePanel({ name, onStart, questionCount }: { name: string; onStart: () => void; questionCount: number }) {
-  return <div className="home-panel"><div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><div className="control-actions"><Button onClick={onStart}>Перейти к созданию комнаты</Button><Button secondary disabled>Библейская викторина · скоро</Button></div><p className="home-feedback">Сейчас продукт находится на этапе разработки. Доступны две функции для тестирования: диагностика уже работает, а викторина готовится к запуску. Пожалуйста, протестируйте сервис и поделитесь обратной связью.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ЭТАП РАЗРАБОТКИ</p><h3>Диагностика уже доступна. Викторина — на подходе.</h3><div className="landing-feature-list"><article><span>01</span><div><b>Диагностика атмосферы</b><small>{questionCount || '—'} вопросов · {Object.keys(categories).length} тем · личные и общие результаты</small></div></article><article><span>02</span><div><b>Библия: викторина</b><small>Следующий модуль «Атмосферы». Сейчас он показан как функция в разработке.</small></div></article></div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Откройте обзор и создайте новую комнату для своей встречи.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Выберите диагностику или в будущем — игру, затем начните встречу.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте общую картину, библиотеку результатов и экспорт.</p></article></div></section></div>
+function HomePanel({ name, onStartDiagnostic, onStartQuiz, questionCount }: { name: string; onStartDiagnostic: () => void; onStartQuiz: () => void; questionCount: number }) {
+  return <div className="home-panel"><div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><div className="control-actions"><Button onClick={onStartDiagnostic}>Начать диагностику</Button><Button secondary onClick={onStartQuiz}>Библейская викторина</Button></div><p className="home-feedback">Сейчас продукт находится на этапе разработки. Доступны две функции для тестирования: диагностика и викторина. Пожалуйста, протестируйте сервис и поделитесь обратной связью.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ЭТАП РАЗРАБОТКИ</p><h3>Диагностика и викторина доступны для тестирования.</h3><div className="landing-feature-list"><article><span>01</span><div><b>Диагностика атмосферы</b><small>{questionCount || '—'} вопросов · {Object.keys(categories).length} тем · личные и общие результаты</small></div></article><article><span>02</span><div><b>Библия: викторина</b><small>Три набора по 15 вопросов · общий топ‑3 после завершения.</small></div></article></div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Откройте обзор и создайте комнату для своей встречи.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Выберите диагностику или викторину, затем начните встречу.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте общую картину, библиотеку результатов и экспорт.</p></article></div></section></div>
 }
 
 function RulesPanel({ onStart }: { onStart: () => void }) {
@@ -456,17 +458,24 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     if (tab === 'roomSetup') return
     setRoomTitleDraft(session?.phase === 'lobby' ? session.roomTitle || '' : '')
   }, [room, session?.phase, session?.roomTitle, tab])
-  const openRoomSetup = () => {
+  const openRoomSetup = (mode: RoomMode = 'diagnostic') => {
     setCreateError('')
     setActionError('')
     setRoomTitleDraft('')
     setRoomDetails({
       groupName: workspace?.name || '',
       city: workspace?.city || '',
-      mode: 'diagnostic',
+      mode,
       estimatedParticipants: 30,
     })
     setScoringTemplateId('standard-v1')
+    // Diagnostic always uses the published system pack directly. A selection
+    // persisted from a quiz setup must not redirect it to workspace storage.
+    if (mode === diagnosticMode) setTemplateSelection(diagnosticSelection(diagnosticPackId))
+    else {
+      const selection = initialQuizSelection(workspaceQuizPacks, systemPacks)
+      if (selection) setTemplateSelection(selection)
+    }
     navigate('roomSetup')
   }
   const create = async (title = roomTitleDraft) => {
@@ -481,6 +490,9 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
         city: roomDetails.city.trim() || workspace?.city?.trim() || '',
         mode: roomDetails.mode,
       }
+      const selectionForRoom = roomDetails.mode === diagnosticMode
+        ? diagnosticSelection(diagnosticPackId)
+        : templateSelection
       const activePack = roomDetails.mode === 'quiz'
         ? (templateSelection.templateSource === 'workspace' ? workspaceQuizPacks[templateSelection.selectedPackId] : systemPacks[templateSelection.selectedPackId])
         : activeDiagnosticPack
@@ -494,8 +506,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
         if (!activePack.questions.length) throw new Error('В опубликованном наборе нет вопросов. Создание комнаты невозможно.')
         const user = await ensureAuth()
         if (!user) throw new Error('Не удалось подтвердить вход в Firebase. Войдите в аккаунт ещё раз и повторите создание комнаты.')
-        await createSession(newRoom, user.uid, activePack.questions, leader.workspaceId, templateSelection, title, detailsForRoom, scoringTemplateId)
-      } else setDemo(createSessionRecord(newRoom, 'demo-host', activePack?.questions || questionBank, leader.workspaceId, undefined, templateSelection, title, detailsForRoom, scoringTemplateId))
+        await createSession(newRoom, user.uid, activePack.questions, leader.workspaceId, selectionForRoom, title, detailsForRoom, scoringTemplateId)
+      } else setDemo(createSessionRecord(newRoom, 'demo-host', activePack?.questions || questionBank, leader.workspaceId, undefined, selectionForRoom, title, detailsForRoom, scoringTemplateId))
       localStorage.setItem(roomKey, newRoom); localStorage.setItem(lastRoomKey, newRoom); localStorage.removeItem('atmosphere-host-room'); setLastClosedRoom(''); setResultRoom(''); setRoom(newRoom); navigate('overview', newRoom)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Не удалось создать комнату. Проверьте подключение к Firebase и повторите попытку.'
@@ -579,7 +591,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     navigate('results', archived.roomId)
   }
   const resultSession = resultRoom === room ? session : archives[resultRoom] || null
-  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} questionCount={questionBank.length} onStart={openRoomSetup} /></HostLayout>
+  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} questionCount={questionBank.length} onStartDiagnostic={() => openRoomSetup(diagnosticMode)} onStartQuiz={() => openRoomSetup(quizMode)} /></HostLayout>
   if (tab === 'rules') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ПОДСКАЗКИ ДЛЯ ВЕДУЩЕГО</p><h1>Правила</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><RulesPanel onStart={() => navigate('overview')} /></HostLayout>
   if (tab === 'profile') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ВАШ АККАУНТ</p><h1>Профиль</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><ProfilePanel profile={leader} /></HostLayout>
   if (tab === 'results' && resultRoom && resultSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={resultSession} participants={Object.keys(resultSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode><header className="host-header host-results-header"><div><p className="eyebrow">РЕЗУЛЬТАТЫ · {resultRoom}</p><h1>Общая картина</h1></div><span className="status">СОХРАНЕНО</span></header><Results room={resultRoom} sessionOverride={resultSession} embedded /></HostLayout>
@@ -653,9 +665,9 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     } finally { setQuestionSaving(false) }
   }
   const warning = !firebaseReady ? 'Для работы с несколькими устройствами подключите Firebase: демо-режим синхронизируется только в этом браузере.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Этот QR ведёт на адрес компьютера. После публикации сайта здесь будет общий интернет-адрес.' : ''
-  const activeDiagnosticPack = systemPacks[diagnosticPackId] || null
-  const quizSystemPacks = Object.values(systemPacks).filter(pack => pack.mode === 'quiz' && pack.status === 'published')
-  const quizWorkspacePacks = Object.values(workspaceQuizPacks).filter(pack => pack.mode === 'quiz')
+  const activeDiagnosticPack = isDiagnosticPack(systemPacks[diagnosticPackId]) ? systemPacks[diagnosticPackId] : null
+  const quizSystemPacks = Object.values(systemPacks).filter(pack => isQuizPack(pack) && pack.status === 'published')
+  const quizWorkspacePacks = Object.values(workspaceQuizPacks).filter(isQuizPack)
   const activeQuizPack = templateSelection.templateSource === 'workspace'
     ? workspaceQuizPacks[templateSelection.selectedPackId] || null
     : systemPacks[templateSelection.selectedPackId] || null
@@ -663,8 +675,12 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const addQuizPack = async (pack: ContentPack) => {
     setQuizActionError('')
     try {
-      await copyQuizPackToWorkspace(leader.workspaceId, pack.packId)
-      setTemplateSelection({ selectedPackId: pack.packId, templateSource: 'workspace' })
+      const copied = await copyQuizPackToWorkspace(leader.workspaceId, pack.packId)
+      // The realtime listener will confirm the same value. Updating this
+      // local view only after the server write resolves gives instant, honest
+      // feedback without pretending a rejected copy succeeded.
+      setWorkspaceQuizPacks(previous => ({ ...previous, [copied.packId]: copied }))
+      setTemplateSelection(workspaceQuizSelection(copied.packId))
     } catch (error) {
       setQuizActionError(error instanceof Error ? error.message : 'Не удалось добавить набор викторины в workspace.')
     }
@@ -678,7 +694,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     <h3>Настройте новую комнату</h3>
     <p>Название, формат и ожидаемое число участников сохраняются только в истории и экспорте ведущего.</p>
     <div className="room-pilot-fields">
-      <label>Формат<select value={roomDetails.mode} onChange={event => { const mode = event.target.value as RoomMode; setRoomDetails(previous => ({ ...previous, mode })); setQuizActionError(''); if (mode === 'diagnostic') setTemplateSelection(defaultDiagnosticTemplateSelection) }}><option value="diagnostic">Диагностика</option><option value="quiz">Библейская викторина</option></select></label>
+      <label>Формат<select value={roomDetails.mode} onChange={event => { const mode = event.target.value as RoomMode; setRoomDetails(previous => ({ ...previous, mode })); setQuizActionError(''); if (mode === diagnosticMode) setTemplateSelection(diagnosticSelection(diagnosticPackId)); else { const selection = initialQuizSelection(workspaceQuizPacks, systemPacks); if (selection) setTemplateSelection(selection) } }}><option value="diagnostic">Диагностика</option><option value="quiz">Библейская викторина</option></select></label>
       <label>Предполагаемое количество участников<select value={roomDetails.estimatedParticipants} onChange={event => setRoomDetails(previous => ({ ...previous, estimatedParticipants: Number(event.target.value) }))}>{[10, 15, 20, 25, 30].map(count => <option value={count} key={count}>{count} участников</option>)}</select></label>
       {roomDetails.mode === 'diagnostic' ? <label>Шаблон подсчёта<select value={scoringTemplateId} onChange={event => setScoringTemplateId(event.target.value as ScoringTemplateId)}><option value="standard-v1">Стандартный: A 3 · B 2 · C 1 · D 0 · пропуск −1</option><option value="strict-v1">Строгий: A 2 · B 1 · C 0 · D −1 · пропуск −2</option></select></label> : <label>Подсчёт ответов<input disabled value="Верный ответ — 1 балл · неверный — 0" /></label>}
     </div>

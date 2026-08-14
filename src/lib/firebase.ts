@@ -205,11 +205,15 @@ export const resolveRoomTemplate = async (workspaceId: string | undefined, selec
     if (mode === 'quiz') throw new Error('Для викторины нужен опубликованный набор вопросов.')
     return createDiagnosticTemplateSnapshot(builtInQuestions)
   }
-  const path = selection.templateSource === 'workspace' && workspaceId
-    ? `workspaces/${workspaceId}/workspacePacks/${selection.selectedPackId}`
-    : `globalPacks/${selection.selectedPackId}`
+  // Diagnostics use the published system material directly. Quiz packs are
+  // deliberately resolved from a leader-owned workspace copy. Keeping this
+  // decision here prevents a stale UI selection from mixing the two modes.
+  const effectiveSelection = mode === 'diagnostic' ? defaultDiagnosticTemplateSelection : selection
+  const path = effectiveSelection.templateSource === 'workspace' && workspaceId
+    ? `workspaces/${workspaceId}/workspacePacks/${effectiveSelection.selectedPackId}`
+    : `globalPacks/${effectiveSelection.selectedPackId}`
   const snapshot = await get(ref(db, path))
-  const pack = normalizeContentPack(snapshot.val(), [], { packId: selection.selectedPackId, templateOrigin: selection.templateSource, workspaceId, mode })
+  const pack = normalizeContentPack(snapshot.val(), [], { packId: effectiveSelection.selectedPackId, templateOrigin: effectiveSelection.templateSource, workspaceId, mode })
   if (!pack || pack.status !== 'published') throw new Error('Выбранный набор недоступен или не опубликован.')
   const actualMode = pack.mode || (pack.gameTypeId === quizGameTypeId ? 'quiz' : 'diagnostic')
   if (actualMode !== mode) throw new Error('Выбранный набор не соответствует формату комнаты.')
@@ -811,16 +815,17 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
   if (!currentUser || currentUser.isAnonymous || currentUser.uid !== hostUid) throw new Error('Сеанс ведущего не подтверждён. Войдите в аккаунт ещё раз и повторите создание комнаты.')
   if (!workspaceId) throw new Error('Для создания комнаты нужно рабочее пространство.')
   const mode = pilotDetails?.mode || 'diagnostic'
-  if (mode === 'quiz' && templateSelection.templateSource !== 'workspace') {
+  const effectiveSelection = mode === 'diagnostic' ? defaultDiagnosticTemplateSelection : templateSelection
+  if (mode === 'quiz' && effectiveSelection.templateSource !== 'workspace') {
     throw new Error('Для викторины сначала добавьте опубликованный набор в свой workspace.')
   }
   await assertRoomCreationAccess(hostUid, workspaceId, mode === 'quiz' ? quizProductId : diagnosticProductId)
   // Refreshes only the leader's personal copy when the published source pack
   // received a newer version. Existing sessions never change: they use their
   // immutable templateSnapshot.
-  if (mode === 'quiz') await copyQuizPackToWorkspace(workspaceId, templateSelection.selectedPackId)
-  const template = await resolveRoomTemplate(workspaceId, templateSelection, mode)
-  const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, templateSelection, roomTitle, pilotDetails, scoringTemplateId)
+  if (mode === 'quiz') await copyQuizPackToWorkspace(workspaceId, effectiveSelection.selectedPackId)
+  const template = await resolveRoomTemplate(workspaceId, effectiveSelection, mode)
+  const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, effectiveSelection, roomTitle, pilotDetails, scoringTemplateId)
   // The lobby is the only pre-join readable record. It contains no questions,
   // participants, or answers from another workspace.
   try {
