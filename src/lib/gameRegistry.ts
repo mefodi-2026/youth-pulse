@@ -1,4 +1,4 @@
-import { resolveSessionScoring, scoreAnswers } from './scoring'
+import { resolveSessionScoring, scoreAnswers, scoreQuizAnswers } from './scoring'
 import { getSessionQuestions, type PackRuleConfig, type Question, type ResponseValue, type Scores, type Session } from '../types'
 
 /**
@@ -29,6 +29,20 @@ const normalizeDiagnosticRuleConfig = (value?: Partial<PackRuleConfig>): PackRul
   scoringMode: value?.scoringMode === 'diagnostic-2-1-0-minus-1' || value?.scoringMode === 'diagnostic-3-2-1-0' ? value.scoringMode : diagnosticRuleConfig.scoringMode,
 })
 
+const quizRuleConfig: PackRuleConfig = {
+  allowSkip: false,
+  answerMode: 'single-choice',
+  questionOrder: 'fixed',
+  scoringMode: 'quiz-correct-1-0',
+}
+
+const normalizeQuizRuleConfig = (value?: Partial<PackRuleConfig>): PackRuleConfig => ({
+  allowSkip: false,
+  answerMode: 'single-choice',
+  questionOrder: value?.questionOrder === 'shuffled' ? 'shuffled' : 'fixed',
+  scoringMode: 'quiz-correct-1-0',
+})
+
 export const diagnosticGameModule: GameModule = {
   productId: 'youth-atmosphere',
   gameTypeId: 'diagnostic',
@@ -39,8 +53,28 @@ export const diagnosticGameModule: GameModule = {
   score: (answers, questionSet, session) => scoreAnswers(answers, questionSet, resolveSessionScoring(session)),
 }
 
+export const bibleQuizGameModule: GameModule = {
+  productId: 'bible-quiz',
+  gameTypeId: 'quiz',
+  contentSchemaVersion: 1,
+  defaultRuleConfig: quizRuleConfig,
+  normalizeRuleConfig: normalizeQuizRuleConfig,
+  getQuestions: (session, legacyFallback) => getSessionQuestions(session, legacyFallback),
+  score: (answers, questionSet) => {
+    const quiz = scoreQuizAnswers(answers, questionSet)
+    return {
+      total: quiz.percentage,
+      categories: { communication: 0, forgiveness: 0, service: 0, care: 0, honesty: 0 },
+      points: quiz.correct,
+      maximumPoints: quiz.total,
+      minimumPoints: 0,
+    }
+  },
+}
+
 const modules: Record<string, GameModule> = {
   [diagnosticGameModule.gameTypeId]: diagnosticGameModule,
+  [bibleQuizGameModule.gameTypeId]: bibleQuizGameModule,
 }
 
 /** Unknown types deliberately fall back to the safe diagnostic adapter until a module is registered. */

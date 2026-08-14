@@ -2,8 +2,9 @@ import { initializeApp } from 'firebase/app'
 import { browserLocalPersistence, createUserWithEmailAndPassword, deleteUser, getAuth, onAuthStateChanged, setPersistence, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
 import { equalTo, get, getDatabase, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
 import { questions as builtInQuestions } from '../data/questions'
+import { bibleQuizStarterPacks } from '../data/bibleQuizPacks'
 import { canUseFeature } from './access'
-import { diagnosticGameModule, getGameModule } from './gameRegistry'
+import { bibleQuizGameModule, diagnosticGameModule, getGameModule } from './gameRegistry'
 import { getScoringTemplate } from './scoring'
 import { orderQuestionsByCategory } from './questionOrder'
 import type { Answer, ContentPack, FeedbackItem, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, RoomLobby, RoomMode, ScoringTemplateId, Session, SessionArchive, SessionEvent, SessionEventType, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
@@ -21,6 +22,8 @@ const config = {
 export const firebaseReady = Boolean(config.apiKey && config.databaseURL && config.projectId)
 export const diagnosticProductId = diagnosticGameModule.productId
 export const diagnosticGameTypeId = diagnosticGameModule.gameTypeId
+export const quizProductId = bibleQuizGameModule.productId
+export const quizGameTypeId = bibleQuizGameModule.gameTypeId
 export const diagnosticPackId = 'youth-atmosphere-diagnostic'
 export const diagnosticPackVersion = 1
 export const defaultDiagnosticTemplateSelection: TemplateSelection = { selectedPackId: diagnosticPackId, templateSource: 'system' }
@@ -47,7 +50,7 @@ export const platformProductDefaults: Record<string, ProductConfig> = {
     name: 'Библейская викторина',
     description: 'Будущий игровой модуль для командных викторин.',
     type: 'quiz',
-    status: 'disabled',
+    status: 'enabled',
     version: 1,
     maintenanceMessage: 'Викторина пока находится в разработке.',
     updatedAt: 0,
@@ -86,11 +89,15 @@ const createRoomLobby = (session: Session): RoomLobby => ({
   phase: session.phase,
   maxParticipants: session.maxParticipants,
   createdAt: session.createdAt,
+  ...(session.mode ? { mode: session.mode } : {}),
+  ...(session.packId ? { packId: session.packId } : {}),
+  ...(session.packSnapshot?.title ? { packTitle: session.packSnapshot.title } : {}),
+  ...(session.difficulty ? { difficulty: session.difficulty } : {}),
   ...(session.closedAt ? { closedAt: session.closedAt } : {}),
 })
 
-const createPilotWorkspaceAccess = (ownerUid: string, now: number): WorkspaceProduct => ({
-  productId: diagnosticProductId,
+const createPilotWorkspaceAccess = (productId: string, ownerUid: string, now: number): WorkspaceProduct => ({
+  productId,
   ownerUid,
   enabled: true,
   accessSource: pilotAccessSource,
@@ -127,17 +134,19 @@ const normalizeContentPack = (value: unknown, _fallbackQuestions: Question[], de
   const raw = value as Partial<ContentPack> & { questions?: Question[] }
   const questionSet = raw.questions || raw.content?.questions
   if (!Array.isArray(questionSet)) return null
-  const orderedQuestions = copyQuestions(orderQuestionsByCategory(questionSet))
+  const isQuiz = raw.mode === 'quiz' || raw.gameTypeId === quizGameTypeId || raw.productId === quizProductId || defaults.mode === 'quiz'
+  const orderedQuestions = copyQuestions(isQuiz ? questionSet : orderQuestionsByCategory(questionSet))
   return {
-    productId: raw.productId || defaults.productId || diagnosticProductId,
-    gameTypeId: raw.gameTypeId || defaults.gameTypeId || diagnosticGameTypeId,
+    productId: raw.productId || defaults.productId || (isQuiz ? quizProductId : diagnosticProductId),
+    gameTypeId: raw.gameTypeId || defaults.gameTypeId || (isQuiz ? quizGameTypeId : diagnosticGameTypeId),
+    ...(isQuiz ? { mode: 'quiz' as const, ...(raw.difficulty ? { difficulty: raw.difficulty } : {}) } : { mode: 'diagnostic' as const }),
     packId: raw.packId || defaults.packId || diagnosticPackId,
     version: raw.version || raw.packVersion || defaults.version || defaults.packVersion || diagnosticPackVersion,
     packVersion: raw.packVersion || raw.version || defaults.packVersion || defaults.version || diagnosticPackVersion,
     status: normalizePackStatus(raw.status || defaults.status),
     ...(raw.sourcePackId || defaults.sourcePackId ? { sourcePackId: raw.sourcePackId || defaults.sourcePackId } : {}),
     templateOrigin: raw.templateOrigin || defaults.templateOrigin || 'system',
-    title: normalizePackTitle(raw.title || defaults.title),
+    title: isQuiz ? (typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : defaults.title || 'Библейская викторина') : normalizePackTitle(raw.title || defaults.title),
     description: raw.description || defaults.description || defaultPackDescription,
     questions: orderedQuestions,
     content: { questions: orderedQuestions },
@@ -148,6 +157,24 @@ const normalizeContentPack = (value: unknown, _fallbackQuestions: Question[], de
     ...(raw.createdAt || defaults.createdAt ? { createdAt: raw.createdAt || defaults.createdAt } : {}),
     ...(raw.updatedAt || defaults.updatedAt ? { updatedAt: raw.updatedAt || defaults.updatedAt } : {}),
     ...(raw.createdBy || defaults.createdBy ? { createdBy: raw.createdBy || defaults.createdBy } : {}),
+    ...(raw.sourcePackVersion || defaults.sourcePackVersion ? { sourcePackVersion: raw.sourcePackVersion || defaults.sourcePackVersion } : {}),
+    ...(raw.copiedBy || defaults.copiedBy ? { copiedBy: raw.copiedBy || defaults.copiedBy } : {}),
+    ...(raw.copiedAt || defaults.copiedAt ? { copiedAt: raw.copiedAt || defaults.copiedAt } : {}),
+  }
+}
+
+const createTemplateSnapshot = (source: ContentPack): TemplateSnapshot => {
+  const module = getGameModule(source.gameTypeId)
+  const isQuiz = source.mode === 'quiz' || source.gameTypeId === quizGameTypeId
+  const questions = copyQuestions(isQuiz ? source.questions : orderQuestionsByCategory(source.questions))
+  return {
+    ...source,
+    mode: isQuiz ? 'quiz' : 'diagnostic',
+    questions,
+    content: { questions: copyQuestions(questions) },
+    settings: copySettings(source.settings),
+    ruleConfig: module.normalizeRuleConfig(source.ruleConfig),
+    capturedAt: Date.now(),
   }
 }
 
@@ -170,6 +197,24 @@ export const resolveDiagnosticTemplate = async (workspaceId?: string, selection:
     }
   }
   throw new Error('Выбранный набор недоступен или не активен. Выберите другой набор и попробуйте ещё раз.')
+}
+
+/** Resolves any selected pack without silently switching sources or modes. */
+export const resolveRoomTemplate = async (workspaceId: string | undefined, selection: TemplateSelection, mode: RoomMode): Promise<TemplateSnapshot> => {
+  if (!db) {
+    if (mode === 'quiz') throw new Error('Для викторины нужен опубликованный набор вопросов.')
+    return createDiagnosticTemplateSnapshot(builtInQuestions)
+  }
+  const path = selection.templateSource === 'workspace' && workspaceId
+    ? `workspaces/${workspaceId}/workspacePacks/${selection.selectedPackId}`
+    : `globalPacks/${selection.selectedPackId}`
+  const snapshot = await get(ref(db, path))
+  const pack = normalizeContentPack(snapshot.val(), [], { packId: selection.selectedPackId, templateOrigin: selection.templateSource, workspaceId, mode })
+  if (!pack || pack.status !== 'published') throw new Error('Выбранный набор недоступен или не опубликован.')
+  const actualMode = pack.mode || (pack.gameTypeId === quizGameTypeId ? 'quiz' : 'diagnostic')
+  if (actualMode !== mode) throw new Error('Выбранный набор не соответствует формату комнаты.')
+  if (!pack.questions.length) throw new Error('В выбранном наборе нет вопросов.')
+  return createTemplateSnapshot(pack)
 }
 
 const requireFirebase = () => {
@@ -278,11 +323,13 @@ export const registerLeader = async (input: RegisterLeaderInput) => {
       createdAt: now,
       updatedAt: now,
     }
-    const productAccess = createPilotWorkspaceAccess(user.uid, now)
+    const diagnosticAccess = createPilotWorkspaceAccess(diagnosticProductId, user.uid, now)
+    const quizAccess = createPilotWorkspaceAccess(quizProductId, user.uid, now)
     await update(ref(services.db), {
       [`users/${user.uid}`]: profile,
       [`workspaces/${workspaceId}`]: workspace,
-      [`workspaceProducts/${workspaceId}/${diagnosticProductId}`]: productAccess,
+      [`workspaceProducts/${workspaceId}/${diagnosticProductId}`]: diagnosticAccess,
+      [`workspaceProducts/${workspaceId}/${quizProductId}`]: quizAccess,
     })
     return profile
   } catch (error) {
@@ -372,6 +419,59 @@ export const subscribePublishedGlobalPacks = (callback: (value: Record<string, C
 export const subscribeWorkspacePack = (workspaceId: string, packId: string, callback: (value: ContentPack | null) => void, onError?: (error: Error) => void) => {
   if (!db || !workspaceId) return () => undefined
   return onValue(ref(db, `workspacePacks/${workspaceId}/${packId}`), snapshot => callback(normalizeContentPack(snapshot.val(), builtInQuestions, { workspaceId, packId, templateOrigin: 'workspace' })), error => onError?.(error))
+}
+
+/** Quiz copies live under the workspace document, unlike the legacy diagnostic editor path. */
+export const subscribeWorkspaceQuizPacks = (workspaceId: string, callback: (value: Record<string, ContentPack>) => void, onError?: (error: Error) => void) => {
+  if (!db || !workspaceId) { callback({}); return () => undefined }
+  return onValue(ref(db, `workspaces/${workspaceId}/workspacePacks`), snapshot => {
+    const raw = (snapshot.val() || {}) as Record<string, unknown>
+    const packs = Object.fromEntries(Object.entries(raw).flatMap(([packId, value]) => {
+      const pack = normalizeContentPack(value, [], { packId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
+      return pack?.mode === 'quiz' ? [[packId, pack]] : []
+    })) as Record<string, ContentPack>
+    callback(packs)
+  }, error => onError?.(error))
+}
+
+/** Creates an immutable workspace copy of a published quiz pack once per leader. */
+export const copyQuizPackToWorkspace = async (workspaceId: string, sourcePackId: string) => {
+  const services = requireFirebase()
+  await authPersistence
+  const user = services.auth.currentUser
+  if (!user || user.isAnonymous) throw new Error('Войдите как ведущий, чтобы добавить набор в workspace.')
+  const [profileSnapshot, workspaceSnapshot, sourceSnapshot, existingSnapshot] = await Promise.all([
+    get(ref(services.db, `users/${user.uid}`)),
+    get(ref(services.db, `workspaces/${workspaceId}`)),
+    get(ref(services.db, `globalPacks/${sourcePackId}`)),
+    get(ref(services.db, `workspaces/${workspaceId}/workspacePacks/${sourcePackId}`)),
+  ])
+  const profile = profileSnapshot.val() as LeaderProfile | null
+  const workspace = workspaceSnapshot.val() as Workspace | null
+  if (!profile || profile.workspaceId !== workspaceId || workspace?.ownerUid !== user.uid) throw new Error('Этот workspace не принадлежит текущему ведущему.')
+  const source = normalizeContentPack(sourceSnapshot.val(), [], { packId: sourcePackId, templateOrigin: 'system', mode: 'quiz' })
+  if (!source || source.status !== 'published' || source.mode !== 'quiz') throw new Error('Этот набор викторины недоступен для копирования.')
+  const existing = existingSnapshot.exists()
+    ? normalizeContentPack(existingSnapshot.val(), [], { packId: sourcePackId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
+    : null
+  if (existing && existing.sourcePackVersion === source.packVersion) return existing
+  const now = Date.now()
+  const copy: ContentPack = {
+    ...source,
+    templateOrigin: 'workspace',
+    workspaceId,
+    sourcePackId: source.sourcePackId || source.packId,
+    sourcePackVersion: source.packVersion,
+    copiedBy: user.uid,
+    copiedAt: now,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    createdBy: user.uid,
+    questions: copyQuestions(source.questions),
+    content: { questions: copyQuestions(source.questions) },
+  }
+  await set(ref(services.db, `workspaces/${workspaceId}/workspacePacks/${sourcePackId}`), copy)
+  return copy
 }
 
 /** Platform-owner-only summary. Rules reject this subscription for ordinary leaders. */
@@ -507,28 +607,46 @@ export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
   const existingSnapshot = await get(ref(services.db, `globalPacks/${draft.packId}`))
   const existing = normalizeContentPack(existingSnapshot.val(), builtInQuestions, { packId: draft.packId, templateOrigin: 'system' })
   const nextVersion = Math.max(1, (existing?.version || existing?.packVersion || 0) + 1)
+  const isQuiz = draft.mode === 'quiz' || draft.gameTypeId === quizGameTypeId || draft.productId === quizProductId
+  const orderedQuestions = copyQuestions(isQuiz ? draft.content.questions : orderQuestionsByCategory(draft.content.questions))
+  const module = getGameModule(isQuiz ? quizGameTypeId : (draft.gameTypeId || diagnosticGameTypeId))
   const pack: ContentPack = {
     ...draft,
-    productId: draft.productId || diagnosticProductId,
-    gameTypeId: draft.gameTypeId || diagnosticGameTypeId,
+    productId: draft.productId || (isQuiz ? quizProductId : diagnosticProductId),
+    gameTypeId: draft.gameTypeId || (isQuiz ? quizGameTypeId : diagnosticGameTypeId),
+    mode: isQuiz ? 'quiz' : 'diagnostic',
     packId: draft.packId,
     version: nextVersion,
     packVersion: nextVersion,
     status: normalizePackStatus(draft.status),
     templateOrigin: 'system',
     sourcePackId: draft.sourcePackId || draft.packId,
-    content: { questions: copyQuestions(orderQuestionsByCategory(draft.content.questions)) },
-    questions: copyQuestions(orderQuestionsByCategory(draft.content.questions)),
+    content: { questions: orderedQuestions },
+    questions: copyQuestions(orderedQuestions),
     description: draft.description.trim() || defaultPackDescription,
     settings: copySettings(draft.settings),
-    ruleConfig: getGameModule(draft.gameTypeId || diagnosticGameTypeId).normalizeRuleConfig(draft.ruleConfig),
-    contentSchemaVersion: draft.contentSchemaVersion || diagnosticGameModule.contentSchemaVersion,
+    ruleConfig: module.normalizeRuleConfig(draft.ruleConfig),
+    contentSchemaVersion: draft.contentSchemaVersion || module.contentSchemaVersion,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     createdBy: existing?.createdBy || services.auth.currentUser?.uid,
   }
   await set(ref(services.db, `globalPacks/${pack.packId}`), pack)
   return pack
+}
+
+/** Owner-triggered, idempotent creation of the three published quiz starter packs. */
+export const seedBibleQuizStarterPacks = async () => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!await isPlatformOwner()) throw new Error('Только владелец платформы может публиковать системные наборы.')
+  const created: ContentPack[] = []
+  for (const source of bibleQuizStarterPacks) {
+    const snapshot = await get(ref(services.db, `globalPacks/${source.packId}`))
+    if (snapshot.exists()) continue
+    created.push(await saveGlobalPackAsOwner({ ...source, version: 1, packVersion: 1 }))
+  }
+  return created
 }
 
 /**
@@ -587,21 +705,21 @@ export const seedDefaultGlobalPack = async () => {
   return pack
 }
 
-const assertRoomCreationAccess = async (hostUid: string, workspaceId: string) => {
+const assertRoomCreationAccess = async (hostUid: string, workspaceId: string, productId = diagnosticProductId) => {
   const services = requireFirebase()
   const platformOwner = await isPlatformOwner()
   const [profileSnapshot, workspaceSnapshot, workspaceProductSnapshot, productSnapshot] = await Promise.all([
     get(ref(services.db, `users/${hostUid}`)),
     get(ref(services.db, `workspaces/${workspaceId}`)),
-    get(ref(services.db, `workspaceProducts/${workspaceId}/${diagnosticProductId}`)),
-    get(ref(services.db, `products/${diagnosticProductId}`)),
+    get(ref(services.db, `workspaceProducts/${workspaceId}/${productId}`)),
+    get(ref(services.db, `products/${productId}`)),
   ])
   const profile = profileSnapshot.val() as LeaderProfile | null
   const workspace = workspaceSnapshot.val() as Workspace | null
   if (profile?.workspaceId !== workspaceId || workspace?.ownerUid !== hostUid) {
     throw new Error('Рабочее пространство не принадлежит текущему ведущему. Обновите страницу или войдите в нужный аккаунт.')
   }
-  const decision = canUseFeature(diagnosticProductId, 'create_room', {
+  const decision = canUseFeature(productId, 'create_room', {
     profile,
     workspace,
     workspaceProduct: workspaceProductSnapshot.val() as WorkspaceProduct | null,
@@ -624,11 +742,15 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
     mode: pilotDetails?.mode || 'diagnostic',
     estimatedParticipants: Math.max(1, Math.min(30, Math.round(Number(pilotDetails?.estimatedParticipants) || 30))),
   }
+  const isQuiz = template.mode === 'quiz' || template.gameTypeId === quizGameTypeId || details.mode === 'quiz'
+  const mode: RoomMode = isQuiz ? 'quiz' : 'diagnostic'
   const scoring = getScoringTemplate(scoringTemplateId)
-  const ruleConfig = {
-    ...(template.ruleConfig ? { ...template.ruleConfig } : diagnosticGameModule.defaultRuleConfig),
-    scoringMode: scoring.scoringTemplateId === 'strict-v1' ? 'diagnostic-2-1-0-minus-1' as const : 'diagnostic-3-2-1-0' as const,
-  }
+  const ruleConfig = isQuiz
+    ? bibleQuizGameModule.normalizeRuleConfig(template.ruleConfig)
+    : {
+        ...(template.ruleConfig ? { ...template.ruleConfig } : diagnosticGameModule.defaultRuleConfig),
+        scoringMode: scoring.scoringTemplateId === 'strict-v1' ? 'diagnostic-2-1-0-minus-1' as const : 'diagnostic-3-2-1-0' as const,
+      }
   const createdEvent: SessionEvent = { id: 'room_created', type: 'room_created', roomId, ...(workspaceId ? { workspaceId } : {}), hostUid, createdAt }
   return {
     roomId,
@@ -643,7 +765,8 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
     ...(workspaceId ? { workspaceId } : {}),
     groupName: details.groupName,
     city: details.city,
-    mode: details.mode,
+    mode,
+    ...(isQuiz ? { quizPackId: template.packId, quizPackVersion: template.packVersion, ...(template.difficulty ? { difficulty: template.difficulty } : {}) } : {}),
     estimatedParticipants: details.estimatedParticipants,
     participantCount: 0,
     completedCount: 0,
@@ -653,9 +776,7 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
     gameTypeId: template.gameTypeId,
     packId: template.packId,
     packVersion: template.packVersion,
-    scoringTemplateId: scoring.scoringTemplateId,
-    scoringTemplateVersion: scoring.scoringTemplateVersion,
-    scoringMap: { ...scoring.scoringMap },
+    ...(!isQuiz ? { scoringTemplateId: scoring.scoringTemplateId, scoringTemplateVersion: scoring.scoringTemplateVersion, scoringMap: { ...scoring.scoringMap } } : {}),
     sourcePackId: template.sourcePackId || template.packId,
     packUpdatedAt: template.updatedAt || template.capturedAt,
     packSnapshot: {
@@ -664,16 +785,16 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
       questions: copyQuestions(template.questions),
       settings: copySettings(template.settings),
       ruleConfig,
-      scoring: {
+      ...(!isQuiz ? { scoring: {
         scoringTemplateId: scoring.scoringTemplateId,
         scoringTemplateVersion: scoring.scoringTemplateVersion,
         scoringMap: { ...scoring.scoringMap },
         mode: ruleConfig.scoringMode,
         answerScores: { A: scoring.scoringMap.A, B: scoring.scoringMap.B, C: scoring.scoringMap.C, D: scoring.scoringMap.D },
         skippedAnswerScore: scoring.scoringMap.SKIP,
-      },
+      } } : {}),
     },
-    settings: { ...copySettings(template.settings), roomMode: details.mode, estimatedParticipants: details.estimatedParticipants, scoringTemplateId: scoring.scoringTemplateId, scoringTemplateVersion: scoring.scoringTemplateVersion },
+    settings: { ...copySettings(template.settings), roomMode: mode, estimatedParticipants: details.estimatedParticipants, ...(isQuiz ? { quizScoring: 'correct-1-0' } : { scoringTemplateId: scoring.scoringTemplateId, scoringTemplateVersion: scoring.scoringTemplateVersion }) },
     templateOrigin: template.templateOrigin,
     templateSnapshot: template,
     questions: copyQuestions(template.content.questions),
@@ -689,8 +810,16 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
   const currentUser = services.auth.currentUser
   if (!currentUser || currentUser.isAnonymous || currentUser.uid !== hostUid) throw new Error('Сеанс ведущего не подтверждён. Войдите в аккаунт ещё раз и повторите создание комнаты.')
   if (!workspaceId) throw new Error('Для создания комнаты нужно рабочее пространство.')
-  await assertRoomCreationAccess(hostUid, workspaceId)
-  const template = await resolveDiagnosticTemplate(workspaceId, templateSelection)
+  const mode = pilotDetails?.mode || 'diagnostic'
+  if (mode === 'quiz' && templateSelection.templateSource !== 'workspace') {
+    throw new Error('Для викторины сначала добавьте опубликованный набор в свой workspace.')
+  }
+  await assertRoomCreationAccess(hostUid, workspaceId, mode === 'quiz' ? quizProductId : diagnosticProductId)
+  // Refreshes only the leader's personal copy when the published source pack
+  // received a newer version. Existing sessions never change: they use their
+  // immutable templateSnapshot.
+  if (mode === 'quiz') await copyQuizPackToWorkspace(workspaceId, templateSelection.selectedPackId)
+  const template = await resolveRoomTemplate(workspaceId, templateSelection, mode)
   const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, templateSelection, roomTitle, pilotDetails, scoringTemplateId)
   // The lobby is the only pre-join readable record. It contains no questions,
   // participants, or answers from another workspace.

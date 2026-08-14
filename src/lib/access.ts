@@ -20,7 +20,7 @@ const allowedBillingStatuses = new Set(['free', 'pilot', 'manual_paid'])
  * One policy entry point for product access. UI buttons use this for feedback,
  * while Firebase Rules repeat the create-room condition as the protected gate.
  */
-export const canUseProduct = (_productId: ProductId, input: ProductAccessInput): AccessDecision => {
+export const canUseProduct = (productId: ProductId, input: ProductAccessInput): AccessDecision => {
   const now = input.now ?? Date.now()
   if (input.profile?.status !== 'active') return { allowed: false, reason: 'Аккаунт ведущего не активен.' }
   if (!input.workspace) return { allowed: false, reason: 'Рабочее пространство не найдено.' }
@@ -35,6 +35,10 @@ export const canUseProduct = (_productId: ProductId, input: ProductAccessInput):
     && input.workspaceProduct.planId === 'pilot-free'
     && (input.workspaceProduct.expiresAt === 0 || input.workspaceProduct.expiresAt > now)
   const legacyWorkspace = !billingStatus && (!input.workspaceProduct || legacyPilotProduct)
+  // Existing pilot workspaces were created before the quiz product existed.
+  // Keep their explicit pilot entitlement valid without creating records from
+  // the browser; new registrations receive a concrete product record.
+  const implicitQuizPilot = productId === 'bible-quiz' && billingStatus === 'pilot' && !input.workspaceProduct
   const workspacePlanId = input.workspace.planId || (legacyPilotProduct ? input.workspaceProduct?.planId : undefined)
   if (!legacyWorkspace && (!billingStatus || !allowedBillingStatuses.has(billingStatus))) {
     return { allowed: false, reason: 'Доступ рабочего пространства сейчас не активен.' }
@@ -43,7 +47,7 @@ export const canUseProduct = (_productId: ProductId, input: ProductAccessInput):
     return { allowed: false, reason: 'Срок доступа рабочего пространства завершён.' }
   }
 
-  if (!legacyWorkspace) {
+  if (!legacyWorkspace && !implicitQuizPilot) {
     if (!input.workspaceProduct?.enabled) return { allowed: false, reason: 'Этот продукт не подключён для рабочего пространства.' }
     if (input.workspaceProduct.planId !== workspacePlanId) return { allowed: false, reason: 'Данные доступа продукта требуют проверки.' }
     if (input.workspaceProduct.expiresAt > 0 && input.workspaceProduct.expiresAt <= now) {

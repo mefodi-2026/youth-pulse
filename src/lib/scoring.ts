@@ -95,6 +95,13 @@ export const scoreAnswers = (
   }
 }
 
+/** Scoring for a quiz is deliberately separate from diagnostic categories. */
+export const scoreQuizAnswers = (answers: Record<string, ResponseValue> = {}, questionSet: Question[] = []) => {
+  const total = questionSet.length
+  const correct = questionSet.reduce((sum, question) => sum + (question.correctAnswer && answers[question.id] === question.correctAnswer ? 1 : 0), 0)
+  return { correct, total, percentage: total ? Math.round(correct / total * 100) : 0 }
+}
+
 export const recommendations = (scores: Scores) => (Object.keys(categories) as CategoryId[]).map(category => ({
   category,
   score: scores.categories[category] || 0,

@@ -44,8 +44,9 @@ export function StageDashboard({ room }: { room: string }) {
   const finished = people.filter(person => person.status === 'finished').length
   const viewed = people.filter(person => Boolean(person.personalViewedAt)).length
   const progress = Math.round(answered / totalAnswers * 100)
-  const ready = people.length > 0 && finished === people.length && viewed === people.length
-  const phaseLabel = session?.phase === 'lobby' ? 'Собираем участников' : ready ? 'Группа готова к общему результату' : 'Ждём завершения диагностики'
+  const isQuiz = session?.mode === 'quiz' || session?.gameTypeId === 'quiz'
+  const ready = people.length > 0 && finished === people.length && (isQuiz || viewed === people.length)
+  const phaseLabel = session?.phase === 'lobby' ? 'Собираем участников' : ready ? 'Группа готова к общему результату' : `Ждём завершения ${isQuiz ? 'викторины' : 'диагностики'}`
   const reveal = async () => {
     if (!session || !ready || opening) return
     setOpening(true)

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
-import { archiveSession, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeLeaderProfile, subscribePublishedGlobalPacks, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, updatePhase, updateRoomTitle, updateSessionPilotCounts, type RoomPilotDetails } from './lib/firebase'
+import { archiveSession, copyQuizPackToWorkspace, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, quizGameTypeId, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeLeaderProfile, subscribePublishedGlobalPacks, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, subscribeWorkspaceQuizPacks, updatePhase, updateRoomTitle, updateSessionPilotCounts, type RoomPilotDetails } from './lib/firebase'
 import { getGameModule } from './lib/gameRegistry'
 import { resolveSessionScoring } from './lib/scoring'
 import { downloadWishPng, printWish } from './lib/export'
@@ -303,6 +303,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [systemPacksState, setSystemPacksState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [systemPacksError, setSystemPacksError] = useState('')
   const [workspacePack, setWorkspacePack] = useState<ContentPack | null>(null)
+  const [workspaceQuizPacks, setWorkspaceQuizPacks] = useState<Record<string, ContentPack>>({})
+  const [quizActionError, setQuizActionError] = useState('')
   const [questionDraft, setQuestionDraft] = useState({ category: 'communication' as Question['category'], title: '', options: ['', '', '', ''] })
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [questionSaving, setQuestionSaving] = useState(false)
@@ -401,6 +403,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     }
     let stopSystem: () => void = () => undefined
     let stopWorkspace: () => void = () => undefined
+    let stopWorkspaceQuiz: () => void = () => undefined
     void ensureAuth().then(() => {
       setSystemPacksState('loading')
       stopSystem = subscribePublishedGlobalPacks(value => {
@@ -413,18 +416,22 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
         setSystemPacksState('error')
       })
       stopWorkspace = subscribeWorkspacePack(leader.workspaceId, diagnosticPackId, setWorkspacePack, () => setWorkspacePack(null))
+      stopWorkspaceQuiz = subscribeWorkspaceQuizPacks(leader.workspaceId, setWorkspaceQuizPacks, () => setWorkspaceQuizPacks({}))
     }).catch(() => {
       setSystemPacks({})
       setSystemPacksState('error')
       setSystemPacksError('Не удалось подтвердить доступ к библиотеке наборов.')
       setWorkspacePack(null)
+      setWorkspaceQuizPacks({})
     })
-    return () => { stopSystem(); stopWorkspace() }
+    return () => { stopSystem(); stopWorkspace(); stopWorkspaceQuiz() }
   }, [leader.workspaceId])
   useEffect(() => {
-    const selected = templateSelection.templateSource === 'workspace' ? workspacePack : systemPacks[templateSelection.selectedPackId] || null
+    const selected = templateSelection.templateSource === 'workspace'
+      ? (roomDetails.mode === 'quiz' ? workspaceQuizPacks[templateSelection.selectedPackId] : workspacePack)
+      : systemPacks[templateSelection.selectedPackId] || null
     setQuestionBank(selected?.content.questions || (firebaseReady ? [] : questions))
-  }, [systemPacks, templateSelection, workspacePack])
+  }, [roomDetails.mode, systemPacks, templateSelection, workspacePack, workspaceQuizPacks])
   // A stale selection from an earlier build must not make the published
   // catalogue appear empty. Prefer the canonical diagnostic pack, then the
   // first published pack, without ever changing an explicit workspace copy.
@@ -433,6 +440,13 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     const fallback = systemPacks[diagnosticPackId] || Object.values(systemPacks).sort((left, right) => left.title.localeCompare(right.title, 'ru'))[0]
     if (fallback) setTemplateSelection({ selectedPackId: fallback.packId, templateSource: 'system' })
   }, [systemPacks, templateSelection])
+  useEffect(() => {
+    if (roomDetails.mode !== 'quiz') return
+    const selected = templateSelection.templateSource === 'workspace' ? workspaceQuizPacks[templateSelection.selectedPackId] : systemPacks[templateSelection.selectedPackId]
+    if (selected?.mode === 'quiz') return
+    const firstCopied = Object.values(workspaceQuizPacks).find(pack => pack.mode === 'quiz')
+    if (firstCopied) setTemplateSelection({ selectedPackId: firstCopied.packId, templateSource: 'workspace' })
+  }, [roomDetails.mode, systemPacks, templateSelection, workspaceQuizPacks])
   useEffect(() => { localStorage.setItem(templateKey, JSON.stringify(templateSelection)) }, [templateKey, templateSelection])
   useEffect(() => {
     document.documentElement.classList.toggle('question-editor-open', questionEditorOpen)
@@ -461,22 +475,27 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     setBusy(true); setActionError(''); setCreateError('')
     const newRoom = makeRoom()
     try {
-      if (roomDetails.mode !== 'diagnostic') throw new Error('Викторина пока готовится к запуску. Для пилота выберите диагностику.')
       const detailsForRoom: RoomPilotDetails = {
         ...roomDetails,
         groupName: workspace?.name?.trim() || roomDetails.groupName.trim(),
         city: roomDetails.city.trim() || workspace?.city?.trim() || '',
-        mode: 'diagnostic',
+        mode: roomDetails.mode,
+      }
+      const activePack = roomDetails.mode === 'quiz'
+        ? (templateSelection.templateSource === 'workspace' ? workspaceQuizPacks[templateSelection.selectedPackId] : systemPacks[templateSelection.selectedPackId])
+        : activeDiagnosticPack
+      if (roomDetails.mode === 'quiz' && (templateSelection.templateSource !== 'workspace' || !workspaceQuizPacks[templateSelection.selectedPackId])) {
+        throw new Error('Сначала добавьте выбранный набор викторины в свой workspace, затем выберите его для комнаты.')
       }
       if (firebaseReady) {
-        if (!activeDiagnosticPack) throw new Error(systemPacksState === 'error'
+        if (!activePack) throw new Error(systemPacksState === 'error'
           ? `Не удалось загрузить опубликованный диагностический набор: ${systemPacksError || 'проверьте подключение к Firebase.'}`
           : 'Опубликованный диагностический набор пока недоступен. Обновите страницу и попробуйте снова.')
-        if (!activeDiagnosticPack.questions.length) throw new Error('В опубликованном диагностическом наборе нет вопросов. Создание комнаты невозможно.')
+        if (!activePack.questions.length) throw new Error('В опубликованном наборе нет вопросов. Создание комнаты невозможно.')
         const user = await ensureAuth()
         if (!user) throw new Error('Не удалось подтвердить вход в Firebase. Войдите в аккаунт ещё раз и повторите создание комнаты.')
-        await createSession(newRoom, user.uid, activeDiagnosticPack.questions, leader.workspaceId, defaultDiagnosticTemplateSelection, title, detailsForRoom, scoringTemplateId)
-      } else setDemo(createSessionRecord(newRoom, 'demo-host', activeDiagnosticPack?.questions || questionBank, leader.workspaceId, undefined, undefined, title, detailsForRoom, scoringTemplateId))
+        await createSession(newRoom, user.uid, activePack.questions, leader.workspaceId, templateSelection, title, detailsForRoom, scoringTemplateId)
+      } else setDemo(createSessionRecord(newRoom, 'demo-host', activePack?.questions || questionBank, leader.workspaceId, undefined, templateSelection, title, detailsForRoom, scoringTemplateId))
       localStorage.setItem(roomKey, newRoom); localStorage.setItem(lastRoomKey, newRoom); localStorage.removeItem('atmosphere-host-room'); setLastClosedRoom(''); setResultRoom(''); setRoom(newRoom); navigate('overview', newRoom)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Не удалось создать комнату. Проверьте подключение к Firebase и повторите попытку.'
@@ -635,6 +654,21 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   }
   const warning = !firebaseReady ? 'Для работы с несколькими устройствами подключите Firebase: демо-режим синхронизируется только в этом браузере.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Этот QR ведёт на адрес компьютера. После публикации сайта здесь будет общий интернет-адрес.' : ''
   const activeDiagnosticPack = systemPacks[diagnosticPackId] || null
+  const quizSystemPacks = Object.values(systemPacks).filter(pack => pack.mode === 'quiz' && pack.status === 'published')
+  const quizWorkspacePacks = Object.values(workspaceQuizPacks).filter(pack => pack.mode === 'quiz')
+  const activeQuizPack = templateSelection.templateSource === 'workspace'
+    ? workspaceQuizPacks[templateSelection.selectedPackId] || null
+    : systemPacks[templateSelection.selectedPackId] || null
+  const activeSetupPack = roomDetails.mode === 'quiz' ? activeQuizPack : activeDiagnosticPack
+  const addQuizPack = async (pack: ContentPack) => {
+    setQuizActionError('')
+    try {
+      await copyQuizPackToWorkspace(leader.workspaceId, pack.packId)
+      setTemplateSelection({ selectedPackId: pack.packId, templateSource: 'workspace' })
+    } catch (error) {
+      setQuizActionError(error instanceof Error ? error.message : 'Не удалось добавить набор викторины в workspace.')
+    }
+  }
   const displayPackTitle = (value?: string) => {
     const title = value?.trim() || ''
     return !title || /^\?+$/.test(title) ? 'Диагностика атмосферы молодёжи' : title
@@ -644,25 +678,45 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     <h3>Настройте новую комнату</h3>
     <p>Название, формат и ожидаемое число участников сохраняются только в истории и экспорте ведущего.</p>
     <div className="room-pilot-fields">
-      <label>Формат<select value={roomDetails.mode} onChange={event => setRoomDetails(previous => ({ ...previous, mode: event.target.value as RoomMode }))}><option value="diagnostic">Диагностика</option><option value="quiz" disabled>Библейская викторина · скоро</option></select></label>
+      <label>Формат<select value={roomDetails.mode} onChange={event => { const mode = event.target.value as RoomMode; setRoomDetails(previous => ({ ...previous, mode })); setQuizActionError(''); if (mode === 'diagnostic') setTemplateSelection(defaultDiagnosticTemplateSelection) }}><option value="diagnostic">Диагностика</option><option value="quiz">Библейская викторина</option></select></label>
       <label>Предполагаемое количество участников<select value={roomDetails.estimatedParticipants} onChange={event => setRoomDetails(previous => ({ ...previous, estimatedParticipants: Number(event.target.value) }))}>{[10, 15, 20, 25, 30].map(count => <option value={count} key={count}>{count} участников</option>)}</select></label>
-      <label>Шаблон подсчёта<select value={scoringTemplateId} onChange={event => setScoringTemplateId(event.target.value as ScoringTemplateId)}><option value="standard-v1">Стандартный: A 3 · B 2 · C 1 · D 0 · пропуск −1</option><option value="strict-v1">Строгий: A 2 · B 1 · C 0 · D −1 · пропуск −2</option></select></label>
+      {roomDetails.mode === 'diagnostic' ? <label>Шаблон подсчёта<select value={scoringTemplateId} onChange={event => setScoringTemplateId(event.target.value as ScoringTemplateId)}><option value="standard-v1">Стандартный: A 3 · B 2 · C 1 · D 0 · пропуск −1</option><option value="strict-v1">Строгий: A 2 · B 1 · C 0 · D −1 · пропуск −2</option></select></label> : <label>Подсчёт ответов<input disabled value="Верный ответ — 1 балл · неверный — 0" /></label>}
     </div>
     <p className="room-template-hint">Выбранный шаблон фиксируется в комнате и не изменится, даже если настройки набора обновят позже.</p>
   </Glass>
   const packSelectionControl = <Glass className="pack-picker">
     <p className="eyebrow">НАБОР ВОПРОСОВ</p>
     {systemPacksState === 'loading'
-      ? <p>Загружаем опубликованный диагностический набор…</p>
+      ? <p>Загружаем опубликованные наборы…</p>
       : systemPacksState === 'error'
         ? <><h3>Библиотека недоступна</h3><p className="connection-warning">{systemPacksError || 'Не удалось получить набор из Firebase.'}</p></>
-        : !activeDiagnosticPack && firebaseReady
-          ? <><h3>Нет опубликованного диагностического набора</h3><p className="connection-warning">Владелец платформы должен опубликовать системный набор перед созданием комнаты.</p></>
-          : <><h3>{displayPackTitle(activeDiagnosticPack?.title)}</h3><p>{activeDiagnosticPack?.questions.length || questionBank.length} вопросов · версия {activeDiagnosticPack?.packVersion || 1}</p><p>{activeDiagnosticPack?.description || 'Системный набор вопросов для диагностики атмосферы молодёжи.'}</p>{activeDiagnosticPack && activeDiagnosticPack.questions.length === 0 && <p className="connection-warning">В этом наборе пока нет вопросов, поэтому его нельзя использовать для создания комнаты.</p>}</>}
+        : roomDetails.mode === 'diagnostic'
+          ? !activeDiagnosticPack && firebaseReady
+            ? <><h3>Нет опубликованного диагностического набора</h3><p className="connection-warning">Владелец платформы должен опубликовать системный набор перед созданием комнаты.</p></>
+            : <><h3>{displayPackTitle(activeDiagnosticPack?.title)}</h3><p>{activeDiagnosticPack?.questions.length || questionBank.length} вопросов · версия {activeDiagnosticPack?.packVersion || 1}</p><p>{activeDiagnosticPack?.description || 'Системный набор вопросов для диагностики атмосферы молодёжи.'}</p>{activeDiagnosticPack && activeDiagnosticPack.questions.length === 0 && <p className="connection-warning">В этом наборе пока нет вопросов, поэтому его нельзя использовать для создания комнаты.</p>}</>
+          : <>
+            <h3>Выберите набор викторины</h3>
+            <p>Сначала добавьте опубликованный набор в свой workspace. Это создаст вашу отдельную копию и не изменит глобальную библиотеку.</p>
+            {!quizSystemPacks.length && <p className="connection-warning">Пока нет опубликованных наборов викторины. Владелец может создать стартовые наборы в глобальной библиотеке.</p>}
+            <div className="quiz-pack-list">
+              {quizSystemPacks.map(pack => {
+                const copied = workspaceQuizPacks[pack.packId]
+                return <div className={`quiz-pack-row ${activeQuizPack?.packId === pack.packId ? 'selected' : ''}`} key={pack.packId}>
+                  <div><b>{displayPackTitle(pack.title)}</b><small>{pack.difficulty === 'easy' ? 'Лёгкий уровень' : pack.difficulty === 'medium' ? 'Средний уровень' : 'Сложный уровень'} · {pack.questions.length} вопросов · v{pack.packVersion}</small></div>
+                  {copied
+                    ? <Button secondary onClick={() => setTemplateSelection({ selectedPackId: copied.packId, templateSource: 'workspace' })}>{templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === copied.packId ? 'Выбран' : 'Выбрать'}</Button>
+                    : <Button secondary onClick={() => void addQuizPack(pack)}>Добавить в мой workspace</Button>}
+                </div>
+              })}
+            </div>
+            {!!quizWorkspacePacks.length && <div className="quiz-pack-current"><p className="eyebrow">МОИ ДОБАВЛЕННЫЕ НАБОРЫ</p>{quizWorkspacePacks.map(pack => <button type="button" key={pack.packId} className={templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === pack.packId ? 'selected' : ''} onClick={() => setTemplateSelection({ selectedPackId: pack.packId, templateSource: 'workspace' })}>{displayPackTitle(pack.title)} <small>{pack.questions.length} вопросов · v{pack.packVersion}</small></button>)}</div>}
+            {activeQuizPack && <p className="room-template-hint">Выбрано: {displayPackTitle(activeQuizPack.title)} · {activeQuizPack.questions.length} вопросов. Комната сохранит независимый snapshot этой версии.</p>}
+            {quizActionError && <p className="connection-warning">{quizActionError}</p>}
+          </>}
   </Glass>
   if (tab === 'roomSetup') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">НОВАЯ ВСТРЕЧА</p><h1>Настройка комнаты</h1><p className="room-header-title">Сначала подтвердите параметры — комната появится только после нажатия кнопки ниже.</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
-    <Glass className="start-panel"><p className="eyebrow">ШАГ 1 · ПАРАМЕТРЫ</p><h2>Создайте новую комнату</h2><p>Выберите формат, ожидаемое число участников и шаблон подсчёта. Диагностический набор подставлен автоматически.</p>{roomPilotDetailsControl}{packSelectionControl}<label className="room-title-input">Название комнаты<input value={roomTitleDraft} onChange={event => setRoomTitleDraft(event.target.value)} placeholder={defaultRoomTitle()} maxLength={80} /></label><div className="control-actions"><Button disabled={busy || systemPacksState === 'loading' || (firebaseReady && (!activeDiagnosticPack || activeDiagnosticPack.questions.length === 0))} onClick={() => void create()}>{busy ? 'Создаём…' : 'Подтвердить и создать комнату'}</Button><Button secondary disabled={busy} onClick={() => navigate(session && session.phase !== 'closed' ? 'currentRoom' : 'overview')}>Отмена</Button></div>{createError && <p className="connection-warning">{createError}</p>}{actionError && <p className="connection-warning">{actionError}</p>}</Glass>
+    <Glass className="start-panel"><p className="eyebrow">ШАГ 1 · ПАРАМЕТРЫ</p><h2>Создайте новую комнату</h2><p>Выберите формат, ожидаемое число участников и набор вопросов. Комната и QR-код появятся только после подтверждения.</p>{roomPilotDetailsControl}{packSelectionControl}<label className="room-title-input">Название комнаты<input value={roomTitleDraft} onChange={event => setRoomTitleDraft(event.target.value)} placeholder={defaultRoomTitle()} maxLength={80} /></label><div className="control-actions"><Button disabled={busy || systemPacksState === 'loading' || (firebaseReady && (!activeSetupPack || activeSetupPack.questions.length === 0 || (roomDetails.mode === 'quiz' && templateSelection.templateSource !== 'workspace')))} onClick={() => void create()}>{busy ? 'Создаём…' : 'Подтвердить и создать комнату'}</Button><Button secondary disabled={busy} onClick={() => navigate(session && session.phase !== 'closed' ? 'currentRoom' : 'overview')}>Отмена</Button></div>{createError && <p className="connection-warning">{createError}</p>}{actionError && <p className="connection-warning">{actionError}</p>}</Glass>
   </HostLayout>
   const feedbackUrl = createFeedbackUrl(feedbackFormUrl, session)
   const historyFiltersControl = <Glass className="history-filters"><p className="eyebrow">ФИЛЬТРЫ ИСТОРИИ</p><div><input value={historyFilters.query} onChange={event => setHistoryFilters(previous => ({ ...previous, query: event.target.value }))} placeholder="Комната, молодёжка, город или код" /><select value={historyFilters.mode} onChange={event => setHistoryFilters(previous => ({ ...previous, mode: event.target.value as 'all' | RoomMode }))}><option value="all">Все форматы</option><option value="diagnostic">Диагностика</option><option value="quiz">Викторина</option></select><label>С<input type="date" value={historyFilters.from} onChange={event => setHistoryFilters(previous => ({ ...previous, from: event.target.value }))} /></label><label>По<input type="date" value={historyFilters.to} onChange={event => setHistoryFilters(previous => ({ ...previous, to: event.target.value }))} /></label></div></Glass>
@@ -802,6 +856,7 @@ function Results({ room, sessionOverride, embedded = false }: { room: string; se
   const elapsed = session?.resultsIntroStartedAt ? now - session.resultsIntroStartedAt : 0
   const showReal = session?.phase === 'resultsReal' || elapsed >= 20000
   const people = Object.values(session?.participants || {})
+  if (session?.mode === 'quiz' || session?.gameTypeId === quizGameTypeId) return <QuizResults session={session} embedded={embedded} />
   const real = useMemo(() => { if (!people.length) return { communication: 84, forgiveness: 71, service: 79, care: 68, honesty: 76 }; const game = getGameModule(session?.gameTypeId); const values = people.map(person => game.score(person.answers || {}, game.getQuestions(session, questions), session).categories); return Object.fromEntries(Object.keys(categories).map(key => [key, Math.round(values.reduce((sum, item) => sum + item[key as keyof typeof item], 0) / values.length)])) as Record<keyof typeof categories, number> }, [people, session?.gameTypeId, session?.questions, session?.templateSnapshot, session?.scoringTemplateId, session?.scoringTemplateVersion])
   const shown = showReal ? real : { communication: 96, forgiveness: 94, service: 97, care: 93, honesty: 95 }
   const overall = Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)
@@ -809,6 +864,16 @@ function Results({ room, sessionOverride, embedded = false }: { room: string; se
   if (embedded) return <div className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><ResultRing value={overall} /><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b className={value < 0 ? 'negative' : ''}>{value}%</b><i><em style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p></div>
   return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><ResultRing value={overall} /><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b className={value < 0 ? 'negative' : ''}>{value}%</b><i><em style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p><small className="privacy">Показаны только агрегированные результаты — без имён и личных ответов.</small></main>
   return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><div className="big-score"><b>{Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)}%</b><span>общий ориентир</span></div><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b>{value}%</b><i><em style={{ width: `${value}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p><small className="privacy">Показаны только агрегированные результаты — без имён и личных ответов.</small></main>
+}
+
+function QuizResults({ session, embedded }: { session: Session; embedded: boolean }) {
+  const questions = getGameModule('quiz').getQuestions(session, [])
+  const rows = Object.values(session.participants || {}).filter(person => person.status === 'finished').map(person => {
+    const score = getGameModule('quiz').score(person.answers || {}, questions, session)
+    return { person, correct: score.points || 0, total: score.maximumPoints || questions.length, percentage: score.total }
+  }).sort((left, right) => right.correct - left.correct || (left.person.completedAt || Number.MAX_SAFE_INTEGER) - (right.person.completedAt || Number.MAX_SAFE_INTEGER) || left.person.nickname.localeCompare(right.person.nickname, 'ru'))
+  const content = <><p className="eyebrow">БИБЛЕЙСКАЯ ВИКТОРИНА · РЕЗУЛЬТАТЫ</p><h1>{session.roomTitle || session.packSnapshot?.title || 'Результаты викторины'}</h1><Glass className="quiz-results-board"><div><b>{rows.length}</b><span>завершили игру</span></div><ol>{rows.slice(0, 3).map((row, index) => <li key={row.person.id}><em>{index + 1}</em><span>{row.person.nickname}</span><strong>{row.correct} из {row.total} · {row.percentage}%</strong></li>)}</ol>{!rows.length && <p>Пока нет завершённых ответов.</p>}</Glass><p className="privacy">Показаны только никнеймы и итоговые баллы. Ответы участников не раскрываются.</p></>
+  return embedded ? <div className="results quiz-results">{content}</div> : <main className="results quiz-results">{content}</main>
 }
 
 export default App

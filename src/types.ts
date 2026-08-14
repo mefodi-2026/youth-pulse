@@ -4,6 +4,7 @@ export type ResponseValue = Answer | 'SKIP'
 export type SessionPhase = 'lobby' | 'live' | 'personal' | 'resultsIntro' | 'resultsReal' | 'closed'
 /** A session format selected by a leader. Quiz is reserved for the future game module. */
 export type RoomMode = 'diagnostic' | 'quiz'
+export type QuizDifficulty = 'easy' | 'medium' | 'hard'
 export type SessionEventType = 'room_created' | 'room_started' | 'participant_joined' | 'participant_finished' | 'report_viewed' | 'room_closed'
 export type UserStatus = 'pending' | 'active' | 'paused' | 'revoked'
 export type BillingStatus = 'free' | 'pilot' | 'manual_paid' | 'expired' | 'disabled'
@@ -23,7 +24,7 @@ export interface PackRuleConfig {
   allowSkip: boolean
   answerMode: 'single-choice'
   questionOrder: 'fixed' | 'shuffled'
-  scoringMode: 'diagnostic-3-2-1-0' | 'diagnostic-2-1-0-minus-1'
+  scoringMode: 'diagnostic-3-2-1-0' | 'diagnostic-2-1-0-minus-1' | 'quiz-correct-1-0'
 }
 
 export interface Question {
@@ -33,6 +34,10 @@ export interface Question {
   categoryOrder?: number
   title: string
   options: Record<Answer, string>
+  /** Quiz-only answer key. It is captured inside the room snapshot. */
+  correctAnswer?: Answer
+  /** Optional short explanation for a future post-game review. */
+  explanation?: string
 }
 export interface PackSettings { [key: string]: boolean | number | string | null }
 export interface PackContent { questions: Question[] }
@@ -63,6 +68,9 @@ export interface PackSnapshot {
 export interface ContentPack {
   productId: ProductId
   gameTypeId: GameTypeId
+  /** Missing on legacy packs; treat as a diagnostic pack. */
+  mode?: RoomMode
+  difficulty?: QuizDifficulty
   packId: PackId
   /** `version` is the content version; `packVersion` remains for older sessions. */
   version?: PackVersion
@@ -85,6 +93,10 @@ export interface ContentPack {
   createdAt?: number
   updatedAt?: number
   createdBy?: string
+  /** Audit fields used by a quiz copied from the global library. */
+  sourcePackVersion?: PackVersion
+  copiedBy?: string
+  copiedAt?: number
 }
 export interface TemplateSnapshot extends ContentPack { capturedAt: number }
 export interface Participant { id: string; nickname: string; joinedAt: number; status: 'waiting' | 'answering' | 'finished'; currentQuestionIndex: number; answers: Record<string, ResponseValue>; completedAt?: number; personalViewedAt?: number }
@@ -162,6 +174,10 @@ export interface Session {
   groupName?: string
   city?: string
   mode?: RoomMode
+  /** Quiz metadata is optional to preserve rooms created before the quiz module. */
+  quizPackId?: PackId
+  quizPackVersion?: PackVersion
+  difficulty?: QuizDifficulty
   startedAt?: number
   /** Expected number stated by the leader when a room is created. */
   estimatedParticipants?: number
@@ -214,6 +230,10 @@ export interface RoomLobby {
   maxParticipants: number
   createdAt: number
   closedAt?: number
+  mode?: RoomMode
+  packId?: PackId
+  packTitle?: string
+  difficulty?: QuizDifficulty
 }
 export interface Scores {
   total: number
