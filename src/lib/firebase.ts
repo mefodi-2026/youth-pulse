@@ -4,8 +4,9 @@ import { equalTo, get, getDatabase, onValue, orderByChild, push, query, ref, set
 import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
 import { diagnosticGameModule, getGameModule } from './gameRegistry'
+import { getScoringTemplate } from './scoring'
 import { orderQuestionsByCategory } from './questionOrder'
-import type { Answer, ContentPack, FeedbackItem, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, RoomLobby, RoomMode, Session, SessionArchive, SessionEvent, SessionEventType, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
+import type { Answer, ContentPack, FeedbackItem, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, RoomLobby, RoomMode, ScoringTemplateId, Session, SessionArchive, SessionEvent, SessionEventType, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -612,7 +613,7 @@ const assertRoomCreationAccess = async (hostUid: string, workspaceId: string) =>
 
 export const defaultRoomTitle = (createdAt = Date.now()) => `Встреча молодёжки · ${new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(createdAt))}`
 
-export const createSessionRecord = (roomId: string, hostUid: string, questionSet: Question[] = builtInQuestions, workspaceId?: string, templateSnapshot?: TemplateSnapshot, templateSelection?: TemplateSelection, roomTitle?: string, pilotDetails?: Partial<RoomPilotDetails>): Session => {
+export const createSessionRecord = (roomId: string, hostUid: string, questionSet: Question[] = builtInQuestions, workspaceId?: string, templateSnapshot?: TemplateSnapshot, templateSelection?: TemplateSelection, roomTitle?: string, pilotDetails?: Partial<RoomPilotDetails>, scoringTemplateId: ScoringTemplateId = 'standard-v1'): Session => {
   const template = templateSnapshot || createDiagnosticTemplateSnapshot(questionSet)
   const selection = templateSelection || { selectedPackId: template.packId, templateSource: template.templateOrigin }
   const createdAt = Date.now()
@@ -622,6 +623,11 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
     city: pilotDetails?.city?.trim() || '',
     mode: pilotDetails?.mode || 'diagnostic',
     estimatedParticipants: Math.max(1, Math.min(30, Math.round(Number(pilotDetails?.estimatedParticipants) || 30))),
+  }
+  const scoring = getScoringTemplate(scoringTemplateId)
+  const ruleConfig = {
+    ...(template.ruleConfig ? { ...template.ruleConfig } : diagnosticGameModule.defaultRuleConfig),
+    scoringMode: scoring.scoringTemplateId === 'strict-v1' ? 'diagnostic-2-1-0-minus-1' as const : 'diagnostic-3-2-1-0' as const,
   }
   const createdEvent: SessionEvent = { id: 'room_created', type: 'room_created', roomId, ...(workspaceId ? { workspaceId } : {}), hostUid, createdAt }
   return {
@@ -647,6 +653,9 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
     gameTypeId: template.gameTypeId,
     packId: template.packId,
     packVersion: template.packVersion,
+    scoringTemplateId: scoring.scoringTemplateId,
+    scoringTemplateVersion: scoring.scoringTemplateVersion,
+    scoringMap: { ...scoring.scoringMap },
     sourcePackId: template.sourcePackId || template.packId,
     packUpdatedAt: template.updatedAt || template.capturedAt,
     packSnapshot: {
@@ -654,14 +663,17 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
       description: template.description,
       questions: copyQuestions(template.questions),
       settings: copySettings(template.settings),
-      ruleConfig: template.ruleConfig ? { ...template.ruleConfig } : undefined,
+      ruleConfig,
       scoring: {
-        mode: template.ruleConfig?.scoringMode || 'diagnostic-3-2-1-0',
-        answerScores: { A: 3, B: 2, C: 1, D: 0 },
-        skippedAnswerScore: Number(template.settings.skippedAnswerScore ?? -1),
+        scoringTemplateId: scoring.scoringTemplateId,
+        scoringTemplateVersion: scoring.scoringTemplateVersion,
+        scoringMap: { ...scoring.scoringMap },
+        mode: ruleConfig.scoringMode,
+        answerScores: { A: scoring.scoringMap.A, B: scoring.scoringMap.B, C: scoring.scoringMap.C, D: scoring.scoringMap.D },
+        skippedAnswerScore: scoring.scoringMap.SKIP,
       },
     },
-    settings: { ...copySettings(template.settings), roomMode: details.mode, estimatedParticipants: details.estimatedParticipants },
+    settings: { ...copySettings(template.settings), roomMode: details.mode, estimatedParticipants: details.estimatedParticipants, scoringTemplateId: scoring.scoringTemplateId, scoringTemplateVersion: scoring.scoringTemplateVersion },
     templateOrigin: template.templateOrigin,
     templateSnapshot: template,
     questions: copyQuestions(template.content.questions),
@@ -670,7 +682,7 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
   }
 }
 
-export const createSession = async (roomId: string, hostUid: string, questionSet?: Question[], workspaceId?: string, templateSelection: TemplateSelection = defaultDiagnosticTemplateSelection, roomTitle?: string, pilotDetails?: Partial<RoomPilotDetails>) => {
+export const createSession = async (roomId: string, hostUid: string, questionSet?: Question[], workspaceId?: string, templateSelection: TemplateSelection = defaultDiagnosticTemplateSelection, roomTitle?: string, pilotDetails?: Partial<RoomPilotDetails>, scoringTemplateId: ScoringTemplateId = 'standard-v1') => {
   if (!db) throw new Error('Firebase не настроен')
   const services = requireFirebase()
   await authPersistence
@@ -679,7 +691,7 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
   if (!workspaceId) throw new Error('Для создания комнаты нужно рабочее пространство.')
   await assertRoomCreationAccess(hostUid, workspaceId)
   const template = await resolveDiagnosticTemplate(workspaceId, templateSelection)
-  const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, templateSelection, roomTitle, pilotDetails)
+  const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, templateSelection, roomTitle, pilotDetails, scoringTemplateId)
   // The lobby is the only pre-join readable record. It contains no questions,
   // participants, or answers from another workspace.
   try {

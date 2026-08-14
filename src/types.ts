@@ -14,6 +14,8 @@ export type GameTypeId = string
 export type PackId = string
 export type PackVersion = number
 export type TemplateOrigin = 'system' | 'workspace'
+/** Stable, versioned scoring presets selectable during room setup. */
+export type ScoringTemplateId = 'standard-v1' | 'strict-v1'
 export interface TemplateSelection { selectedPackId: PackId; templateSource: TemplateOrigin }
 /** `active` is a legacy editor alias. Firebase records are always written as `published`. */
 export type PackStatus = 'draft' | 'published' | 'archived' | 'active'
@@ -21,7 +23,7 @@ export interface PackRuleConfig {
   allowSkip: boolean
   answerMode: 'single-choice'
   questionOrder: 'fixed' | 'shuffled'
-  scoringMode: 'diagnostic-3-2-1-0'
+  scoringMode: 'diagnostic-3-2-1-0' | 'diagnostic-2-1-0-minus-1'
 }
 
 export interface Question {
@@ -35,9 +37,14 @@ export interface Question {
 export interface PackSettings { [key: string]: boolean | number | string | null }
 export interface PackContent { questions: Question[] }
 export interface PackScoringSnapshot {
-  mode: PackRuleConfig['scoringMode']
-  answerScores: Record<Answer, number>
-  skippedAnswerScore: number
+  /** Present on rooms created after the scoring-template setup was added. */
+  scoringTemplateId?: ScoringTemplateId
+  scoringTemplateVersion?: number
+  scoringMap?: Record<ResponseValue, number>
+  /** Legacy mirrors retained only to calculate rooms created before templates. */
+  mode?: PackRuleConfig['scoringMode']
+  answerScores?: Record<Answer, number>
+  skippedAnswerScore?: number
 }
 /**
  * The compact immutable record copied into a room. It intentionally excludes
@@ -174,6 +181,10 @@ export interface Session {
   packSnapshot?: PackSnapshot
   /** Room-level settings captured from the selected pack at creation. */
   settings?: PackSettings
+  /** Immutable selected scoring preset. Old rooms intentionally omit these fields. */
+  scoringTemplateId?: ScoringTemplateId
+  scoringTemplateVersion?: number
+  scoringMap?: Record<ResponseValue, number>
   templateOrigin?: TemplateOrigin
   templateSnapshot?: TemplateSnapshot
   resultsIntroStartedAt?: number
@@ -204,7 +215,14 @@ export interface RoomLobby {
   createdAt: number
   closedAt?: number
 }
-export interface Scores { total: number; categories: Record<CategoryId, number> }
+export interface Scores {
+  total: number
+  categories: Record<CategoryId, number>
+  /** Raw point range is useful for exports and future reports; existing UI can ignore it. */
+  points?: number
+  maximumPoints?: number
+  minimumPoints?: number
+}
 
 export const getSessionQuestions = (session: Pick<Session, 'templateSnapshot' | 'packSnapshot' | 'questions'> | null | undefined, fallback: Question[]) => {
   const packSnapshotQuestions = session?.packSnapshot?.questions

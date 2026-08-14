@@ -1,4 +1,4 @@
-import { scoreAnswers } from './scoring'
+import { resolveSessionScoring, scoreAnswers } from './scoring'
 import { getSessionQuestions, type PackRuleConfig, type Question, type ResponseValue, type Scores, type Session } from '../types'
 
 /**
@@ -12,7 +12,7 @@ export interface GameModule {
   defaultRuleConfig: PackRuleConfig
   normalizeRuleConfig: (value?: Partial<PackRuleConfig>) => PackRuleConfig
   getQuestions: (session: Pick<Session, 'templateSnapshot' | 'packSnapshot' | 'questions' | 'gameTypeId'> | null | undefined, legacyFallback: Question[]) => Question[]
-  score: (answers: Record<string, ResponseValue>, questionSet: Question[]) => Scores
+  score: (answers: Record<string, ResponseValue>, questionSet: Question[], session?: Session | null) => Scores
 }
 
 const diagnosticRuleConfig: PackRuleConfig = {
@@ -26,7 +26,7 @@ const normalizeDiagnosticRuleConfig = (value?: Partial<PackRuleConfig>): PackRul
   allowSkip: typeof value?.allowSkip === 'boolean' ? value.allowSkip : diagnosticRuleConfig.allowSkip,
   answerMode: value?.answerMode === 'single-choice' ? value.answerMode : diagnosticRuleConfig.answerMode,
   questionOrder: value?.questionOrder === 'shuffled' || value?.questionOrder === 'fixed' ? value.questionOrder : diagnosticRuleConfig.questionOrder,
-  scoringMode: value?.scoringMode === 'diagnostic-3-2-1-0' ? value.scoringMode : diagnosticRuleConfig.scoringMode,
+  scoringMode: value?.scoringMode === 'diagnostic-2-1-0-minus-1' || value?.scoringMode === 'diagnostic-3-2-1-0' ? value.scoringMode : diagnosticRuleConfig.scoringMode,
 })
 
 export const diagnosticGameModule: GameModule = {
@@ -36,7 +36,7 @@ export const diagnosticGameModule: GameModule = {
   defaultRuleConfig: diagnosticRuleConfig,
   normalizeRuleConfig: normalizeDiagnosticRuleConfig,
   getQuestions: (session, legacyFallback) => getSessionQuestions(session, legacyFallback),
-  score: (answers, questionSet) => scoreAnswers(answers, questionSet),
+  score: (answers, questionSet, session) => scoreAnswers(answers, questionSet, resolveSessionScoring(session)),
 }
 
 const modules: Record<string, GameModule> = {
