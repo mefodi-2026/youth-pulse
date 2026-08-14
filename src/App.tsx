@@ -462,7 +462,6 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : 'unknown'
       console.error(`Не удалось создать комнату [${code}] для ${newRoom}: ${message}`)
       setCreateError(message)
-      setActionError(message)
     } finally { setBusy(false) }
   }
   const changePhase = async (next: SessionPhase) => {

@@ -595,9 +595,14 @@ const assertRoomCreationAccess = async (hostUid: string, workspaceId: string) =>
     get(ref(services.db, `workspaceProducts/${workspaceId}/${diagnosticProductId}`)),
     get(ref(services.db, `products/${diagnosticProductId}`)),
   ])
+  const profile = profileSnapshot.val() as LeaderProfile | null
+  const workspace = workspaceSnapshot.val() as Workspace | null
+  if (profile?.workspaceId !== workspaceId || workspace?.ownerUid !== hostUid) {
+    throw new Error('Рабочее пространство не принадлежит текущему ведущему. Обновите страницу или войдите в нужный аккаунт.')
+  }
   const decision = canUseFeature(diagnosticProductId, 'create_room', {
-    profile: profileSnapshot.val() as LeaderProfile | null,
-    workspace: workspaceSnapshot.val() as Workspace | null,
+    profile,
+    workspace,
     workspaceProduct: workspaceProductSnapshot.val() as WorkspaceProduct | null,
     product: productSnapshot.val() as ProductConfig | null,
     isPlatformOwner: platformOwner,

@@ -26,7 +26,16 @@ export const canUseProduct = (_productId: ProductId, input: ProductAccessInput):
   if (!input.workspace) return { allowed: false, reason: 'Рабочее пространство не найдено.' }
 
   const billingStatus = input.workspace.billingStatus
-  const legacyWorkspace = !billingStatus && !input.workspaceProduct
+  // Workspaces created before the access layer may already have an explicit
+  // enabled pilot product, but lack the newer workspace-level billing fields.
+  // Treat only that verifiable migration shape as a pilot workspace; do not
+  // grant access merely because billingStatus is absent.
+  const legacyPilotProduct = !billingStatus
+    && input.workspaceProduct?.enabled === true
+    && input.workspaceProduct.planId === 'pilot-free'
+    && (input.workspaceProduct.expiresAt === 0 || input.workspaceProduct.expiresAt > now)
+  const legacyWorkspace = !billingStatus && (!input.workspaceProduct || legacyPilotProduct)
+  const workspacePlanId = input.workspace.planId || (legacyPilotProduct ? input.workspaceProduct?.planId : undefined)
   if (!legacyWorkspace && (!billingStatus || !allowedBillingStatuses.has(billingStatus))) {
     return { allowed: false, reason: 'Доступ рабочего пространства сейчас не активен.' }
   }
@@ -36,7 +45,7 @@ export const canUseProduct = (_productId: ProductId, input: ProductAccessInput):
 
   if (!legacyWorkspace) {
     if (!input.workspaceProduct?.enabled) return { allowed: false, reason: 'Этот продукт не подключён для рабочего пространства.' }
-    if (input.workspaceProduct.planId !== input.workspace.planId) return { allowed: false, reason: 'Данные доступа продукта требуют проверки.' }
+    if (input.workspaceProduct.planId !== workspacePlanId) return { allowed: false, reason: 'Данные доступа продукта требуют проверки.' }
     if (input.workspaceProduct.expiresAt > 0 && input.workspaceProduct.expiresAt <= now) {
       return { allowed: false, reason: 'Срок доступа к продукту завершён.' }
     }
