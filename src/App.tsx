@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
-import { archiveSession, copyQuizPackToWorkspace, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, ensureParticipantRoomData, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, quizGameTypeId, registerLeader, saveAnswer, saveWorkspacePack, saveWorkspaceQuizPack, subscribeAuthUser, subscribeLeaderProfile, subscribePublishedGlobalPacks, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, subscribeWorkspaceQuizPacks, updatePhase, updateRoomTitle, updateSessionPilotCounts, type RoomPilotDetails } from './lib/firebase'
+import { archiveSession, copyQuizPackToWorkspace, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, ensureParticipantRoomData, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, quizGameTypeId, registerLeader, saveAnswer, saveWorkspacePack, saveWorkspaceQuizPack, subscribeAuthUser, subscribeGlobalPack, subscribeLeaderProfile, subscribePublishedGlobalPacks, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, subscribeWorkspaceQuizPacks, updatePhase, updateRoomTitle, updateSessionPilotCounts, type RoomPilotDetails } from './lib/firebase'
 import { getGameModule } from './lib/gameRegistry'
 import { resolveSessionScoring } from './lib/scoring'
 import { downloadWishPng, printWish } from './lib/export'
@@ -336,6 +336,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     } catch { return defaultDiagnosticTemplateSelection }
   })
   const [systemPacks, setSystemPacks] = useState<Record<string, ContentPack>>({})
+  const [systemDiagnosticPack, setSystemDiagnosticPack] = useState<ContentPack | null>(null)
   const [systemPacksState, setSystemPacksState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [systemPacksError, setSystemPacksError] = useState('')
   const [workspacePack, setWorkspacePack] = useState<ContentPack | null>(null)
@@ -454,6 +455,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       return
     }
     let stopSystem: () => void = () => undefined
+    let stopDiagnostic: () => void = () => undefined
     let stopWorkspace: () => void = () => undefined
     let stopWorkspaceQuiz: () => void = () => undefined
     void ensureAuth().then(() => {
@@ -467,6 +469,10 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
         setSystemPacksError(packLibraryErrorText(error))
         setSystemPacksState('error')
       })
+      // The diagnostic pack is a mandatory system material. Keep a direct,
+      // published-only subscription as well as the catalogue query so an
+      // unrelated catalogue update can never make it look unavailable.
+      stopDiagnostic = subscribeGlobalPack(diagnosticPackId, setSystemDiagnosticPack, () => setSystemDiagnosticPack(null))
       stopWorkspace = subscribeWorkspacePack(leader.workspaceId, diagnosticPackId, setWorkspacePack, () => setWorkspacePack(null))
       stopWorkspaceQuiz = subscribeWorkspaceQuizPacks(leader.workspaceId, setWorkspaceQuizPacks, () => setWorkspaceQuizPacks({}))
     }).catch(() => {
@@ -475,13 +481,14 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       setSystemPacksError('Не удалось подтвердить доступ к библиотеке наборов.')
       setWorkspacePack(null)
       setWorkspaceQuizPacks({})
+      setSystemDiagnosticPack(null)
     })
-    return () => { stopSystem(); stopWorkspace(); stopWorkspaceQuiz() }
+    return () => { stopSystem(); stopDiagnostic(); stopWorkspace(); stopWorkspaceQuiz() }
   }, [leader.workspaceId])
   useEffect(() => {
     const selected = templateSelection.templateSource === 'workspace'
       ? (roomDetails.mode === 'quiz' ? workspaceQuizPacks[templateSelection.selectedPackId] : workspacePack)
-      : systemPacks[templateSelection.selectedPackId] || null
+      : (templateSelection.selectedPackId === diagnosticPackId ? systemDiagnosticPack : systemPacks[templateSelection.selectedPackId]) || null
     // `questions` is the canonical runtime field of a pack. Older records
     // may only have `content.questions`; using it strictly here made the
     // diagnostic library show five empty categories even though the published
@@ -490,7 +497,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       ? selected.questions
       : selected?.content?.questions
     setQuestionBank(selectedQuestions?.length ? selectedQuestions : (firebaseReady ? [] : questions))
-  }, [roomDetails.mode, systemPacks, templateSelection, workspacePack, workspaceQuizPacks])
+  }, [roomDetails.mode, systemDiagnosticPack, systemPacks, templateSelection, workspacePack, workspaceQuizPacks])
   // A stale selection from an earlier build must not make the published
   // catalogue appear empty. Prefer the canonical diagnostic pack, then the
   // first published pack, without ever changing an explicit workspace copy.
@@ -722,7 +729,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     } finally { setQuestionSaving(false) }
   }
   const warning = !firebaseReady ? 'Для работы с несколькими устройствами подключите Firebase: демо-режим синхронизируется только в этом браузере.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Этот QR ведёт на адрес компьютера. После публикации сайта здесь будет общий интернет-адрес.' : ''
-  const activeDiagnosticPack = isDiagnosticPack(systemPacks[diagnosticPackId]) ? systemPacks[diagnosticPackId] : null
+  const activeDiagnosticPack = isDiagnosticPack(systemDiagnosticPack) ? systemDiagnosticPack : isDiagnosticPack(systemPacks[diagnosticPackId]) ? systemPacks[diagnosticPackId] : null
   const quizSystemPacks = Object.values(systemPacks).filter(pack => isQuizPack(pack) && pack.status === 'published')
   const quizWorkspacePacks = Object.values(workspaceQuizPacks).filter(isQuizPack)
   // A system quiz pack is only a candidate to copy. It must never look like
