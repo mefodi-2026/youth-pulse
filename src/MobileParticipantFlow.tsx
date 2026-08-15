@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { categories, questions } from './data/questions'
-import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeRoomLobby, subscribeSession, waitForAuthPersistence } from './lib/firebase'
+import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeParticipantQuestionSet, subscribeParticipantQuizResult, subscribeParticipantRecord, subscribePublicRoom, subscribeRoomLobby, waitForAuthPersistence } from './lib/firebase'
 import { getGameModule } from './lib/gameRegistry'
 import { downloadWishPng, printWish } from './lib/export'
-import { type Answer, type Participant, type ResponseValue, type RoomLobby, type Scores, type Session } from './types'
+import { type Answer, type Participant, type ParticipantQuestionSet, type ParticipantQuizResult, type PublicRoom, type ResponseValue, type RoomLobby, type Scores, type Session } from './types'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -12,6 +12,10 @@ const setDemo = (session: Session) => { localStorage.setItem(demoKey(session.roo
 function useParticipantSession(room: string, participantId?: string) {
   const [session, setSession] = useState<Session | null>(null)
   const [lobby, setLobby] = useState<RoomLobby | null>(null)
+  const [publicRoom, setPublicRoom] = useState<PublicRoom | null>(null)
+  const [questionSet, setQuestionSet] = useState<ParticipantQuestionSet | null>(null)
+  const [participantRecord, setParticipantRecord] = useState<Participant | null>(null)
+  const [quizResult, setQuizResult] = useState<ParticipantQuizResult | null>(null)
   useEffect(() => {
     if (!room) return
     if (!firebaseReady) {
@@ -23,17 +27,50 @@ function useParticipantSession(room: string, participantId?: string) {
       applyDemo(); const sync = (event: StorageEvent) => { if (event.key === demoKey(room)) applyDemo() }
       window.addEventListener('storage', sync); return () => window.removeEventListener('storage', sync)
     }
-    let active = true; let stopLobby: () => void = () => undefined; let stopSession: () => void = () => undefined
+    let active = true; let stopLobby: () => void = () => undefined; let stopPublic: () => void = () => undefined; let stopQuestions: () => void = () => undefined; let stopParticipant: () => void = () => undefined; let stopQuizResult: () => void = () => undefined
     void ensureAuth().then(() => {
       if (!active) return
-      stopLobby = subscribeRoomLobby(room, value => { if (active) setLobby(value) }, () => { if (active) setLobby(null) })
-      // Full room data is readable only after this anonymous identity has
-      // created its own participant record. This prevents cross-room reads.
-      if (participantId) stopSession = subscribeSession(room, value => { if (active) setSession(value) }, () => { if (active) setSession(null) })
+      stopPublic = subscribePublicRoom(room, value => {
+        if (!active) return
+        setPublicRoom(value)
+        if (value) { stopLobby(); setLobby(null); return }
+        // A legacy room has no safe projection until its host opens it once.
+        // Only then is its old lobby read for a non-sensitive waiting state.
+        stopLobby = subscribeRoomLobby(room, legacy => { if (active) setLobby(legacy) }, () => { if (active) setLobby(null) })
+      }, () => { if (active) setPublicRoom(null) })
+      stopQuestions = subscribeParticipantQuestionSet(room, value => { if (active) setQuestionSet(value) }, () => { if (active) setQuestionSet(null) })
+      if (participantId) {
+        stopParticipant = subscribeParticipantRecord(room, participantId, value => { if (active) setParticipantRecord(value) }, () => { if (active) setParticipantRecord(null) })
+        stopQuizResult = subscribeParticipantQuizResult(room, participantId, value => { if (active) setQuizResult(value) }, () => { if (active) setQuizResult(null) })
+      }
     })
-    return () => { active = false; stopLobby(); stopSession() }
+    return () => { active = false; stopLobby(); stopPublic(); stopQuestions(); stopParticipant(); stopQuizResult() }
   }, [participantId, room])
-  return [session, setSession, lobby] as const
+  useEffect(() => {
+    if (!publicRoom || !questionSet || !participantId || !participantRecord) { setSession(null); return }
+    // The shell deliberately resembles a Session so existing participant UI
+    // stays unchanged, but its data comes exclusively from public questions
+    // and this participant's own record. It contains no answer keys.
+    setSession({
+      roomId: publicRoom.roomId,
+      roomTitle: publicRoom.roomTitle,
+      displayCode: publicRoom.displayCode,
+      createdAt: publicRoom.createdAt,
+      phase: publicRoom.phase,
+      status: publicRoom.phase,
+      maxParticipants: publicRoom.maxParticipants,
+      hostUid: '',
+      mode: publicRoom.mode || questionSet.mode || 'diagnostic',
+      productId: publicRoom.productId || questionSet.productId,
+      gameTypeId: publicRoom.gameTypeId || questionSet.gameTypeId,
+      packId: publicRoom.packId || questionSet.packId,
+      scoringTemplateId: publicRoom.scoringTemplateId || questionSet.scoringTemplateId,
+      packSnapshot: { title: publicRoom.packTitle || questionSet.packTitle || '', description: '', questions: questionSet.questions, settings: {} },
+      questions: questionSet.questions,
+      participants: { [participantId]: participantRecord },
+    } as Session)
+  }, [participantId, publicRoom, questionSet, participantRecord])
+  return [session, setSession, lobby || (publicRoom ? { roomId: publicRoom.roomId, hostUid: '', workspaceId: '', phase: publicRoom.phase, maxParticipants: publicRoom.maxParticipants, createdAt: publicRoom.createdAt, mode: publicRoom.mode, packId: publicRoom.packId, packTitle: publicRoom.packTitle, difficulty: publicRoom.difficulty, closedAt: publicRoom.closedAt } : null), quizResult] as const
 }
 
 const Shell = ({ children, screen = '' }: { children: React.ReactNode; screen?: string }) => <main className="mobile-wrap mobile-flow"><div className={`mobile-card phone-screen ${screen}`}>{children}</div></main>
@@ -63,7 +100,7 @@ function createPoster(participant: Participant, scores: Scores) {
 
 export function MobileParticipantFlow({ room }: { room: string }) {
   const [participant, setParticipant] = useState<Participant | null>(null)
-  const [session, setSession, lobby] = useParticipantSession(room, participant?.id)
+  const [session, setSession, lobby, quizResult] = useParticipantSession(room, participant?.id)
   const [screen, setScreen] = useState<'intro' | 'nickname'>('intro')
   const [name, setName] = useState('')
   const [notice, setNotice] = useState('')
@@ -157,10 +194,8 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   if (!session || session.phase === 'lobby') return <Shell screen="waiting-screen"><div className="waiting-orbit"><i /><i /><b>✦</b></div><p className="flow-label">ПОДКЛЮЧЕНИЕ ПОДТВЕРЖДЕНО</p><h1>Ждём ведущего</h1><p>Ты уже в комнате. Как только ведущий запустит {isQuiz ? 'викторину' : 'диагностику'}, первый вопрос появится автоматически.</p><div className="waiting-status"><span /><div><b>Собираем участников</b><small>Не закрывай эту страницу</small></div></div></Shell>
   if (!activeQuestions.length) return <Shell screen="waiting-screen"><p className="flow-label">НАБОР БЕЗ ВОПРОСОВ</p><h1>{isQuiz ? 'Викторина пока недоступна' : 'Диагностика пока недоступна'}</h1><p>Ведущий выбрал набор без вопросов. Попросите его выбрать другой материал и создать новую комнату.</p></Shell>
   if (participant.status === 'finished' && isQuiz) {
-    const quizScore = getGameModule('quiz').score(participant.answers || {}, activeQuestions, session)
-    const correct = Math.round(quizScore.points || 0)
     const canShowPersonalScore = session.phase === 'resultsIntro' || session.phase === 'resultsReal'
-    return <Shell screen="report-ready"><div className="ready-spark">✓</div><p className="flow-label">ВИКТОРИНА ЗАВЕРШЕНА</p><h1>{participant.nickname}, спасибо!</h1><p>{canShowPersonalScore ? `Твой результат: ${correct} из ${activeQuestions.length} · ${quizScore.total}%` : 'Ты ответил(а) на все вопросы. Ждём, пока остальные участники завершат игру, чтобы ведущий открыл общий результат.'}</p>{canShowPersonalScore && <p className="flow-footnote">Общий рейтинг показан на экране ведущего.</p>}</Shell>
+    return <Shell screen="report-ready"><div className="ready-spark">✓</div><p className="flow-label">ВИКТОРИНА ЗАВЕРШЕНА</p><h1>{participant.nickname}, спасибо!</h1><p>{canShowPersonalScore && quizResult ? `Твой результат: ${quizResult.correct} из ${quizResult.total} · ${quizResult.percentage}%` : 'Ты ответил(а) на все вопросы. Ждём, пока остальные участники завершат игру, чтобы ведущий открыл общий результат.'}</p>{canShowPersonalScore && <p className="flow-footnote">Общий рейтинг показан на экране ведущего.</p>}</Shell>
   }
   if (participant.status === 'finished' && !reportReady) return <Shell screen="report-loading"><div className="report-loader"><i /><b>✦</b></div><p className="flow-label">ГОТОВО</p><h1>Подготавливаем<br />твой отчёт</h1><p>Собираем твою личную карточку — это займёт всего пару секунд.</p></Shell>
   if (participant.status === 'finished' && !showReport) return <Shell screen="report-ready"><div className="ready-spark">✓</div><p className="flow-label">ТВОЙ ОТЧЁТ ГОТОВ</p><h1>{participant.nickname}, спасибо!</h1><p>Ты ответил(а) на все вопросы. Твоя личная карточка готова и доступна только тебе.</p><Action onClick={() => void openReport()}>Открыть личный отчёт <span>→</span></Action></Shell>

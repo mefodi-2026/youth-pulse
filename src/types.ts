@@ -106,7 +106,8 @@ export interface SessionEvent {
   type: SessionEventType
   roomId: string
   workspaceId?: string
-  hostUid: string
+  /** Present for host events. Participant events intentionally do not expose a host UID. */
+  hostUid?: string
   participantId?: string
   createdAt: number
 }
@@ -234,6 +235,52 @@ export interface RoomLobby {
   packId?: PackId
   packTitle?: string
   difficulty?: QuizDifficulty
+}
+/**
+ * Deliberately minimal room metadata readable by anonymous participants.
+ * Private session data, workspace ownership and host identity never belong here.
+ */
+export interface PublicRoom {
+  roomId: string
+  roomTitle?: string
+  displayCode?: string
+  phase: SessionPhase
+  maxParticipants: number
+  createdAt: number
+  closedAt?: number
+  mode?: RoomMode
+  gameTypeId?: GameTypeId
+  productId?: ProductId
+  packId?: PackId
+  packTitle?: string
+  difficulty?: QuizDifficulty
+  scoringTemplateId?: ScoringTemplateId
+}
+/** Question shape sent to a participant. Answer keys and explanations are excluded. */
+export type ParticipantQuestion = Omit<Question, 'correctAnswer' | 'explanation'>
+export interface ParticipantQuestionSet {
+  roomId: string
+  createdAt: number
+  mode?: RoomMode
+  gameTypeId?: GameTypeId
+  productId?: ProductId
+  packId?: PackId
+  packTitle?: string
+  scoringTemplateId?: ScoringTemplateId
+  questions: ParticipantQuestion[]
+}
+/** Private answer-key material for a room, readable only by host/platform owner. */
+export interface PrivateQuestionSet {
+  roomId: string
+  createdAt: number
+  questions: Array<Pick<Question, 'id' | 'correctAnswer' | 'explanation'>>
+}
+export interface ParticipantQuizResult {
+  participantId: string
+  correct: number
+  total: number
+  percentage: number
+  releasedAt: number
 }
 export interface Scores {
   total: number

@@ -7,7 +7,8 @@ import { canUseFeature } from './access'
 import { bibleQuizGameModule, diagnosticGameModule, getGameModule } from './gameRegistry'
 import { getScoringTemplate } from './scoring'
 import { orderQuestionsByCategory } from './questionOrder'
-import type { Answer, ContentPack, FeedbackItem, Invite, LeaderProfile, Participant, ProductConfig, Question, ResponseValue, RoomLobby, RoomMode, ScoringTemplateId, Session, SessionArchive, SessionEvent, SessionEventType, SessionPhase, TemplateSelection, TemplateSnapshot, UserStatus, Workspace, WorkspaceProduct } from '../types'
+import { participantQuestionsPath, participantResultPath, privateQuestionsPath, publicRoomPath, roomParticipantPath, roomPath } from '../core/roomService'
+import { getSessionQuestions, type Answer, type ContentPack, type FeedbackItem, type Invite, type LeaderProfile, type Participant, type ParticipantQuestion, type ParticipantQuestionSet, type ParticipantQuizResult, type PrivateQuestionSet, type ProductConfig, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type RoomMode, type ScoringTemplateId, type Session, type SessionArchive, type SessionEvent, type SessionEventType, type SessionPhase, type TemplateSelection, type TemplateSnapshot, type UserStatus, type Workspace, type WorkspaceProduct } from '../types'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -80,20 +81,55 @@ const normalizePackTitle = (title: unknown) => {
 const defaultPackDescription = 'Интерактивная диагностика для молодёжных групп.'
 const normalizePackStatus = (status: unknown): ContentPack['status'] => status === 'draft' || status === 'archived' ? status : 'published'
 
-const createRoomLobby = (session: Session): RoomLobby => ({
+/** Safe metadata for a participant: no host UID, workspace ID, answers or settings. */
+const createPublicRoom = (session: Session): PublicRoom => ({
   roomId: session.roomId,
   ...(session.roomTitle ? { roomTitle: session.roomTitle } : {}),
   ...(session.displayCode ? { displayCode: session.displayCode } : {}),
-  hostUid: session.hostUid,
-  workspaceId: session.workspaceId || '',
   phase: session.phase,
   maxParticipants: session.maxParticipants,
   createdAt: session.createdAt,
+  ...(session.closedAt ? { closedAt: session.closedAt } : {}),
   ...(session.mode ? { mode: session.mode } : {}),
+  ...(session.productId ? { productId: session.productId } : {}),
+  ...(session.gameTypeId ? { gameTypeId: session.gameTypeId } : {}),
   ...(session.packId ? { packId: session.packId } : {}),
   ...(session.packSnapshot?.title ? { packTitle: session.packSnapshot.title } : {}),
   ...(session.difficulty ? { difficulty: session.difficulty } : {}),
-  ...(session.closedAt ? { closedAt: session.closedAt } : {}),
+  ...(session.scoringTemplateId ? { scoringTemplateId: session.scoringTemplateId } : {}),
+})
+
+const toParticipantQuestion = (question: Question): ParticipantQuestion => ({
+  id: question.id,
+  category: question.category,
+  ...(question.categoryOrder !== undefined ? { categoryOrder: question.categoryOrder } : {}),
+  title: question.title,
+  options: { ...question.options },
+})
+
+const createParticipantQuestionSet = (session: Session): ParticipantQuestionSet => {
+  const questionSet = getSessionQuestions(session, builtInQuestions)
+  return {
+    roomId: session.roomId,
+    createdAt: session.createdAt,
+    ...(session.mode ? { mode: session.mode } : {}),
+    ...(session.productId ? { productId: session.productId } : {}),
+    ...(session.gameTypeId ? { gameTypeId: session.gameTypeId } : {}),
+    ...(session.packId ? { packId: session.packId } : {}),
+    ...(session.packSnapshot?.title ? { packTitle: session.packSnapshot.title } : {}),
+    ...(session.scoringTemplateId ? { scoringTemplateId: session.scoringTemplateId } : {}),
+    questions: questionSet.map(toParticipantQuestion),
+  }
+}
+
+const createPrivateQuestionSet = (session: Session): PrivateQuestionSet => ({
+  roomId: session.roomId,
+  createdAt: session.createdAt,
+  questions: getSessionQuestions(session, builtInQuestions).map(question => ({
+    id: question.id,
+    ...(question.correctAnswer ? { correctAnswer: question.correctAnswer } : {}),
+    ...(question.explanation ? { explanation: question.explanation } : {}),
+  })),
 })
 
 const createPilotWorkspaceAccess = (productId: string, ownerUid: string, now: number): WorkspaceProduct => ({
@@ -182,7 +218,11 @@ const createTemplateSnapshot = (source: ContentPack): TemplateSnapshot => {
 export const resolveDiagnosticTemplate = async (workspaceId?: string, selection: TemplateSelection = defaultDiagnosticTemplateSelection): Promise<TemplateSnapshot> => {
   if (!db) return createDiagnosticTemplateSnapshot(builtInQuestions)
   const candidates: Array<{ path: string; defaults: Partial<ContentPack> }> = selection.templateSource === 'workspace' && workspaceId
-    ? [{ path: `workspacePacks/${workspaceId}/${selection.selectedPackId}`, defaults: { workspaceId, packId: selection.selectedPackId, templateOrigin: 'workspace' } }]
+    ? [
+        { path: `workspaces/${workspaceId}/workspacePacks/${selection.selectedPackId}`, defaults: { workspaceId, packId: selection.selectedPackId, templateOrigin: 'workspace' } },
+        // Read-only migration fallback. New data is never written to this root.
+        { path: `workspacePacks/${workspaceId}/${selection.selectedPackId}`, defaults: { workspaceId, packId: selection.selectedPackId, templateOrigin: 'workspace' } },
+      ]
     : [{ path: `globalPacks/${selection.selectedPackId}`, defaults: { packId: selection.selectedPackId, templateOrigin: 'system' } }]
   for (const candidate of candidates) {
     try {
@@ -372,14 +412,35 @@ export const ensureAuth = async () => {
 }
 
 export const subscribeSession = (roomId: string, callback: (value: Session | null) => void, onError?: (error: Error) => void) => {
-  if (!db) return () => undefined
-  return onValue(ref(db, `sessions/${roomId}`), snapshot => callback(snapshot.val()), error => onError?.(error))
+  if (!db || !roomId) return () => undefined
+  return onValue(ref(db, roomPath(roomId)), snapshot => callback(snapshot.val()), error => onError?.(error))
 }
 
 /** Join-safe metadata: it intentionally contains no questions, participants or answers. */
 export const subscribeRoomLobby = (roomId: string, callback: (value: RoomLobby | null) => void, onError?: (error: Error) => void) => {
   if (!db) return () => undefined
   return onValue(ref(db, `roomLobbies/${roomId}`), snapshot => callback((snapshot.val() || null) as RoomLobby | null), error => onError?.(error))
+}
+
+/** Public room metadata used by every new room. It contains no ownership or answer data. */
+export const subscribePublicRoom = (roomId: string, callback: (value: PublicRoom | null) => void, onError?: (error: Error) => void) => {
+  if (!db || !roomId) return () => undefined
+  return onValue(ref(db, publicRoomPath(roomId)), snapshot => callback((snapshot.val() || null) as PublicRoom | null), error => onError?.(error))
+}
+
+export const subscribeParticipantQuestionSet = (roomId: string, callback: (value: ParticipantQuestionSet | null) => void, onError?: (error: Error) => void) => {
+  if (!db || !roomId) return () => undefined
+  return onValue(ref(db, participantQuestionsPath(roomId)), snapshot => callback((snapshot.val() || null) as ParticipantQuestionSet | null), error => onError?.(error))
+}
+
+export const subscribeParticipantRecord = (roomId: string, participantId: string, callback: (value: Participant | null) => void, onError?: (error: Error) => void) => {
+  if (!db || !roomId || !participantId) return () => undefined
+  return onValue(ref(db, roomParticipantPath(roomId, participantId)), snapshot => callback((snapshot.val() || null) as Participant | null), error => onError?.(error))
+}
+
+export const subscribeParticipantQuizResult = (roomId: string, participantId: string, callback: (value: ParticipantQuizResult | null) => void, onError?: (error: Error) => void) => {
+  if (!db || !roomId || !participantId) return () => undefined
+  return onValue(ref(db, participantResultPath(roomId, participantId)), snapshot => callback((snapshot.val() || null) as ParticipantQuizResult | null), error => onError?.(error))
 }
 
 export const subscribeGlobalPack = (packId: string, callback: (value: ContentPack | null) => void, onError?: (error: Error) => void) => {
@@ -422,7 +483,17 @@ export const subscribePublishedGlobalPacks = (callback: (value: Record<string, C
 
 export const subscribeWorkspacePack = (workspaceId: string, packId: string, callback: (value: ContentPack | null) => void, onError?: (error: Error) => void) => {
   if (!db || !workspaceId) return () => undefined
-  return onValue(ref(db, `workspacePacks/${workspaceId}/${packId}`), snapshot => callback(normalizeContentPack(snapshot.val(), builtInQuestions, { workspaceId, packId, templateOrigin: 'workspace' })), error => onError?.(error))
+  const canonical = ref(db, `workspaces/${workspaceId}/workspacePacks/${packId}`)
+  let stopLegacy: () => void = () => undefined
+  const stopCanonical = onValue(canonical, snapshot => {
+    const pack = normalizeContentPack(snapshot.val(), builtInQuestions, { workspaceId, packId, templateOrigin: 'workspace' })
+    if (pack) { stopLegacy(); callback(pack); return }
+    // Legacy root is read-only compatibility only. It is intentionally never
+    // merged with canonical data, so duplicates cannot be created by a read.
+    stopLegacy()
+    stopLegacy = onValue(ref(db, `workspacePacks/${workspaceId}/${packId}`), legacy => callback(normalizeContentPack(legacy.val(), builtInQuestions, { workspaceId, packId, templateOrigin: 'workspace' })), error => onError?.(error))
+  }, error => onError?.(error))
+  return () => { stopCanonical(); stopLegacy() }
 }
 
 /** Quiz copies live under the workspace document, unlike the legacy diagnostic editor path. */
@@ -537,15 +608,16 @@ export const setLeaderStatusAsOwner = async (uid: string, status: UserStatus) =>
   if (status === 'paused' || status === 'revoked') {
     const sessionsSnapshot = await get(ref(services.db, 'sessions'))
     const sessions = (sessionsSnapshot.val() || {}) as Record<string, Session>
-    Object.values(sessions).filter(session => session.hostUid === uid && session.phase !== 'closed').forEach(session => {
+    for (const session of Object.values(sessions).filter(session => session.hostUid === uid && session.phase !== 'closed')) {
+      await ensureParticipantRoomData(session.roomId, session)
       const closed: SessionArchive = { ...session, phase: 'closed', closedAt: now, archivedAt: now }
       patch[`sessions/${session.roomId}/phase`] = 'closed'
       patch[`sessions/${session.roomId}/closedAt`] = now
-      patch[`roomLobbies/${session.roomId}/phase`] = 'closed'
-      patch[`roomLobbies/${session.roomId}/closedAt`] = now
+      patch[`${publicRoomPath(session.roomId)}/phase`] = 'closed'
+      patch[`${publicRoomPath(session.roomId)}/closedAt`] = now
       patch[`sessionArchives/${session.roomId}`] = closed
       if (session.workspaceId) patch[`workspaceArchives/${session.workspaceId}/${session.roomId}`] = closed
-    })
+    }
   }
   await update(ref(services.db), patch)
 }
@@ -826,13 +898,13 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
   if (mode === 'quiz') await copyQuizPackToWorkspace(workspaceId, effectiveSelection.selectedPackId)
   const template = await resolveRoomTemplate(workspaceId, effectiveSelection, mode)
   const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, effectiveSelection, roomTitle, pilotDetails, scoringTemplateId)
-  // The lobby is the only pre-join readable record. It contains no questions,
-  // participants, or answers from another workspace.
+  // `sessions` is the canonical room record. Participant-facing data is written
+  // immediately afterwards into separate, deliberately safe paths. We cannot
+  // create both in one multi-location write because Rules must first verify that
+  // this session belongs to the currently authenticated leader.
   try {
-    await update(ref(db), {
-      [`sessions/${roomId}`]: session,
-      [`roomLobbies/${roomId}`]: createRoomLobby(session),
-    })
+    await set(ref(db, roomPath(roomId)), session)
+    await ensureParticipantRoomData(roomId, session)
   } catch (reason) {
     const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code) : ''
     console.error('room creation was rejected by Firebase', { roomId, workspaceId, hostUid, packId: session.packId, code, reason })
@@ -843,17 +915,42 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
   return session
 }
 
+/**
+ * Creates the participant-safe projection for a room once. It is also the
+ * non-destructive compatibility bridge for legacy rooms created before the
+ * public/private split. The full session remains host-only.
+ */
+export const ensureParticipantRoomData = async (roomId: string, knownSession?: Session) => {
+  const services = requireFirebase()
+  const session = knownSession || (await assertCurrentUserIsRoomHost(roomId)).session
+  if (session.roomId !== roomId) throw new Error('Идентификатор комнаты не совпадает с данными сессии.')
+  const [publicSnapshot, participantQuestionsSnapshot, privateQuestionsSnapshot] = await Promise.all([
+    get(ref(services.db, publicRoomPath(roomId))),
+    get(ref(services.db, participantQuestionsPath(roomId))),
+    get(ref(services.db, privateQuestionsPath(roomId))),
+  ])
+  const patch: Record<string, unknown> = {}
+  if (!publicSnapshot.exists()) patch[publicRoomPath(roomId)] = createPublicRoom(session)
+  if (!participantQuestionsSnapshot.exists()) patch[participantQuestionsPath(roomId)] = createParticipantQuestionSet(session)
+  if (!privateQuestionsSnapshot.exists()) patch[privateQuestionsPath(roomId)] = createPrivateQuestionSet(session)
+  if (Object.keys(patch).length) await update(ref(services.db), patch)
+}
+
 export const joinSession = async (roomId: string, participant: Participant) => {
   const services = requireFirebase()
   await authPersistence
   if (!services.auth.currentUser) throw new Error('Firebase user is not ready.')
   if (services.auth.currentUser.uid !== participant.id) throw new Error('Participant identity does not match the current Firebase user.')
   if (!services.auth.currentUser.isAnonymous) throw new Error('Откройте ссылку участника в отдельном браузере или в режиме инкогнито.')
-  const [lobbySnapshot, participantSnapshot] = await Promise.all([
-    get(ref(services.db, `roomLobbies/${roomId}`)),
-    get(ref(services.db, `sessions/${roomId}/participants/${participant.id}`)),
+  const [publicRoomSnapshot, participantSnapshot] = await Promise.all([
+    get(ref(services.db, publicRoomPath(roomId))),
+    get(ref(services.db, roomParticipantPath(roomId, participant.id))),
   ])
-  const lobby = lobbySnapshot.val() as RoomLobby | null
+  // Only read the legacy lobby if a safe projection does not exist. Rules
+  // deliberately deny it once the projection is present, because it contains
+  // host/workspace identifiers from the previous data model.
+  const legacyLobbySnapshot = publicRoomSnapshot.exists() ? null : await get(ref(services.db, `roomLobbies/${roomId}`))
+  const lobby = (publicRoomSnapshot.val() || legacyLobbySnapshot?.val()) as (PublicRoom | RoomLobby | null)
   if (!lobby) throw new Error('Комната не найдена или больше недоступна.')
   if (lobby.phase === 'closed') throw new Error('Сессия завершена ведущим. Подключение больше недоступно.')
   if (participantSnapshot.exists()) return
@@ -886,13 +983,30 @@ export const updatePhase = async (roomId: string, phase: SessionPhase, expectedH
   const completedCount = Object.values(services.session.participants || {}).filter(participant => participant.status === 'finished').length
   const eventType: SessionEventType | null = phase === 'live' ? 'room_started' : phase === 'closed' ? 'room_closed' : null
   const event: SessionEvent | null = eventType ? { id: eventType, type: eventType, roomId, ...(services.session.workspaceId ? { workspaceId: services.session.workspaceId } : {}), hostUid: services.session.hostUid, createdAt: timestamp } : null
-  const patch = phase === 'resultsIntro'
-    ? { [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/resultsIntroStartedAt`]: timestamp, [`roomLobbies/${roomId}/phase`]: phase }
+  await ensureParticipantRoomData(roomId, services.session)
+  const quizResultPatch: Record<string, ParticipantQuizResult> = {}
+  if (phase === 'resultsIntro' && (services.session.mode === 'quiz' || services.session.gameTypeId === quizGameTypeId)) {
+    const privateQuestions = getSessionQuestions(services.session, [])
+    for (const participant of Object.values(services.session.participants || {})) {
+      if (participant.status !== 'finished') continue
+      const scored = bibleQuizGameModule.score(participant.answers || {}, privateQuestions, services.session)
+      quizResultPatch[participantResultPath(roomId, participant.id)] = {
+        participantId: participant.id,
+        correct: Math.round(scored.points || 0),
+        total: privateQuestions.length,
+        percentage: Math.round(scored.total),
+        releasedAt: timestamp,
+      }
+    }
+  }
+  const patch: Record<string, unknown> = phase === 'resultsIntro'
+    ? { [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/resultsIntroStartedAt`]: timestamp, [`${publicRoomPath(roomId)}/phase`]: phase }
     : phase === 'closed'
-      ? { [`sessions/${roomId}/phase`]: 'closed', [`sessions/${roomId}/closedAt`]: timestamp, [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount, [`sessions/${roomId}/events/${event?.id}`]: event, [`roomLobbies/${roomId}/phase`]: 'closed', [`roomLobbies/${roomId}/closedAt`]: timestamp }
+      ? { [`sessions/${roomId}/phase`]: 'closed', [`sessions/${roomId}/closedAt`]: timestamp, [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount, [`sessions/${roomId}/events/${event?.id}`]: event, [`${publicRoomPath(roomId)}/phase`]: 'closed', [`${publicRoomPath(roomId)}/closedAt`]: timestamp }
       : phase === 'live'
-        ? { [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/startedAt`]: services.session.startedAt || timestamp, [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount, [`sessions/${roomId}/events/${event?.id}`]: event, [`roomLobbies/${roomId}/phase`]: phase }
-        : { [`sessions/${roomId}/phase`]: phase, [`roomLobbies/${roomId}/phase`]: phase }
+        ? { [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/startedAt`]: services.session.startedAt || timestamp, [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount, [`sessions/${roomId}/events/${event?.id}`]: event, [`${publicRoomPath(roomId)}/phase`]: phase }
+        : { [`sessions/${roomId}/phase`]: phase, [`${publicRoomPath(roomId)}/phase`]: phase }
+  Object.assign(patch, quizResultPatch)
   await update(ref(services.db), patch)
 }
 
@@ -911,7 +1025,8 @@ export const updateRoomTitle = async (roomId: string, roomTitle: string, expecte
   if (services.session.phase !== 'lobby') throw new Error('После запуска диагностики название комнаты изменить нельзя.')
   const cleanTitle = roomTitle.trim().slice(0, 80)
   if (!cleanTitle) throw new Error('Введите название комнаты.')
-  await update(ref(services.db), { [`sessions/${roomId}/roomTitle`]: cleanTitle, [`roomLobbies/${roomId}/roomTitle`]: cleanTitle })
+  await ensureParticipantRoomData(roomId, services.session)
+  await update(ref(services.db), { [`sessions/${roomId}/roomTitle`]: cleanTitle, [`${publicRoomPath(roomId)}/roomTitle`]: cleanTitle })
 }
 
 /** Writes only an archive. The caller must close the live session first. */
@@ -941,13 +1056,15 @@ export const saveWorkspacePack = async (workspaceId: string, questionSet: Questi
   const user = services.auth.currentUser
   if (!user || user.isAnonymous) throw new Error('Для сохранения вопросов войдите в аккаунт ведущего.')
   if (!workspaceId) throw new Error('Не найдено рабочее пространство ведущего.')
-  const packPath = `workspacePacks/${workspaceId}/${diagnosticPackId}`
+  // Canonical personal-pack path. The legacy root remains read-only fallback.
+  const packPath = `workspaces/${workspaceId}/workspacePacks/${diagnosticPackId}`
   const currentSnapshot = await get(ref(services.db, packPath))
   const current = normalizeContentPack(currentSnapshot.val(), builtInQuestions, { workspaceId, packId: diagnosticPackId, templateOrigin: 'workspace' })
   const now = Date.now()
   const pack: ContentPack = {
     productId: diagnosticProductId,
     gameTypeId: diagnosticGameTypeId,
+    mode: 'diagnostic',
     packId: diagnosticPackId,
     version: Math.max(diagnosticPackVersion, (current?.version || current?.packVersion || diagnosticPackVersion - 1) + 1),
     packVersion: Math.max(diagnosticPackVersion, (current?.version || current?.packVersion || diagnosticPackVersion - 1) + 1),
@@ -971,10 +1088,8 @@ export const saveWorkspacePack = async (workspaceId: string, questionSet: Questi
 }
 
 export const saveSessionQuestions = async (roomId: string, questionSet: Question[]) => {
-  if (!db) throw new Error('Firebase is not configured')
-  const services = await assertCurrentUserIsRoomHost(roomId)
-  const snapshot = createDiagnosticTemplateSnapshot(questionSet, services.session.templateSnapshot)
-  await update(ref(db, `sessions/${roomId}`), { questions: copyQuestions(questionSet), templateSnapshot: snapshot, packVersion: snapshot.packVersion })
+  void roomId; void questionSet
+  throw new Error('Снимок вопросов комнаты неизменяем после создания. Измените набор и создайте новую комнату.')
 }
 
 /** @deprecated Legacy questionBank is intentionally no longer read by the host UI. */
@@ -987,11 +1102,14 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
   await authPersistence
   const currentUser = services.auth.currentUser
   if (!currentUser || currentUser.uid !== participant.id) throw new Error('Participant identity does not match the current Firebase user.')
-  const sessionSnapshot = await get(ref(services.db, `sessions/${roomId}`))
-  const session = sessionSnapshot.val() as Session | null
-  if (!session) throw new Error('Комната больше недоступна.')
-  if (session.phase !== 'live') throw new Error(session.phase === 'closed' ? 'Сессия завершена ведущим. Ответы больше не принимаются.' : 'Диагностика ещё не запущена.')
-  const storedParticipant = session.participants?.[participant.id]
+  const [publicSnapshot, participantSnapshot] = await Promise.all([
+    get(ref(services.db, publicRoomPath(roomId))),
+    get(ref(services.db, roomParticipantPath(roomId, participant.id))),
+  ])
+  const publicRoom = publicSnapshot.val() as PublicRoom | null
+  if (!publicRoom) throw new Error('Безопасные данные комнаты ещё не подготовлены. Попросите ведущего обновить комнату.')
+  if (publicRoom.phase !== 'live') throw new Error(publicRoom.phase === 'closed' ? 'Сессия завершена ведущим. Ответы больше не принимаются.' : 'Диагностика ещё не запущена.')
+  const storedParticipant = participantSnapshot.val() as Participant | null
   if (!storedParticipant) throw new Error('Участник не найден в комнате. Подключитесь заново.')
   if (storedParticipant.id !== currentUser.uid) throw new Error('Participant record does not belong to the current Firebase user.')
   const finished = nextIndex >= totalQuestions
@@ -1015,11 +1133,13 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
 const recordParticipantEvent = async (roomId: string, participantId: string, type: Extract<SessionEventType, 'participant_joined' | 'participant_finished' | 'report_viewed'>) => {
   try {
     const services = requireFirebase()
-    const sessionSnapshot = await get(ref(services.db, `sessions/${roomId}`))
-    const session = sessionSnapshot.val() as Session | null
-    if (!session?.participants?.[participantId]) return
+    const [publicSnapshot, participantSnapshot] = await Promise.all([
+      get(ref(services.db, publicRoomPath(roomId))),
+      get(ref(services.db, roomParticipantPath(roomId, participantId))),
+    ])
+    if (!publicSnapshot.exists() || !participantSnapshot.exists()) return
     const id = `${type}-${participantId}`
-    const event: SessionEvent = { id, type, roomId, ...(session.workspaceId ? { workspaceId: session.workspaceId } : {}), hostUid: session.hostUid, participantId, createdAt: Date.now() }
+    const event: SessionEvent = { id, type, roomId, participantId, createdAt: Date.now() }
     await set(ref(services.db, `sessions/${roomId}/events/${id}`), event)
   } catch (error) {
     // Analytics must never roll back a successful participant action.

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
-import { archiveSession, copyQuizPackToWorkspace, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, quizGameTypeId, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeLeaderProfile, subscribePublishedGlobalPacks, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, subscribeWorkspaceQuizPacks, updatePhase, updateRoomTitle, updateSessionPilotCounts, type RoomPilotDetails } from './lib/firebase'
+import { archiveSession, copyQuizPackToWorkspace, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, ensureParticipantRoomData, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, quizGameTypeId, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeLeaderProfile, subscribePublishedGlobalPacks, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, subscribeWorkspaceQuizPacks, updatePhase, updateRoomTitle, updateSessionPilotCounts, type RoomPilotDetails } from './lib/firebase'
 import { getGameModule } from './lib/gameRegistry'
 import { resolveSessionScoring } from './lib/scoring'
 import { downloadWishPng, printWish } from './lib/export'
@@ -63,7 +63,13 @@ function useRoom(room: string) {
       setConnection('connecting')
       void ensureAuth().then(() => {
         if (!active) return
-        unsubscribe = subscribeSession(room, value => { if (active) { setSession(value); setConnection('ready') } }, () => { if (active) setConnection('error') })
+        unsubscribe = subscribeSession(room, value => {
+          if (!active) return
+          setSession(value); setConnection('ready')
+          // Legacy rooms get a one-time public participant projection when
+          // their owner opens them. This avoids exposing full old snapshots.
+          if (value) void ensureParticipantRoomData(room, value).catch(error => console.warn('participant room projection was not prepared', { room, error }))
+        }, () => { if (active) setConnection('error') })
       }).catch(() => { if (active) setConnection('error') })
       return () => { active = false; unsubscribe() }
     }
