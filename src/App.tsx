@@ -931,12 +931,14 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
 function exportCsv(session: Session, leader: LeaderProfile) {
   const questionSet = getGameModule(session?.gameTypeId).getQuestions(session, questions)
   const scoring = resolveSessionScoring(session)
-  const participantCount = session.participantCount ?? Object.keys(session.participants || {}).length
-  const completedCount = session.completedCount ?? Object.values(session.participants || {}).filter(participant => participant.status === 'finished').length
+  const participantRecords = session.participants || {}
+  const participantCount = session.participantCount ?? Object.keys(participantRecords).length
+  const completedCount = session.completedCount ?? Object.values(participantRecords).filter(participant => participant.status === 'finished').length
   const common = [leader.fullName, leader.email, session.workspaceId || leader.workspaceId, session.hostUid, session.groupName || '', session.city || '', session.mode === 'quiz' ? 'Викторина' : 'Диагностика', session.packId || '', session.packVersion || '', new Date(session.createdAt).toISOString(), session.startedAt ? new Date(session.startedAt).toISOString() : '', session.closedAt ? new Date(session.closedAt).toISOString() : '', session.estimatedParticipants ?? '', participantCount, completedCount]
-  const rows = Object.values(session.participants).map(participant => {
-    const scores = getGameModule(session?.gameTypeId).score(participant.answers, questionSet, session)
-    return [...common, participant.id, participant.nickname, participant.status, ...questionSet.flatMap(question => { const selected = participant.answers[question.id]; return [question.title, selected === 'SKIP' ? `Пропущен (${scoring.scoringMap.SKIP} балл.)` : selected ? question.options[selected] : ''] }), scores.total, ...Object.values(scores.categories)]
+  const rows = Object.values(participantRecords).map(participant => {
+    const answers = participant.answers || {}
+    const scores = getGameModule(session?.gameTypeId).score(answers, questionSet, session)
+    return [...common, participant.id, participant.nickname, participant.status, ...questionSet.flatMap(question => { const selected = answers[question.id]; return [question.title, selected === 'SKIP' ? `Пропущен (${scoring.scoringMap.SKIP} балл.)` : selected ? question.options[selected] : ''] }), scores.total, ...Object.values(scores.categories)]
   })
   const headers = ['leaderName', 'leaderEmail', 'workspaceId', 'hostUid', 'groupName', 'city', 'mode', 'packId', 'packVersion', 'createdAt', 'startedAt', 'closedAt', 'estimatedParticipants', 'participantCount', 'completedCount', 'participantId', 'nickname', 'status', ...questionSet.flatMap((_, index) => [`Вопрос ${index + 1}`, `Ответ ${index + 1}`]), 'total', ...Object.values(categories)]
   const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(';')).join('\n')
