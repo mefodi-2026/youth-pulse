@@ -486,18 +486,17 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     return () => { stopSystem(); stopDiagnostic(); stopWorkspace(); stopWorkspaceQuiz() }
   }, [leader.workspaceId])
   useEffect(() => {
-    const selected = templateSelection.templateSource === 'workspace'
-      ? (roomDetails.mode === 'quiz' ? workspaceQuizPacks[templateSelection.selectedPackId] : workspacePack)
-      : (templateSelection.selectedPackId === diagnosticPackId ? systemDiagnosticPack : systemPacks[templateSelection.selectedPackId]) || null
-    // `questions` is the canonical runtime field of a pack. Older records
-    // may only have `content.questions`; using it strictly here made the
-    // diagnostic library show five empty categories even though the published
-    // pack itself contained all of its questions.
+    // The diagnostic library must never inherit a quiz selection left over
+    // from room setup. Quiz has its own pack state; diagnostics use either
+    // their explicit workspace copy or the published system diagnostic pack.
+    const selected = templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === diagnosticPackId
+      ? workspacePack
+      : systemDiagnosticPack || systemPacks[diagnosticPackId] || null
     const selectedQuestions = selected?.questions?.length
       ? selected.questions
       : selected?.content?.questions
     setQuestionBank(selectedQuestions?.length ? selectedQuestions : (firebaseReady ? [] : questions))
-  }, [roomDetails.mode, systemDiagnosticPack, systemPacks, templateSelection, workspacePack, workspaceQuizPacks])
+  }, [systemDiagnosticPack, systemPacks, templateSelection, workspacePack])
   // A stale selection from an earlier build must not make the published
   // catalogue appear empty. Prefer the canonical diagnostic pack, then the
   // first published pack, without ever changing an explicit workspace copy.
