@@ -668,10 +668,12 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const activeDiagnosticPack = isDiagnosticPack(systemPacks[diagnosticPackId]) ? systemPacks[diagnosticPackId] : null
   const quizSystemPacks = Object.values(systemPacks).filter(pack => isQuizPack(pack) && pack.status === 'published')
   const quizWorkspacePacks = Object.values(workspaceQuizPacks).filter(isQuizPack)
-  const activeQuizPack = templateSelection.templateSource === 'workspace'
+  // A system quiz pack is only a candidate to copy. It must never look like
+  // it was successfully added before Firebase confirms the workspace write.
+  const selectedQuizWorkspacePack = templateSelection.templateSource === 'workspace'
     ? workspaceQuizPacks[templateSelection.selectedPackId] || null
-    : systemPacks[templateSelection.selectedPackId] || null
-  const activeSetupPack = roomDetails.mode === 'quiz' ? activeQuizPack : activeDiagnosticPack
+    : null
+  const activeSetupPack = roomDetails.mode === 'quiz' ? selectedQuizWorkspacePack : activeDiagnosticPack
   const addQuizPack = async (pack: ContentPack) => {
     setQuizActionError('')
     try {
@@ -717,16 +719,16 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
             <div className="quiz-pack-list">
               {quizSystemPacks.map(pack => {
                 const copied = workspaceQuizPacks[pack.packId]
-                return <div className={`quiz-pack-row ${activeQuizPack?.packId === pack.packId ? 'selected' : ''}`} key={pack.packId}>
+                return <div className={`quiz-pack-row ${selectedQuizWorkspacePack?.packId === pack.packId ? 'selected' : ''}`} key={pack.packId}>
                   <div><b>{displayPackTitle(pack.title)}</b><small>{pack.difficulty === 'easy' ? 'Лёгкий уровень' : pack.difficulty === 'medium' ? 'Средний уровень' : 'Сложный уровень'} · {pack.questions.length} вопросов · v{pack.packVersion}</small></div>
                   {copied
-                    ? <Button secondary onClick={() => setTemplateSelection({ selectedPackId: copied.packId, templateSource: 'workspace' })}>{templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === copied.packId ? 'Выбран' : 'Выбрать'}</Button>
+                    ? <Button secondary onClick={() => setTemplateSelection(workspaceQuizSelection(copied.packId))}>{templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === copied.packId ? 'Добавлено в workspace' : 'Выбрать'}</Button>
                     : <Button secondary onClick={() => void addQuizPack(pack)}>Добавить в мой workspace</Button>}
                 </div>
               })}
             </div>
             {!!quizWorkspacePacks.length && <div className="quiz-pack-current"><p className="eyebrow">МОИ ДОБАВЛЕННЫЕ НАБОРЫ</p>{quizWorkspacePacks.map(pack => <button type="button" key={pack.packId} className={templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === pack.packId ? 'selected' : ''} onClick={() => setTemplateSelection({ selectedPackId: pack.packId, templateSource: 'workspace' })}>{displayPackTitle(pack.title)} <small>{pack.questions.length} вопросов · v{pack.packVersion}</small></button>)}</div>}
-            {activeQuizPack && <p className="room-template-hint">Выбрано: {displayPackTitle(activeQuizPack.title)} · {activeQuizPack.questions.length} вопросов. Комната сохранит независимый snapshot этой версии.</p>}
+            {selectedQuizWorkspacePack && <p className="room-template-hint">Выбрано: {displayPackTitle(selectedQuizWorkspacePack.title)} · {selectedQuizWorkspacePack.questions.length} вопросов. Комната сохранит независимый snapshot этой версии.</p>}
             {quizActionError && <p className="connection-warning">{quizActionError}</p>}
           </>}
   </Glass>
