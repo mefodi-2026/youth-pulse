@@ -549,6 +549,58 @@ export const copyQuizPackToWorkspace = async (workspaceId: string, sourcePackId:
   return copy
 }
 
+/**
+ * Saves an already copied quiz pack. Global quiz packs remain read-only for
+ * leaders: this function accepts only the current leader's workspace copy.
+ */
+export const saveWorkspaceQuizPack = async (workspaceId: string, candidate: ContentPack) => {
+  const services = requireFirebase()
+  await authPersistence
+  const user = services.auth.currentUser
+  if (!user || user.isAnonymous) throw new Error('Войдите как ведущий, чтобы изменить набор викторины.')
+  if (!workspaceId || candidate.mode !== 'quiz' || candidate.templateOrigin !== 'workspace' || candidate.workspaceId !== workspaceId) {
+    throw new Error('Можно редактировать только личную копию набора викторины.')
+  }
+  const packPath = `workspaces/${workspaceId}/workspacePacks/${candidate.packId}`
+  const [profileSnapshot, workspaceSnapshot, existingSnapshot] = await Promise.all([
+    get(ref(services.db, `users/${user.uid}`)),
+    get(ref(services.db, `workspaces/${workspaceId}`)),
+    get(ref(services.db, packPath)),
+  ])
+  const profile = profileSnapshot.val() as LeaderProfile | null
+  const workspace = workspaceSnapshot.val() as Workspace | null
+  if (!profile || profile.workspaceId !== workspaceId || workspace?.ownerUid !== user.uid) throw new Error('Этот workspace не принадлежит текущему ведущему.')
+  const existing = normalizeContentPack(existingSnapshot.val(), [], { packId: candidate.packId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
+  if (!existing || existing.mode !== 'quiz') throw new Error('Сначала добавьте этот набор в свой workspace.')
+  const now = Date.now()
+  const version = Math.max(existing.version || existing.packVersion || 1, candidate.version || candidate.packVersion || 1) + 1
+  const questions = copyQuestions(candidate.questions)
+  const saved: ContentPack = {
+    ...existing,
+    ...candidate,
+    productId: existing.productId,
+    gameTypeId: existing.gameTypeId,
+    mode: 'quiz',
+    packId: existing.packId,
+    templateOrigin: 'workspace',
+    workspaceId,
+    sourcePackId: existing.sourcePackId,
+    sourcePackVersion: existing.sourcePackVersion,
+    version,
+    packVersion: version,
+    status: existing.status || 'published',
+    createdAt: existing.createdAt || now,
+    createdBy: existing.createdBy || user.uid,
+    copiedAt: existing.copiedAt,
+    copiedBy: existing.copiedBy || user.uid,
+    updatedAt: now,
+    questions,
+    content: { questions: copyQuestions(questions) },
+  }
+  await set(ref(services.db, packPath), saved)
+  return saved
+}
+
 /** Platform-owner-only summary. Rules reject this subscription for ordinary leaders. */
 export const subscribePlatformWorkspaces = (callback: (value: Record<string, Workspace>) => void, onError?: (error: Error) => void) => {
   if (!db) return () => undefined
