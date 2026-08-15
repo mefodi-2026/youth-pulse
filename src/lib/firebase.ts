@@ -165,13 +165,25 @@ export const createDiagnosticTemplateSnapshot = (questionSet: Question[] = built
   capturedAt: Date.now(),
 })
 
+/**
+ * Realtime Database normally restores arrays as arrays, but older packs may
+ * have been written as a keyed object.  Treat both representations as the
+ * same immutable pack content so a valid published pack never appears empty.
+ */
+const readPackQuestions = (value: unknown): Question[] => {
+  if (Array.isArray(value)) return value as Question[]
+  if (value && typeof value === 'object') return Object.values(value as Record<string, Question>)
+  return []
+}
+
 const normalizeContentPack = (value: unknown, _fallbackQuestions: Question[], defaults: Partial<ContentPack>): ContentPack | null => {
   if (!value || typeof value !== 'object') return null
   const raw = value as Partial<ContentPack> & { questions?: Question[] }
-  const questionSet = raw.questions || raw.content?.questions
-  if (!Array.isArray(questionSet)) return null
+  const questionSet = readPackQuestions(raw.questions)
+  const legacyQuestionSet = questionSet.length ? questionSet : readPackQuestions(raw.content?.questions)
+  if (!legacyQuestionSet.length && raw.questions == null && raw.content?.questions == null) return null
   const isQuiz = raw.mode === 'quiz' || raw.gameTypeId === quizGameTypeId || raw.productId === quizProductId || defaults.mode === 'quiz'
-  const orderedQuestions = copyQuestions(isQuiz ? questionSet : orderQuestionsByCategory(questionSet))
+  const orderedQuestions = copyQuestions(isQuiz ? legacyQuestionSet : orderQuestionsByCategory(legacyQuestionSet))
   return {
     productId: raw.productId || defaults.productId || (isQuiz ? quizProductId : diagnosticProductId),
     gameTypeId: raw.gameTypeId || defaults.gameTypeId || (isQuiz ? quizGameTypeId : diagnosticGameTypeId),
