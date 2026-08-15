@@ -482,7 +482,14 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     const selected = templateSelection.templateSource === 'workspace'
       ? (roomDetails.mode === 'quiz' ? workspaceQuizPacks[templateSelection.selectedPackId] : workspacePack)
       : systemPacks[templateSelection.selectedPackId] || null
-    setQuestionBank(selected?.content.questions || (firebaseReady ? [] : questions))
+    // `questions` is the canonical runtime field of a pack. Older records
+    // may only have `content.questions`; using it strictly here made the
+    // diagnostic library show five empty categories even though the published
+    // pack itself contained all of its questions.
+    const selectedQuestions = selected?.questions?.length
+      ? selected.questions
+      : selected?.content?.questions
+    setQuestionBank(selectedQuestions?.length ? selectedQuestions : (firebaseReady ? [] : questions))
   }, [roomDetails.mode, systemPacks, templateSelection, workspacePack, workspaceQuizPacks])
   // A stale selection from an earlier build must not make the published
   // catalogue appear empty. Prefer the canonical diagnostic pack, then the
