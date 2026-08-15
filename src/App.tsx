@@ -489,7 +489,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     // The diagnostic library must never inherit a quiz selection left over
     // from room setup. Quiz has its own pack state; diagnostics use either
     // their explicit workspace copy or the published system diagnostic pack.
-    const selected = templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === diagnosticPackId
+    const selected = templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === diagnosticPackId && workspacePack?.questions.length
       ? workspacePack
       : systemDiagnosticPack || systemPacks[diagnosticPackId] || null
     const selectedQuestions = selected?.questions?.length
@@ -654,7 +654,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     navigate('results', archived.roomId)
   }
   const resultSession = resultRoom === room ? session : archives[resultRoom] || null
-  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} questionCount={questionBank.length} onChooseMode={openRoomSetup} /></HostLayout>
+  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} questionCount={systemDiagnosticPack?.questions.length || questionBank.length} onChooseMode={openRoomSetup} /></HostLayout>
   if (tab === 'rules') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ПОДСКАЗКИ ДЛЯ ВЕДУЩЕГО</p><h1>Правила</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><RulesPanel onStart={() => navigate('currentRoom')} /></HostLayout>
   if (tab === 'profile') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ВАШ АККАУНТ</p><h1>Профиль</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><ProfilePanel profile={leader} /></HostLayout>
   if (tab === 'results' && resultRoom && resultSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={resultSession} participants={Object.keys(resultSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode><header className="host-header host-results-header"><div><p className="eyebrow">РЕЗУЛЬТАТЫ · {resultRoom}</p><h1>Общая картина</h1></div><span className="status">СОХРАНЕНО</span></header><Results room={resultRoom} sessionOverride={resultSession} embedded /></HostLayout>
@@ -699,17 +699,18 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       return
     }
     setQuestionSaving(true)
-    const currentQuestion = editingQuestionId ? questionBank.find(question => question.id === editingQuestionId) : undefined
+    const editableBank = questionBank.some(question => Object.prototype.hasOwnProperty.call(categories, question.category)) ? questionBank : diagnosticQuestions
+    const currentQuestion = editingQuestionId ? editableBank.find(question => question.id === editingQuestionId) : undefined
     const categoryChanged = Boolean(currentQuestion && currentQuestion.category !== questionDraft.category)
     const categoryOrder = currentQuestion && !categoryChanged && currentQuestion.categoryOrder
       ? currentQuestion.categoryOrder
-      : nextCategoryQuestionOrder(questionBank, questionDraft.category, editingQuestionId || undefined)
+      : nextCategoryQuestionOrder(editableBank, questionDraft.category, editingQuestionId || undefined)
     const nextQuestion: Question = { id: editingQuestionId || `${questionDraft.category}-${Date.now()}`, category: questionDraft.category, categoryOrder, title: questionDraft.title.trim(), options: { A: questionDraft.options[0].trim(), B: questionDraft.options[1].trim(), C: questionDraft.options[2].trim(), D: questionDraft.options[3].trim() } }
     const nextBank = editingQuestionId
       ? categoryChanged
-        ? [...questionBank.filter(question => question.id !== editingQuestionId), nextQuestion]
-        : questionBank.map(question => question.id === editingQuestionId ? nextQuestion : question)
-      : [...questionBank, nextQuestion]
+        ? [...editableBank.filter(question => question.id !== editingQuestionId), nextQuestion]
+        : editableBank.map(question => question.id === editingQuestionId ? nextQuestion : question)
+      : [...editableBank, nextQuestion]
     try {
       await persistQuestionBank(nextBank)
       closeQuestionEditor()
@@ -721,7 +722,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     if (!window.confirm(`Удалить вопрос «${question.title}»?`)) return
     setQuestionSaving(true)
     try {
-      await persistQuestionBank(questionBank.filter(item => item.id !== question.id))
+      await persistQuestionBank(diagnosticQuestions.filter(item => item.id !== question.id))
       if (editingQuestionId === question.id) closeQuestionEditor()
     } catch (error) {
       setQuestionError(error instanceof Error ? error.message : 'Не удалось удалить вопрос')
@@ -729,6 +730,9 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   }
   const warning = !firebaseReady ? 'Для работы с несколькими устройствами подключите Firebase: демо-режим синхронизируется только в этом браузере.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Этот QR ведёт на адрес компьютера. После публикации сайта здесь будет общий интернет-адрес.' : ''
   const activeDiagnosticPack = isDiagnosticPack(systemDiagnosticPack) ? systemDiagnosticPack : isDiagnosticPack(systemPacks[diagnosticPackId]) ? systemPacks[diagnosticPackId] : null
+  const diagnosticQuestions = templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === diagnosticPackId && workspacePack?.questions.length
+    ? workspacePack.questions
+    : activeDiagnosticPack?.questions || questionBank
   const quizSystemPacks = Object.values(systemPacks).filter(pack => isQuizPack(pack) && pack.status === 'published')
   const quizWorkspacePacks = Object.values(workspaceQuizPacks).filter(isQuizPack)
   // A system quiz pack is only a candidate to copy. It must never look like
@@ -812,7 +816,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
         : roomDetails.mode === 'diagnostic'
           ? !activeDiagnosticPack && firebaseReady
             ? <><h3>Нет опубликованного диагностического набора</h3><p className="connection-warning">Владелец платформы должен опубликовать системный набор перед созданием комнаты.</p></>
-            : <><h3>{displayPackTitle(activeDiagnosticPack?.title)}</h3><p>{activeDiagnosticPack?.questions.length || questionBank.length} вопросов · версия {activeDiagnosticPack?.packVersion || 1}</p><p>{activeDiagnosticPack?.description || 'Системный набор вопросов для диагностики атмосферы молодёжи.'}</p>{activeDiagnosticPack && activeDiagnosticPack.questions.length === 0 && <p className="connection-warning">В этом наборе пока нет вопросов, поэтому его нельзя использовать для создания комнаты.</p>}</>
+            : <><h3>{displayPackTitle(activeDiagnosticPack?.title)}</h3><p>{diagnosticQuestions.length} вопросов · версия {activeDiagnosticPack?.packVersion || 1}</p><p>{activeDiagnosticPack?.description || 'Системный набор вопросов для диагностики атмосферы молодёжи.'}</p>{activeDiagnosticPack && activeDiagnosticPack.questions.length === 0 && <p className="connection-warning">В этом наборе пока нет вопросов, поэтому его нельзя использовать для создания комнаты.</p>}</>
           : <>
             <h3>Выберите набор викторины</h3>
             <p>Сначала добавьте опубликованный набор в свой workspace. Это создаст вашу отдельную копию и не изменит глобальную библиотеку.</p>
@@ -892,9 +896,9 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
 
   if (tab === 'diagnostic') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">РЕЖИМ · ДИАГНОСТИКА</p><h1>{getModeDefinition(diagnosticMode).title}</h1><p className="room-header-title">{getModeDefinition(diagnosticMode).description}</p></div></header>
-    <Glass className="mode-intro"><p className="eyebrow">ОПУБЛИКОВАННЫЙ НАБОР</p><h2>{displayPackTitle(activeDiagnosticPack?.title)}</h2><p>{activeDiagnosticPack?.questions.length || questionBank.length} вопросов · категории, проценты, пропуск и личные пожелания сохраняются только в диагностике.</p><div className="control-actions"><Button onClick={() => openRoomSetup(diagnosticMode)}>Создать комнату</Button><Button secondary onClick={() => resetQuestionDraft('communication')}>Добавить вопрос в личную копию</Button></div><small>Глобальный набор доступен только для просмотра. Изменения создают и редактируют только личную workspace-копию.</small></Glass>
+    <Glass className="mode-intro"><p className="eyebrow">ОПУБЛИКОВАННЫЙ НАБОР</p><h2>{displayPackTitle(activeDiagnosticPack?.title)}</h2><p>{diagnosticQuestions.length} вопросов · категории, проценты, пропуск и личные пожелания сохраняются только в диагностике.</p><div className="control-actions"><Button onClick={() => openRoomSetup(diagnosticMode)}>Создать комнату</Button><Button secondary onClick={() => resetQuestionDraft('communication')}>Добавить вопрос в личную копию</Button></div><small>Глобальный набор доступен только для просмотра. Изменения создают и редактируют только личную workspace-копию.</small></Glass>
     {questionEditorOpen && <Glass className="question-editor"><p className="eyebrow">{editingQuestionId ? 'РЕДАКТИРОВАНИЕ ЛИЧНОЙ КОПИИ' : 'НОВЫЙ ВОПРОС'}</p><label>Категория<select value={questionDraft.category} onChange={event => setQuestionDraft(previous => ({ ...previous, category: event.target.value as Question['category'] }))}>{Object.entries(categories).map(([id, title]) => <option value={id} key={id}>{title}</option>)}</select></label><label>Текст вопроса<textarea value={questionDraft.title} onChange={event => setQuestionDraft(previous => ({ ...previous, title: event.target.value }))} /></label>{questionDraft.options.map((option, index) => <label key={index}>Вариант {String.fromCharCode(65 + index)}<input value={option} onChange={event => setQuestionDraft(previous => ({ ...previous, options: previous.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} /></label>)}{questionError && <p className="connection-warning">{questionError}</p>}<div className="control-actions"><Button disabled={questionSaving} onClick={() => void saveQuestion()}>{questionSaving ? 'Сохраняем…' : 'Сохранить вопрос'}</Button><Button secondary onClick={closeQuestionEditor}>Отмена</Button></div></Glass>}
-    <div className="question-groups">{Object.entries(categories).map(([categoryId, title]) => { const group = orderQuestionsByCategory(questionBank.filter(question => question.category === categoryId)); return <Glass className="question-group" key={categoryId}><p className="eyebrow">{group.length} ВОПРОСОВ</p><h2>{title}</h2><p className="question-scoring">Стандартный scoring: 3 · 2 · 1 · 0</p>{group.map(question => <article className="question-row" key={question.id}><div><b>{question.categoryOrder || group.indexOf(question) + 1}. {question.title}</b><small>{Object.entries(question.options).map(([key, value]) => `${key}: ${value}`).join(' · ')}</small></div><div><Button secondary onClick={() => editQuestion(question)}>Редактировать</Button><Button secondary onClick={() => void deleteQuestion(question)}>Удалить</Button></div></article>)}</Glass> })}</div>
+    <div className="question-groups">{Object.entries(categories).map(([categoryId, title]) => { const group = orderQuestionsByCategory(diagnosticQuestions.filter(question => question.category === categoryId)); return <Glass className="question-group" key={categoryId}><p className="eyebrow">{group.length} ВОПРОСОВ</p><h2>{title}</h2><p className="question-scoring">Стандартный scoring: 3 · 2 · 1 · 0</p>{group.map(question => <article className="question-row" key={question.id}><div><b>{question.categoryOrder || group.indexOf(question) + 1}. {question.title}</b><small>{Object.entries(question.options).map(([key, value]) => `${key}: ${value}`).join(' · ')}</small></div><div><Button secondary onClick={() => editQuestion(question)}>Редактировать</Button><Button secondary onClick={() => void deleteQuestion(question)}>Удалить</Button></div></article>)}</Glass> })}</div>
   </HostLayout>
 
   if (tab === 'quiz') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
