@@ -1,4 +1,4 @@
-import { resolveSessionScoring, scoreAnswers, scoreQuizAnswers } from './scoring'
+import { resolveSessionScoring, scoreAnswers } from './scoring'
 import { getSessionQuestions, type PackRuleConfig, type Question, type ResponseValue, type Scores, type Session } from '../types'
 
 /**
@@ -60,13 +60,14 @@ export const bibleQuizGameModule: GameModule = {
   defaultRuleConfig: quizRuleConfig,
   normalizeRuleConfig: normalizeQuizRuleConfig,
   getQuestions: (session, legacyFallback) => getSessionQuestions(session, legacyFallback),
-  score: (answers, questionSet) => {
-    const quiz = scoreQuizAnswers(answers, questionSet)
+  // Quiz grading is intentionally performed by the trusted Cloud Function.
+  // Browser code never receives the answer-key data needed to calculate it.
+  score: (_answers, questionSet) => {
     return {
-      total: quiz.percentage,
+      total: 0,
       categories: { communication: 0, forgiveness: 0, service: 0, care: 0, honesty: 0 },
-      points: quiz.correct,
-      maximumPoints: quiz.total,
+      points: 0,
+      maximumPoints: questionSet.length,
       minimumPoints: 0,
     }
   },
@@ -77,5 +78,10 @@ const modules: Record<string, GameModule> = {
   [bibleQuizGameModule.gameTypeId]: bibleQuizGameModule,
 }
 
-/** Unknown types deliberately fall back to the safe diagnostic adapter until a module is registered. */
-export const getGameModule = (gameTypeId?: string) => modules[gameTypeId || ''] || diagnosticGameModule
+/** Legacy rooms without a gameTypeId are diagnostics; explicit unknown types are data errors. */
+export const getGameModule = (gameTypeId?: string) => {
+  if (!gameTypeId) return diagnosticGameModule
+  const module = modules[gameTypeId]
+  if (!module) throw new Error(`Неизвестный игровой модуль: ${gameTypeId}`)
+  return module
+}

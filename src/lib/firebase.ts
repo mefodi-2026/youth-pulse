@@ -1,14 +1,14 @@
 import { initializeApp } from 'firebase/app'
 import { browserLocalPersistence, createUserWithEmailAndPassword, deleteUser, getAuth, onAuthStateChanged, setPersistence, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
 import { equalTo, get, getDatabase, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import { questions as builtInQuestions } from '../data/questions'
-import { bibleQuizStarterPacks } from '../data/bibleQuizPacks'
 import { canUseFeature } from './access'
 import { bibleQuizGameModule, diagnosticGameModule, getGameModule } from './gameRegistry'
 import { getScoringTemplate } from './scoring'
 import { orderQuestionsByCategory } from './questionOrder'
-import { participantQuestionsPath, participantResultPath, privateQuestionsPath, publicRoomPath, roomParticipantPath, roomPath } from '../core/roomService'
-import { getSessionQuestions, type Answer, type ContentPack, type FeedbackItem, type Invite, type LeaderProfile, type Participant, type ParticipantQuestion, type ParticipantQuestionSet, type ParticipantQuizResult, type PrivateQuestionSet, type ProductConfig, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type RoomMode, type ScoringTemplateId, type Session, type SessionArchive, type SessionEvent, type SessionEventType, type SessionPhase, type TemplateSelection, type TemplateSnapshot, type UserStatus, type Workspace, type WorkspaceProduct } from '../types'
+import { participantQuestionsPath, participantResultPath, publicRoomPath, roomParticipantPath, roomParticipantResultsPath, roomPath } from '../core/roomService'
+import { getSessionQuestions, type Answer, type ContentPack, type FeedbackItem, type Invite, type LeaderProfile, type Participant, type ParticipantQuestion, type ParticipantQuestionSet, type ParticipantQuizResult, type ProductConfig, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type RoomMode, type ScoringTemplateId, type Session, type SessionArchive, type SessionEvent, type SessionEventType, type SessionPhase, type TemplateSelection, type TemplateSnapshot, type UserStatus, type Workspace, type WorkspaceProduct } from '../types'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -60,6 +60,7 @@ export const platformProductDefaults: Record<string, ProductConfig> = {
 const app = firebaseReady ? initializeApp(config) : null
 const auth = app ? getAuth(app) : null
 const db = app ? getDatabase(app) : null
+const functions = app ? getFunctions(app, 'europe-west1') : null
 let pendingAnonymousSignIn: Promise<NonNullable<typeof auth>['currentUser']> | null = null
 const authPersistence = auth ? setPersistence(auth, browserLocalPersistence) : Promise.resolve()
 
@@ -73,6 +74,17 @@ export interface RoomPilotDetails {
 
 const copyQuestions = (questionSet: Question[]) => questionSet.map(question => ({ ...question, options: { ...question.options } }))
 const copySettings = (settings: Record<string, boolean | number | string | null>) => ({ ...settings })
+/** All browser-facing packs contain only playable material. Quiz keys remain server-only. */
+const toParticipantQuestions = (questionSet: Question[]): ParticipantQuestion[] => questionSet.map(question => ({ ...question, options: { ...question.options } }))
+const buildPublishedPack = (pack: ContentPack): ContentPack => {
+  const questions = toParticipantQuestions(pack.content.questions) as Question[]
+  return {
+    ...pack,
+    questions,
+    content: { questions: copyQuestions(questions) },
+    publicContent: { questions: toParticipantQuestions(pack.content.questions) },
+  }
+}
 const systemDiagnosticPackTitle = 'Диагностика атмосферы молодёжи'
 const normalizePackTitle = (title: unknown) => {
   const value = typeof title === 'string' ? title.trim() : ''
@@ -122,16 +134,6 @@ const createParticipantQuestionSet = (session: Session): ParticipantQuestionSet 
   }
 }
 
-const createPrivateQuestionSet = (session: Session): PrivateQuestionSet => ({
-  roomId: session.roomId,
-  createdAt: session.createdAt,
-  questions: getSessionQuestions(session, builtInQuestions).map(question => ({
-    id: question.id,
-    ...(question.correctAnswer ? { correctAnswer: question.correctAnswer } : {}),
-    ...(question.explanation ? { explanation: question.explanation } : {}),
-  })),
-})
-
 const createPilotWorkspaceAccess = (productId: string, ownerUid: string, now: number): WorkspaceProduct => ({
   productId,
   ownerUid,
@@ -179,14 +181,21 @@ const readPackQuestions = (value: unknown): Question[] => {
 const normalizeContentPack = (value: unknown, _fallbackQuestions: Question[], defaults: Partial<ContentPack>): ContentPack | null => {
   if (!value || typeof value !== 'object') return null
   const raw = value as Partial<ContentPack> & { questions?: Question[] }
-  const questionSet = readPackQuestions(raw.questions)
-  const legacyQuestionSet = questionSet.length ? questionSet : readPackQuestions(raw.content?.questions)
-  if (!legacyQuestionSet.length && raw.questions == null && raw.content?.questions == null) return null
+  const publicQuestionSet = readPackQuestions(raw.publicContent?.questions)
+  const fullQuestionSet = readPackQuestions(raw.questions)
+  const contentQuestionSet = readPackQuestions(raw.content?.questions)
+  const legacyQuestionSet = fullQuestionSet.length
+    ? fullQuestionSet
+    : (contentQuestionSet.length ? contentQuestionSet : publicQuestionSet)
+  if (!legacyQuestionSet.length && raw.questions == null && raw.content?.questions == null && raw.publicContent?.questions == null) return null
   const isQuiz = raw.mode === 'quiz' || raw.gameTypeId === quizGameTypeId || raw.productId === quizProductId || defaults.mode === 'quiz'
+  const resolvedGameTypeId = raw.gameTypeId || defaults.gameTypeId || (isQuiz ? quizGameTypeId : diagnosticGameTypeId)
+  let module
+  try { module = getGameModule(resolvedGameTypeId) } catch { return null }
   const orderedQuestions = copyQuestions(isQuiz ? legacyQuestionSet : orderQuestionsByCategory(legacyQuestionSet))
   return {
     productId: raw.productId || defaults.productId || (isQuiz ? quizProductId : diagnosticProductId),
-    gameTypeId: raw.gameTypeId || defaults.gameTypeId || (isQuiz ? quizGameTypeId : diagnosticGameTypeId),
+    gameTypeId: resolvedGameTypeId,
     ...(isQuiz ? { mode: 'quiz' as const, ...(raw.difficulty ? { difficulty: raw.difficulty } : {}) } : { mode: 'diagnostic' as const }),
     packId: raw.packId || defaults.packId || diagnosticPackId,
     version: raw.version || raw.packVersion || defaults.version || defaults.packVersion || diagnosticPackVersion,
@@ -198,9 +207,10 @@ const normalizeContentPack = (value: unknown, _fallbackQuestions: Question[], de
     description: raw.description || defaults.description || defaultPackDescription,
     questions: orderedQuestions,
     content: { questions: orderedQuestions },
+    ...(publicQuestionSet.length ? { publicContent: { questions: toParticipantQuestions(publicQuestionSet) } } : {}),
     settings: copySettings(raw.settings || defaults.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
-    ruleConfig: getGameModule(raw.gameTypeId || defaults.gameTypeId).normalizeRuleConfig(raw.ruleConfig || defaults.ruleConfig),
-    contentSchemaVersion: raw.contentSchemaVersion || defaults.contentSchemaVersion || getGameModule(raw.gameTypeId || defaults.gameTypeId).contentSchemaVersion,
+    ruleConfig: module.normalizeRuleConfig(raw.ruleConfig || defaults.ruleConfig),
+    contentSchemaVersion: raw.contentSchemaVersion || defaults.contentSchemaVersion || module.contentSchemaVersion,
     ...(raw.workspaceId || defaults.workspaceId ? { workspaceId: raw.workspaceId || defaults.workspaceId } : {}),
     ...(raw.createdAt || defaults.createdAt ? { createdAt: raw.createdAt || defaults.createdAt } : {}),
     ...(raw.updatedAt || defaults.updatedAt ? { updatedAt: raw.updatedAt || defaults.updatedAt } : {}),
@@ -235,7 +245,7 @@ export const resolveDiagnosticTemplate = async (workspaceId?: string, selection:
         // Read-only migration fallback. New data is never written to this root.
         { path: `workspacePacks/${workspaceId}/${selection.selectedPackId}`, defaults: { workspaceId, packId: selection.selectedPackId, templateOrigin: 'workspace' } },
       ]
-    : [{ path: `globalPacks/${selection.selectedPackId}`, defaults: { packId: selection.selectedPackId, templateOrigin: 'system' } }]
+    : [{ path: `publishedPacks/${selection.selectedPackId}`, defaults: { packId: selection.selectedPackId, templateOrigin: 'system' } }]
   for (const candidate of candidates) {
     try {
       const snapshot = await get(ref(db, candidate.path))
@@ -260,10 +270,16 @@ export const resolveRoomTemplate = async (workspaceId: string | undefined, selec
   // Diagnostics use the published system material directly. Quiz packs are
   // deliberately resolved from a leader-owned workspace copy. Keeping this
   // decision here prevents a stale UI selection from mixing the two modes.
-  const effectiveSelection = mode === 'diagnostic' ? defaultDiagnosticTemplateSelection : selection
+  const effectiveSelection = selection
+  if (!effectiveSelection.selectedPackId) throw new Error('Выберите набор вопросов перед созданием комнаты.')
+  if (mode === 'quiz' && effectiveSelection.templateSource !== 'workspace') {
+    throw new Error('Для викторины сначала добавьте опубликованный набор в свой workspace.')
+  }
   const path = effectiveSelection.templateSource === 'workspace' && workspaceId
-    ? `workspaces/${workspaceId}/workspacePacks/${effectiveSelection.selectedPackId}`
-    : `globalPacks/${effectiveSelection.selectedPackId}`
+    ? (mode === 'quiz'
+        ? `workspaces/${workspaceId}/workspacePackPublics/${effectiveSelection.selectedPackId}`
+        : `workspaces/${workspaceId}/workspacePacks/${effectiveSelection.selectedPackId}`)
+    : `publishedPacks/${effectiveSelection.selectedPackId}`
   const snapshot = await get(ref(db, path))
   const pack = normalizeContentPack(snapshot.val(), [], { packId: effectiveSelection.selectedPackId, templateOrigin: effectiveSelection.templateSource, workspaceId, mode })
   if (!pack || pack.status !== 'published') throw new Error('Выбранный набор недоступен или не опубликован.')
@@ -455,9 +471,15 @@ export const subscribeParticipantQuizResult = (roomId: string, participantId: st
   return onValue(ref(db, participantResultPath(roomId, participantId)), snapshot => callback((snapshot.val() || null) as ParticipantQuizResult | null), error => onError?.(error))
 }
 
+/** Host-only aggregate read. The Rules deny this root to participants. */
+export const subscribeRoomQuizResults = (roomId: string, callback: (value: Record<string, ParticipantQuizResult>) => void, onError?: (error: Error) => void) => {
+  if (!db || !roomId) { callback({}); return () => undefined }
+  return onValue(ref(db, roomParticipantResultsPath(roomId)), snapshot => callback((snapshot.val() || {}) as Record<string, ParticipantQuizResult>), error => onError?.(error))
+}
+
 export const subscribeGlobalPack = (packId: string, callback: (value: ContentPack | null) => void, onError?: (error: Error) => void) => {
   if (!db) return () => undefined
-  return onValue(ref(db, `globalPacks/${packId}`), snapshot => callback(normalizeContentPack(snapshot.val(), builtInQuestions, { packId, templateOrigin: 'system' })), error => onError?.(error))
+  return onValue(ref(db, `publishedPacks/${packId}`), snapshot => callback(normalizeContentPack(snapshot.val(), builtInQuestions, { packId, templateOrigin: 'system' })), error => onError?.(error))
 }
 
 /**
@@ -475,22 +497,12 @@ export const subscribePublishedGlobalPacks = (callback: (value: Record<string, C
     })) as Record<string, ContentPack>
     callback(packs)
   }
-  const publishedPacks = query(ref(db, 'globalPacks'), orderByChild('status'), equalTo('published'))
-  let unsubscribeLegacy: () => void = () => undefined
-  const subscribeLegacyActivePacks = () => {
-    const legacyPacks = query(ref(db, 'globalPacks'), orderByChild('status'), equalTo('active'))
-    unsubscribeLegacy = onValue(legacyPacks, toPacks, error => onError?.(error))
-  }
+  const publishedPacks = query(ref(db, 'publishedPacks'), orderByChild('status'), equalTo('published'))
   const unsubscribePublished = onValue(publishedPacks, snapshot => {
     if (snapshot.exists()) toPacks(snapshot)
     else callback({})
-  }, error => {
-    // Compatibility for the already deployed pilot Rules while the canonical
-    // `published` status is being rolled out. New Rules never grant this read.
-    if ((error as { code?: string }).code === 'PERMISSION_DENIED') subscribeLegacyActivePacks()
-    else onError?.(error)
-  })
-  return () => { unsubscribePublished(); unsubscribeLegacy() }
+  }, error => onError?.(error))
+  return () => unsubscribePublished()
 }
 
 export const subscribeWorkspacePack = (workspaceId: string, packId: string, callback: (value: ContentPack | null) => void, onError?: (error: Error) => void) => {
@@ -511,7 +523,7 @@ export const subscribeWorkspacePack = (workspaceId: string, packId: string, call
 /** Quiz copies live under the workspace document, unlike the legacy diagnostic editor path. */
 export const subscribeWorkspaceQuizPacks = (workspaceId: string, callback: (value: Record<string, ContentPack>) => void, onError?: (error: Error) => void) => {
   if (!db || !workspaceId) { callback({}); return () => undefined }
-  return onValue(ref(db, `workspaces/${workspaceId}/workspacePacks`), snapshot => {
+  return onValue(ref(db, `workspaces/${workspaceId}/workspacePackPublics`), snapshot => {
     const raw = (snapshot.val() || {}) as Record<string, unknown>
     const packs = Object.fromEntries(Object.entries(raw).flatMap(([packId, value]) => {
       const pack = normalizeContentPack(value, [], { packId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
@@ -527,90 +539,30 @@ export const copyQuizPackToWorkspace = async (workspaceId: string, sourcePackId:
   await authPersistence
   const user = services.auth.currentUser
   if (!user || user.isAnonymous) throw new Error('Войдите как ведущий, чтобы добавить набор в workspace.')
-  const [profileSnapshot, workspaceSnapshot, sourceSnapshot, existingSnapshot] = await Promise.all([
-    get(ref(services.db, `users/${user.uid}`)),
-    get(ref(services.db, `workspaces/${workspaceId}`)),
-    get(ref(services.db, `globalPacks/${sourcePackId}`)),
-    get(ref(services.db, `workspaces/${workspaceId}/workspacePacks/${sourcePackId}`)),
-  ])
-  const profile = profileSnapshot.val() as LeaderProfile | null
-  const workspace = workspaceSnapshot.val() as Workspace | null
-  if (!profile || profile.workspaceId !== workspaceId || workspace?.ownerUid !== user.uid) throw new Error('Этот workspace не принадлежит текущему ведущему.')
-  const source = normalizeContentPack(sourceSnapshot.val(), [], { packId: sourcePackId, templateOrigin: 'system', mode: 'quiz' })
-  if (!source || source.status !== 'published' || source.mode !== 'quiz') throw new Error('Этот набор викторины недоступен для копирования.')
-  const existing = existingSnapshot.exists()
-    ? normalizeContentPack(existingSnapshot.val(), [], { packId: sourcePackId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
-    : null
-  if (existing && existing.sourcePackVersion === source.packVersion) return existing
-  const now = Date.now()
-  const copy: ContentPack = {
-    ...source,
-    templateOrigin: 'workspace',
-    workspaceId,
-    sourcePackId: source.sourcePackId || source.packId,
-    sourcePackVersion: source.packVersion,
-    copiedBy: user.uid,
-    copiedAt: now,
-    createdAt: existing?.createdAt || now,
-    updatedAt: now,
-    createdBy: user.uid,
-    questions: copyQuestions(source.questions),
-    content: { questions: copyQuestions(source.questions) },
-  }
-  await set(ref(services.db, `workspaces/${workspaceId}/workspacePacks/${sourcePackId}`), copy)
-  return copy
-}
-
-/**
- * Saves an already copied quiz pack. Global quiz packs remain read-only for
- * leaders: this function accepts only the current leader's workspace copy.
- */
-export const saveWorkspaceQuizPack = async (workspaceId: string, candidate: ContentPack) => {
-  const services = requireFirebase()
-  await authPersistence
-  const user = services.auth.currentUser
-  if (!user || user.isAnonymous) throw new Error('Войдите как ведущий, чтобы изменить набор викторины.')
-  if (!workspaceId || candidate.mode !== 'quiz' || candidate.templateOrigin !== 'workspace' || candidate.workspaceId !== workspaceId) {
-    throw new Error('Можно редактировать только личную копию набора викторины.')
-  }
-  const packPath = `workspaces/${workspaceId}/workspacePacks/${candidate.packId}`
   const [profileSnapshot, workspaceSnapshot, existingSnapshot] = await Promise.all([
     get(ref(services.db, `users/${user.uid}`)),
     get(ref(services.db, `workspaces/${workspaceId}`)),
-    get(ref(services.db, packPath)),
+    get(ref(services.db, `workspaces/${workspaceId}/workspacePackPublics/${sourcePackId}`)),
   ])
   const profile = profileSnapshot.val() as LeaderProfile | null
   const workspace = workspaceSnapshot.val() as Workspace | null
   if (!profile || profile.workspaceId !== workspaceId || workspace?.ownerUid !== user.uid) throw new Error('Этот workspace не принадлежит текущему ведущему.')
-  const existing = normalizeContentPack(existingSnapshot.val(), [], { packId: candidate.packId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
-  if (!existing || existing.mode !== 'quiz') throw new Error('Сначала добавьте этот набор в свой workspace.')
-  const now = Date.now()
-  const version = Math.max(existing.version || existing.packVersion || 1, candidate.version || candidate.packVersion || 1) + 1
-  const questions = copyQuestions(candidate.questions)
-  const saved: ContentPack = {
-    ...existing,
-    ...candidate,
-    productId: existing.productId,
-    gameTypeId: existing.gameTypeId,
-    mode: 'quiz',
-    packId: existing.packId,
-    templateOrigin: 'workspace',
-    workspaceId,
-    sourcePackId: existing.sourcePackId,
-    sourcePackVersion: existing.sourcePackVersion,
-    version,
-    packVersion: version,
-    status: existing.status || 'published',
-    createdAt: existing.createdAt || now,
-    createdBy: existing.createdBy || user.uid,
-    copiedAt: existing.copiedAt,
-    copiedBy: existing.copiedBy || user.uid,
-    updatedAt: now,
-    questions,
-    content: { questions: copyQuestions(questions) },
+  const existing = existingSnapshot.exists()
+    ? normalizeContentPack(existingSnapshot.val(), [], { packId: sourcePackId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
+    : null
+  // A personal copy is never silently overwritten by an upstream global update.
+  if (existing) return existing
+  if (!functions) throw new Error('Сервис безопасного копирования викторины недоступен.')
+  try {
+    await httpsCallable(functions, 'copyQuizPackToWorkspace')({ workspaceId, sourcePackId })
+    const copiedSnapshot = await get(ref(services.db, `workspaces/${workspaceId}/workspacePackPublics/${sourcePackId}`))
+    const copied = normalizeContentPack(copiedSnapshot.val(), [], { packId: sourcePackId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
+    if (!copied) throw new Error('Копия набора не появилась в рабочем пространстве.')
+    return copied
+  } catch (error) {
+    console.error('quiz pack copy rejected', { workspaceId, sourcePackId, uid: user.uid, error })
+    throw new Error('Не удалось добавить набор в workspace. Проверьте доступ ведущего и повторите попытку.')
   }
-  await set(ref(services.db, packPath), saved)
-  return saved
 }
 
 /** Platform-owner-only summary. Rules reject this subscription for ordinary leaders. */
@@ -771,22 +723,19 @@ export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
     updatedAt: now,
     createdBy: existing?.createdBy || services.auth.currentUser?.uid,
   }
-  await set(ref(services.db, `globalPacks/${pack.packId}`), pack)
+  // The private source is owner-only. Leaders receive the separate sanitized
+  // projection from /publishedPacks and therefore never download quiz keys.
+  await update(ref(services.db), {
+    [`globalPacks/${pack.packId}`]: pack,
+    [`publishedPacks/${pack.packId}`]: buildPublishedPack(pack),
+  })
   return pack
 }
 
-/** Owner-triggered, idempotent creation of the three published quiz starter packs. */
+/** Starter quiz content is intentionally provisioned through the secure owner
+ * workflow; answer keys must never be embedded in the web application. */
 export const seedBibleQuizStarterPacks = async () => {
-  const services = requireFirebase()
-  await authPersistence
-  if (!await isPlatformOwner()) throw new Error('Только владелец платформы может публиковать системные наборы.')
-  const created: ContentPack[] = []
-  for (const source of bibleQuizStarterPacks) {
-    const snapshot = await get(ref(services.db, `globalPacks/${source.packId}`))
-    if (snapshot.exists()) continue
-    created.push(await saveGlobalPackAsOwner({ ...source, version: 1, packVersion: 1 }))
-  }
-  return created
+  throw new Error('Стартовые наборы викторины создаются владельцем через защищённый серверный импорт.')
 }
 
 /**
@@ -841,7 +790,10 @@ export const seedDefaultGlobalPack = async () => {
     updatedAt: now,
     createdBy: existingRaw?.createdBy || user.uid,
   }
-  await set(ref(services.db, `globalPacks/${diagnosticPackId}`), pack)
+  await update(ref(services.db), {
+    [`globalPacks/${diagnosticPackId}`]: pack,
+    [`publishedPacks/${diagnosticPackId}`]: buildPublishedPack(pack),
+  })
   return pack
 }
 
@@ -916,6 +868,7 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
     gameTypeId: template.gameTypeId,
     packId: template.packId,
     packVersion: template.packVersion,
+    snapshotId: `${template.templateOrigin}:${template.packId}:v${template.packVersion}:${createdAt}`,
     ...(!isQuiz ? { scoringTemplateId: scoring.scoringTemplateId, scoringTemplateVersion: scoring.scoringTemplateVersion, scoringMap: { ...scoring.scoringMap } } : {}),
     sourcePackId: template.sourcePackId || template.packId,
     packUpdatedAt: template.updatedAt || template.capturedAt,
@@ -951,15 +904,32 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
   if (!currentUser || currentUser.isAnonymous || currentUser.uid !== hostUid) throw new Error('Сеанс ведущего не подтверждён. Войдите в аккаунт ещё раз и повторите создание комнаты.')
   if (!workspaceId) throw new Error('Для создания комнаты нужно рабочее пространство.')
   const mode = pilotDetails?.mode || 'diagnostic'
-  const effectiveSelection = mode === 'diagnostic' ? defaultDiagnosticTemplateSelection : templateSelection
+  const effectiveSelection = templateSelection
   if (mode === 'quiz' && effectiveSelection.templateSource !== 'workspace') {
     throw new Error('Для викторины сначала добавьте опубликованный набор в свой workspace.')
   }
   await assertRoomCreationAccess(hostUid, workspaceId, mode === 'quiz' ? quizProductId : diagnosticProductId)
-  // Refreshes only the leader's personal copy when the published source pack
-  // received a newer version. Existing sessions never change: they use their
-  // immutable templateSnapshot.
-  if (mode === 'quiz') await copyQuizPackToWorkspace(workspaceId, effectiveSelection.selectedPackId)
+  if (mode === 'quiz') {
+    if (!functions) throw new Error('Сервис безопасного создания викторины недоступен.')
+    try {
+      await httpsCallable(functions, 'createQuizRoom')({
+        roomId,
+        workspaceId,
+        packId: effectiveSelection.selectedPackId,
+        roomTitle,
+        pilotDetails: { ...pilotDetails, mode: 'quiz' },
+      })
+      const created = await get(ref(services.db, roomPath(roomId)))
+      if (!created.exists()) throw new Error('Сервер не вернул созданную комнату викторины.')
+      return created.val() as Session
+    } catch (reason) {
+      const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code) : ''
+      console.error('secure quiz room creation rejected', { roomId, workspaceId, packId: effectiveSelection.selectedPackId, code, reason })
+      throw new Error(code.includes('permission')
+        ? 'Firebase отклонил создание викторины. Проверьте Rules и доступ ведущего.'
+        : 'Не удалось безопасно создать комнату викторины. Повторите попытку.')
+    }
+  }
   const template = await resolveRoomTemplate(workspaceId, effectiveSelection, mode)
   const session = createSessionRecord(roomId, hostUid, questionSet, workspaceId, template, effectiveSelection, roomTitle, pilotDetails, scoringTemplateId)
   // `sessions` is the canonical room record. Participant-facing data is written
@@ -988,15 +958,13 @@ export const ensureParticipantRoomData = async (roomId: string, knownSession?: S
   const services = requireFirebase()
   const session = knownSession || (await assertCurrentUserIsRoomHost(roomId)).session
   if (session.roomId !== roomId) throw new Error('Идентификатор комнаты не совпадает с данными сессии.')
-  const [publicSnapshot, participantQuestionsSnapshot, privateQuestionsSnapshot] = await Promise.all([
+  const [publicSnapshot, participantQuestionsSnapshot] = await Promise.all([
     get(ref(services.db, publicRoomPath(roomId))),
     get(ref(services.db, participantQuestionsPath(roomId))),
-    get(ref(services.db, privateQuestionsPath(roomId))),
   ])
   const patch: Record<string, unknown> = {}
   if (!publicSnapshot.exists()) patch[publicRoomPath(roomId)] = createPublicRoom(session)
   if (!participantQuestionsSnapshot.exists()) patch[participantQuestionsPath(roomId)] = createParticipantQuestionSet(session)
-  if (!privateQuestionsSnapshot.exists()) patch[privateQuestionsPath(roomId)] = createPrivateQuestionSet(session)
   if (Object.keys(patch).length) await update(ref(services.db), patch)
 }
 
@@ -1048,21 +1016,6 @@ export const updatePhase = async (roomId: string, phase: SessionPhase, expectedH
   const eventType: SessionEventType | null = phase === 'live' ? 'room_started' : phase === 'closed' ? 'room_closed' : null
   const event: SessionEvent | null = eventType ? { id: eventType, type: eventType, roomId, ...(services.session.workspaceId ? { workspaceId: services.session.workspaceId } : {}), hostUid: services.session.hostUid, createdAt: timestamp } : null
   await ensureParticipantRoomData(roomId, services.session)
-  const quizResultPatch: Record<string, ParticipantQuizResult> = {}
-  if (phase === 'resultsIntro' && (services.session.mode === 'quiz' || services.session.gameTypeId === quizGameTypeId)) {
-    const privateQuestions = getSessionQuestions(services.session, [])
-    for (const participant of Object.values(services.session.participants || {})) {
-      if (participant.status !== 'finished') continue
-      const scored = bibleQuizGameModule.score(participant.answers || {}, privateQuestions, services.session)
-      quizResultPatch[participantResultPath(roomId, participant.id)] = {
-        participantId: participant.id,
-        correct: Math.round(scored.points || 0),
-        total: privateQuestions.length,
-        percentage: Math.round(scored.total),
-        releasedAt: timestamp,
-      }
-    }
-  }
   const patch: Record<string, unknown> = phase === 'resultsIntro'
     ? { [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/resultsIntroStartedAt`]: timestamp, [`${publicRoomPath(roomId)}/phase`]: phase }
     : phase === 'closed'
@@ -1070,7 +1023,6 @@ export const updatePhase = async (roomId: string, phase: SessionPhase, expectedH
       : phase === 'live'
         ? { [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/startedAt`]: services.session.startedAt || timestamp, [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount, [`sessions/${roomId}/events/${event?.id}`]: event, [`${publicRoomPath(roomId)}/phase`]: phase }
         : { [`sessions/${roomId}/phase`]: phase, [`${publicRoomPath(roomId)}/phase`]: phase }
-  Object.assign(patch, quizResultPatch)
   await update(ref(services.db), patch)
 }
 
@@ -1176,6 +1128,21 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
   const storedParticipant = participantSnapshot.val() as Participant | null
   if (!storedParticipant) throw new Error('Участник не найден в комнате. Подключитесь заново.')
   if (storedParticipant.id !== currentUser.uid) throw new Error('Participant record does not belong to the current Firebase user.')
+  if (publicRoom.mode === 'quiz') {
+    if (answer === 'SKIP') throw new Error('В викторине нельзя пропустить вопрос.')
+    if (!functions) throw new Error('Проверка викторины временно недоступна.')
+    try {
+      const result = await httpsCallable(functions, 'submitQuizAnswer')({ roomId, questionId, answer })
+      const data = result.data as { nextIndex?: number; status?: Participant['status'] }
+      const refreshed = await get(ref(services.db, roomParticipantPath(roomId, participant.id)))
+      const next = refreshed.val() as Participant | null
+      if (!next || next.currentQuestionIndex !== data.nextIndex) throw new Error('Ответ не был подтверждён сервером.')
+      return next
+    } catch (error) {
+      console.error('quiz answer rejected by trusted handler', { roomId, participantId: participant.id, questionId, error })
+      throw new Error('Ответ не сохранён. Проверьте подключение к викторине и попробуйте ещё раз.')
+    }
+  }
   const finished = nextIndex >= totalQuestions
   const next: Participant = {
     ...storedParticipant,

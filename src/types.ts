@@ -34,13 +34,11 @@ export interface Question {
   categoryOrder?: number
   title: string
   options: Record<Answer, string>
-  /** Quiz-only answer key. It is captured inside the room snapshot. */
-  correctAnswer?: Answer
-  /** Optional short explanation for a future post-game review. */
-  explanation?: string
 }
 export interface PackSettings { [key: string]: boolean | number | string | null }
 export interface PackContent { questions: Question[] }
+/** Material that may be exposed while selecting a pack or playing a room. */
+export interface PublicPackContent { questions: ParticipantQuestion[] }
 export interface PackScoringSnapshot {
   /** Present on rooms created after the scoring-template setup was added. */
   scoringTemplateId?: ScoringTemplateId
@@ -84,6 +82,7 @@ export interface ContentPack {
   /** Canonical content field for global packs. `content.questions` stays as a legacy mirror. */
   questions: Question[]
   content: PackContent
+  publicContent?: PublicPackContent
   settings: PackSettings
   /** Declarative, allow-listed options. It is never interpreted as executable code. */
   ruleConfig?: PackRuleConfig
@@ -194,6 +193,8 @@ export interface Session {
   packVersion?: PackVersion
   /** Source-pack modification time captured during room creation. */
   packUpdatedAt?: number
+  /** Immutable source snapshot identity captured at room creation. */
+  snapshotId?: string
   /** Compact immutable snapshot required by the room contract. */
   packSnapshot?: PackSnapshot
   /** Room-level settings captured from the selected pack at creation. */
@@ -268,12 +269,6 @@ export interface ParticipantQuestionSet {
   packTitle?: string
   scoringTemplateId?: ScoringTemplateId
   questions: ParticipantQuestion[]
-}
-/** Private answer-key material for a room, readable only by host/platform owner. */
-export interface PrivateQuestionSet {
-  roomId: string
-  createdAt: number
-  questions: Array<Pick<Question, 'id' | 'correctAnswer' | 'explanation'>>
 }
 export interface ParticipantQuizResult {
   participantId: string

@@ -3,7 +3,7 @@ import { categories, questions } from './data/questions'
 import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeParticipantQuestionSet, subscribeParticipantQuizResult, subscribeParticipantRecord, subscribePublicRoom, subscribeRoomLobby, waitForAuthPersistence } from './lib/firebase'
 import { getGameModule } from './lib/gameRegistry'
 import { downloadWishPng, printWish } from './lib/export'
-import { type Answer, type Participant, type ParticipantQuestionSet, type ParticipantQuizResult, type PublicRoom, type ResponseValue, type RoomLobby, type Scores, type Session } from './types'
+import { type Answer, type Participant, type ParticipantQuestionSet, type ParticipantQuizResult, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type Scores, type Session } from './types'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -109,7 +109,13 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   const [showReport, setShowReport] = useState(false)
   const [authReady, setAuthReady] = useState(!firebaseReady)
   const [authUid, setAuthUid] = useState('')
-  const activeQuestions = getGameModule(session?.gameTypeId).getQuestions(session, questions)
+  let activeQuestions: Question[] = []
+  let moduleError = ''
+  try {
+    activeQuestions = getGameModule(session?.gameTypeId).getQuestions(session, questions)
+  } catch (error) {
+    moduleError = error instanceof Error ? error.message : 'Не удалось определить режим комнаты.'
+  }
   const isQuiz = session?.mode === 'quiz' || session?.gameTypeId === 'quiz' || lobby?.mode === 'quiz'
   const introQuestionCount = isQuiz ? (session ? activeQuestions.length : 15) : activeQuestions.length
 
@@ -188,6 +194,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
 
   if (!room) return <Shell screen="intro-screen"><p className="flow-label">ОНЛАЙН-ДИАГНОСТИКА</p><h1>Нужен QR-код ведущего</h1><p>Отсканируйте код, чтобы открыть личную ссылку на диагностику.</p></Shell>
   if (firebaseReady && !authReady) return <Shell screen="waiting-screen"><p className="flow-label">ПОДКЛЮЧАЕМ</p><h1>Проверяем подключение</h1><p>Восстанавливаем безопасную сессию участника.</p></Shell>
+  if (moduleError) return <Shell screen="waiting-screen"><p className="flow-label">КОМНАТА НЕДОСТУПНА</p><h1>Неизвестный режим комнаты</h1><p>{moduleError} Попросите ведущего создать комнату заново.</p></Shell>
   if (lobby?.phase === 'closed' || session?.phase === 'closed') return <Shell screen="waiting-screen"><div className="ready-spark">✓</div><p className="flow-label">СЕССИЯ ЗАВЕРШЕНА</p><h1>{isQuiz ? 'Эта викторина уже завершена' : 'Эта диагностика уже завершена'}</h1><p>Ведущий закрыл комнату. Ответы больше не принимаются, а подключиться по этой ссылке нельзя.</p></Shell>
   if (!participant && screen === 'intro') return <Shell screen="intro-screen"><p className="flow-label gold">{isQuiz ? 'БИБЛЕЙСКАЯ ВИКТОРИНА' : 'ОНЛАЙН-ДИАГНОСТИКА'}</p><h1>{isQuiz ? (lobby?.packTitle || session?.packSnapshot?.title || 'Библейская\nвикторина') : <>Атмосфера<br />нашей молодёжи</>}</h1><p>{isQuiz ? 'Проверь свои знания Библии. Выбери один правильный ответ в каждом вопросе.' : 'Небольшая анонимная диагностика, которая помогает увидеть сильные стороны и точки роста.'}</p><div className="intro-info"><b>✦</b><strong>{introQuestionCount} {isQuiz ? 'вопросов викторины' : 'простых вопросов'}</strong><small>{isQuiz ? '1 балл за верный ответ · без таймера' : `${Object.keys(categories).length} тем · в своём темпе · без оценок`}</small><i /><span>{isQuiz ? 'Общий результат появится, когда все участники завершат игру.' : 'В конце ты получишь личную карточку с результатами.'}</span></div><Action onClick={() => setScreen('nickname')}>{isQuiz ? 'Начать викторину' : 'Начать диагностику'}</Action><small className="flow-footnote">{isQuiz ? 'Отвечай внимательно — правильный ответ только один.' : 'Твоя искренность поможет нам стать ближе.'}</small></Shell>
   if (!participant) return <Shell screen="nickname-screen"><p className="flow-label">ШАГ 1 ИЗ 2</p><h1>Как тебя<br />называть?</h1><p>{isQuiz ? 'Укажи имя или никнейм — он появится в общем рейтинге после завершения игры.' : 'Можно указать имя или придумать никнейм — результаты всё равно останутся анонимными.'}</p><input value={name} onChange={event => setName(event.target.value)} placeholder="Например, «Свет»" maxLength={20} /><small className="input-help">{isQuiz ? 'Это имя увидят только в общем результате викторины.' : 'Это нужно только для твоей личной карточки.'}</small>{!isQuiz && <div className="flow-note"><b>Важно</b><p>Нет правильных или неправильных ответов. Главное — отвечать честно.</p></div>}<Action onClick={() => void join()}>Продолжить</Action>{notice && <p className="flow-error">{notice}</p>}</Shell>

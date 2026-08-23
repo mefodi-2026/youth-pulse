@@ -1,0 +1,6 @@
+{
+  "database": { "rules": "firebase-rules.json" },
+  "functions": [
+    { "source": "functions", "codebase": "default", "runtime": "nodejs20" }
+  ]
+}

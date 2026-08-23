@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
-import { archiveSession, copyQuizPackToWorkspace, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, ensureParticipantRoomData, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, quizGameTypeId, registerLeader, saveAnswer, saveWorkspacePack, saveWorkspaceQuizPack, subscribeAuthUser, subscribeGlobalPack, subscribeLeaderProfile, subscribePublishedGlobalPacks, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, subscribeWorkspaceQuizPacks, updatePhase, updateRoomTitle, updateSessionPilotCounts, type RoomPilotDetails } from './lib/firebase'
+import { archiveSession, copyQuizPackToWorkspace, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, ensureParticipantRoomData, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, quizGameTypeId, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeGlobalPack, subscribeLeaderProfile, subscribePublishedGlobalPacks, subscribeRoomQuizResults, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, subscribeWorkspaceQuizPacks, updatePhase, updateRoomTitle, updateSessionPilotCounts, type RoomPilotDetails } from './lib/firebase'
 import { getGameModule } from './lib/gameRegistry'
 import { resolveSessionScoring } from './lib/scoring'
 import { downloadWishPng, printWish } from './lib/export'
@@ -342,9 +342,6 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [workspacePack, setWorkspacePack] = useState<ContentPack | null>(null)
   const [workspaceQuizPacks, setWorkspaceQuizPacks] = useState<Record<string, ContentPack>>({})
   const [quizActionError, setQuizActionError] = useState('')
-  const [quizQuestionDraft, setQuizQuestionDraft] = useState<Question | null>(null)
-  const [quizQuestionIndex, setQuizQuestionIndex] = useState(-1)
-  const [quizQuestionSaving, setQuizQuestionSaving] = useState(false)
   const [questionDraft, setQuestionDraft] = useState({ category: 'communication' as Question['category'], title: '', options: ['', '', '', ''] })
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [questionSaving, setQuestionSaving] = useState(false)
@@ -532,9 +529,13 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       estimatedParticipants: 30,
     })
     setScoringTemplateId('standard-v1')
-    // Diagnostic always uses the published system pack directly. A selection
-    // persisted from a quiz setup must not redirect it to workspace storage.
-    if (mode === diagnosticMode) setTemplateSelection(diagnosticSelection(diagnosticPackId))
+    // A workspace diagnostic copy is intentionally editable per leader. Use
+    // it when it exists; otherwise use the published system pack directly.
+    if (mode === diagnosticMode) {
+      setTemplateSelection(workspacePack?.questions.length
+        ? { selectedPackId: diagnosticPackId, templateSource: 'workspace' }
+        : diagnosticSelection(diagnosticPackId))
+    }
     else {
       const selection = initialQuizSelection(workspaceQuizPacks, systemPacks)
       if (selection) setTemplateSelection(selection)
@@ -553,12 +554,10 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
         city: roomDetails.city.trim() || workspace?.city?.trim() || '',
         mode: roomDetails.mode,
       }
-      const selectionForRoom = roomDetails.mode === diagnosticMode
-        ? diagnosticSelection(diagnosticPackId)
-        : templateSelection
+      const selectionForRoom = templateSelection
       const activePack = roomDetails.mode === 'quiz'
         ? (templateSelection.templateSource === 'workspace' ? workspaceQuizPacks[templateSelection.selectedPackId] : systemPacks[templateSelection.selectedPackId])
-        : activeDiagnosticPack
+        : (templateSelection.templateSource === 'workspace' ? workspacePack || null : activeDiagnosticPack)
       if (roomDetails.mode === 'quiz' && (templateSelection.templateSource !== 'workspace' || !workspaceQuizPacks[templateSelection.selectedPackId])) {
         throw new Error('Сначала добавьте выбранный набор викторины в свой workspace, затем выберите его для комнаты.')
       }
@@ -722,7 +721,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     if (!window.confirm(`Удалить вопрос «${question.title}»?`)) return
     setQuestionSaving(true)
     try {
-      await persistQuestionBank(diagnosticQuestions.filter(item => item.id !== question.id))
+      await persistQuestionBank(questionBank.filter(item => item.id !== question.id))
       if (editingQuestionId === question.id) closeQuestionEditor()
     } catch (error) {
       setQuestionError(error instanceof Error ? error.message : 'Не удалось удалить вопрос')
@@ -752,44 +751,6 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       setTemplateSelection(workspaceQuizSelection(copied.packId))
     } catch (error) {
       setQuizActionError(error instanceof Error ? error.message : 'Не удалось добавить набор викторины в workspace.')
-    }
-  }
-  const editQuizQuestion = (question: Question, index: number) => {
-    if (!selectedQuizWorkspacePack) {
-      setQuizActionError('Для редактирования сначала выберите личную копию набора.')
-      return
-    }
-    setQuizActionError('')
-    setQuizQuestionIndex(index)
-    setQuizQuestionDraft({ ...question, options: { ...question.options } })
-  }
-  const closeQuizQuestionEditor = () => {
-    setQuizQuestionDraft(null)
-    setQuizQuestionIndex(-1)
-  }
-  const saveQuizQuestion = async () => {
-    if (!selectedQuizWorkspacePack || !quizQuestionDraft || quizQuestionIndex < 0) return
-    if (!quizQuestionDraft.title.trim() || Object.values(quizQuestionDraft.options).some(option => !option.trim()) || !quizQuestionDraft.correctAnswer) {
-      setQuizActionError('Заполните текст, все варианты и правильный ответ.')
-      return
-    }
-    setQuizQuestionSaving(true)
-    setQuizActionError('')
-    try {
-      const questions = selectedQuizWorkspacePack.questions.map((question, index) => index === quizQuestionIndex
-        ? { ...quizQuestionDraft, title: quizQuestionDraft.title.trim(), options: { ...quizQuestionDraft.options } }
-        : question)
-      const saved = await saveWorkspaceQuizPack(leader.workspaceId, {
-        ...selectedQuizWorkspacePack,
-        questions,
-        content: { questions },
-      })
-      setWorkspaceQuizPacks(previous => ({ ...previous, [saved.packId]: saved }))
-      closeQuizQuestionEditor()
-    } catch (error) {
-      setQuizActionError(error instanceof Error ? error.message : 'Не удалось сохранить личную копию викторины.')
-    } finally {
-      setQuizQuestionSaving(false)
     }
   }
   const displayPackTitle = (value?: string) => {
@@ -905,8 +866,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     <header className="host-header"><div><p className="eyebrow">РЕЖИМ · ВИКТОРИНА</p><h1>{getModeDefinition(quizMode).title}</h1><p className="room-header-title">{getModeDefinition(quizMode).description}</p></div></header>
     <Glass className="mode-intro"><p className="eyebrow">НОВАЯ ВИКТОРИНА</p><h2>Выберите уровень и начните игру</h2><p>Викторина использует отдельные вопросы, правильные ответы, подсчёт баллов и топ-3. Диагностика не меняется.</p><Button onClick={() => openRoomSetup(quizMode)}>Создать комнату викторины</Button></Glass>
     <div className="quiz-pack-list">{quizSystemPacks.map(pack => { const copied = workspaceQuizPacks[pack.packId]; return <Glass className="quiz-pack-row" key={pack.packId}><div><p className="eyebrow">{pack.difficulty === 'easy' ? 'ЛЁГКИЙ УРОВЕНЬ' : pack.difficulty === 'medium' ? 'СРЕДНИЙ УРОВЕНЬ' : 'СЛОЖНЫЙ УРОВЕНЬ'}</p><h3>{displayPackTitle(pack.title)}</h3><small>{pack.questions.length} вопросов · версия {pack.packVersion}</small></div>{copied ? <Button secondary onClick={() => setTemplateSelection(workspaceQuizSelection(pack.packId))}>Добавлено в workspace</Button> : <Button secondary onClick={() => void addQuizPack(pack)}>Добавить в мой workspace</Button>}</Glass> })}</div>
-    {quizActionError && <p className="connection-warning">{quizActionError}</p>}{selectedQuizPreview && <Glass className="question-group"><p className="eyebrow">ПРОСМОТР НАБОРА</p><h2>{displayPackTitle(selectedQuizPreview.title)}</h2>{selectedQuizPreview.questions.map((question, index) => <article className="question-row" key={question.id}><div><b>{index + 1}. {question.title}</b><small>{Object.entries(question.options).map(([key, value]) => `${key}: ${value}`).join(' · ')}</small></div>{selectedQuizWorkspacePack?.packId === selectedQuizPreview.packId && <Button secondary onClick={() => editQuizQuestion(question, index)}>Редактировать</Button>}</article>)}<small>{selectedQuizWorkspacePack?.packId === selectedQuizPreview.packId ? 'Это ваша личная workspace-копия: можно редактировать её вопросы. Системный набор не меняется.' : 'Системные quiz-наборы доступны только для просмотра. Добавьте набор в workspace, чтобы редактировать личную копию.'}</small></Glass>}
-    {quizQuestionDraft && <Glass className="question-editor"><p className="eyebrow">РЕДАКТИРОВАНИЕ ЛИЧНОЙ КОПИИ ВИКТОРИНЫ</p><label>Текст вопроса<textarea value={quizQuestionDraft.title} onChange={event => setQuizQuestionDraft(previous => previous ? { ...previous, title: event.target.value } : previous)} /></label>{(['A', 'B', 'C', 'D'] as const).map(answer => <label key={answer}>Вариант {answer}<input value={quizQuestionDraft.options[answer]} onChange={event => setQuizQuestionDraft(previous => previous ? { ...previous, options: { ...previous.options, [answer]: event.target.value } } : previous)} /></label>)}<label>Правильный ответ<select value={quizQuestionDraft.correctAnswer || ''} onChange={event => setQuizQuestionDraft(previous => previous ? { ...previous, correctAnswer: event.target.value as Question['correctAnswer'] } : previous)}><option value="">Выберите вариант</option>{(['A', 'B', 'C', 'D'] as const).map(answer => <option value={answer} key={answer}>{answer}</option>)}</select></label><label>Пояснение (видно ведущему)<textarea value={quizQuestionDraft.explanation || ''} onChange={event => setQuizQuestionDraft(previous => previous ? { ...previous, explanation: event.target.value } : previous)} /></label><div className="control-actions"><Button disabled={quizQuestionSaving} onClick={() => void saveQuizQuestion()}>{quizQuestionSaving ? 'Сохраняем…' : 'Сохранить вопрос'}</Button><Button secondary onClick={closeQuizQuestionEditor}>Отмена</Button></div></Glass>}
+    {quizActionError && <p className="connection-warning">{quizActionError}</p>}{selectedQuizPreview && <Glass className="question-group"><p className="eyebrow">ПРОСМОТР НАБОРА</p><h2>{displayPackTitle(selectedQuizPreview.title)}</h2>{selectedQuizPreview.questions.map((question, index) => <article className="question-row" key={question.id}><div><b>{index + 1}. {question.title}</b><small>{Object.entries(question.options).map(([key, value]) => `${key}: ${value}`).join(' · ')}</small></div></article>)}<small>Набор доступен для просмотра и запуска. Ключи ответов и проверка результатов хранятся только в защищённом серверном слое.</small></Glass>}
   </HostLayout>
   const historyFiltersControl = <Glass className="history-filters"><p className="eyebrow">ФИЛЬТРЫ ИСТОРИИ</p><div><input value={historyFilters.query} onChange={event => setHistoryFilters(previous => ({ ...previous, query: event.target.value }))} placeholder="Комната, молодёжка, город или код" /><select value={historyFilters.mode} onChange={event => setHistoryFilters(previous => ({ ...previous, mode: event.target.value as 'all' | RoomMode }))}><option value="all">Все форматы</option><option value="diagnostic">Диагностика</option><option value="quiz">Викторина</option></select><label>С<input type="date" value={historyFilters.from} onChange={event => setHistoryFilters(previous => ({ ...previous, from: event.target.value }))} /></label><label>По<input type="date" value={historyFilters.to} onChange={event => setHistoryFilters(previous => ({ ...previous, to: event.target.value }))} /></label></div></Glass>
   if (!session && tab === 'rooms') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={lastClosedRoom} session={null} participants={0} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
@@ -1063,10 +1023,12 @@ function RoomTabs({ active, mode, onChange }: { active: RoomViewTab; mode?: Room
 }
 
 function QuizResults({ session, embedded }: { session: Session; embedded: boolean }) {
-  const questions = getGameModule('quiz').getQuestions(session, [])
-  const rows = Object.values(session.participants || {}).filter(person => person.status === 'finished').map(person => {
-    const score = getGameModule('quiz').score(person.answers || {}, questions, session)
-    return { person, correct: score.points || 0, total: score.maximumPoints || questions.length, percentage: score.total }
+  const [scoreRecords, setScoreRecords] = useState<Record<string, import('./types').ParticipantQuizResult>>({})
+  useEffect(() => subscribeRoomQuizResults(session.roomId, setScoreRecords), [session.roomId])
+  const people = Object.values(session.participants || {})
+  const rows = people.filter(person => person.status === 'finished').map(person => {
+    const score = scoreRecords[person.id]
+    return { person, correct: score?.correct || 0, total: score?.total || 0, percentage: score?.percentage || 0 }
   }).sort((left, right) => right.correct - left.correct || (left.person.completedAt || Number.MAX_SAFE_INTEGER) - (right.person.completedAt || Number.MAX_SAFE_INTEGER) || left.person.nickname.localeCompare(right.person.nickname, 'ru'))
   const content = <><p className="eyebrow">БИБЛЕЙСКАЯ ВИКТОРИНА · РЕЗУЛЬТАТЫ</p><h1>{session.roomTitle || session.packSnapshot?.title || 'Результаты викторины'}</h1><Glass className="quiz-results-board"><div><b>{rows.length}</b><span>завершили игру</span></div><ol>{rows.slice(0, 3).map((row, index) => <li key={row.person.id}><em>{index + 1}</em><span>{row.person.nickname}</span><strong>{row.correct} из {row.total} · {row.percentage}%</strong></li>)}</ol>{!rows.length && <p>Пока нет завершённых ответов.</p>}</Glass><p className="privacy">Показаны только никнеймы и итоговые баллы. Ответы участников не раскрываются.</p></>
   return embedded ? <div className="results quiz-results">{content}</div> : <main className="results quiz-results">{content}</main>

@@ -15,7 +15,7 @@ export const roomParticipantAnswerPath = (roomId: string, participantId: string,
 export const publicRoomPath = (roomId: string) => `publicRooms/${roomId}`
 export const participantQuestionsPath = (roomId: string) => `roomParticipantQuestions/${roomId}`
 export const participantResultPath = (roomId: string, participantId: string) => `roomParticipantResults/${roomId}/${participantId}`
+export const roomParticipantResultsPath = (roomId: string) => `roomParticipantResults/${roomId}`
 
 /** Private material is host/platform-owner only. */
 export const privateQuestionsPath = (roomId: string) => `roomPrivateQuestions/${roomId}`
-
