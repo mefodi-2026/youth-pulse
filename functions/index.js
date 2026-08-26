@@ -1,8 +1,13 @@
 const { initializeApp, getApps } = require('firebase-admin/app')
 const { getDatabase } = require('firebase-admin/database')
-const { onCall, HttpsError, setGlobalOptions } = require('firebase-functions/v2/https')
+const { onCall, HttpsError } = require('firebase-functions/v2/https')
+const { setGlobalOptions } = require('firebase-functions/v2')
 
-if (!getApps().length) initializeApp()
+if (!getApps().length) {
+  initializeApp({
+    databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://molodeh-c523e-default-rtdb.europe-west1.firebasedatabase.app',
+  })
+}
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 })
 
 const db = getDatabase()
