@@ -8,6 +8,7 @@ import { bibleQuizGameModule, diagnosticGameModule, getGameModule } from './game
 import { getScoringTemplate } from './scoring'
 import { orderQuestionsByCategory } from './questionOrder'
 import { participantQuestionsPath, participantResultPath, publicRoomPath, roomParticipantPath, roomParticipantResultsPath, roomPath } from '../core/roomService'
+import { normalizeQuestionsForMode, resolveCanonicalPackQuestions } from '../modes/contentPackAdapter'
 import { getSessionQuestions, type Answer, type ContentPack, type FeedbackItem, type Invite, type LeaderProfile, type Participant, type ParticipantQuestion, type ParticipantQuestionSet, type ParticipantQuizResult, type ProductConfig, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type RoomMode, type ScoringTemplateId, type Session, type SessionArchive, type SessionEvent, type SessionEventType, type SessionPhase, type TemplateSelection, type TemplateSnapshot, type UserStatus, type Workspace, type WorkspaceProduct } from '../types'
 
 const config = {
@@ -113,8 +114,8 @@ const createPublicRoom = (session: Session): PublicRoom => ({
 
 const toParticipantQuestion = (question: Question): ParticipantQuestion => ({
   id: question.id,
-  category: question.category,
-  ...(question.categoryOrder !== undefined ? { categoryOrder: question.categoryOrder } : {}),
+  ...(question.category ? { category: question.category } : {}),
+  ...('categoryOrder' in question && question.categoryOrder !== undefined ? { categoryOrder: question.categoryOrder } : {}),
   title: question.title,
   options: { ...question.options },
 })
@@ -172,27 +173,17 @@ export const createDiagnosticTemplateSnapshot = (questionSet: Question[] = built
  * have been written as a keyed object.  Treat both representations as the
  * same immutable pack content so a valid published pack never appears empty.
  */
-const readPackQuestions = (value: unknown): Question[] => {
-  if (Array.isArray(value)) return value as Question[]
-  if (value && typeof value === 'object') return Object.values(value as Record<string, Question>)
-  return []
-}
-
 const normalizeContentPack = (value: unknown, _fallbackQuestions: Question[], defaults: Partial<ContentPack>): ContentPack | null => {
   if (!value || typeof value !== 'object') return null
   const raw = value as Partial<ContentPack> & { questions?: Question[] }
-  const publicQuestionSet = readPackQuestions(raw.publicContent?.questions)
-  const fullQuestionSet = readPackQuestions(raw.questions)
-  const contentQuestionSet = readPackQuestions(raw.content?.questions)
-  const legacyQuestionSet = fullQuestionSet.length
-    ? fullQuestionSet
-    : (contentQuestionSet.length ? contentQuestionSet : publicQuestionSet)
+  const publicQuestionSet = resolveCanonicalPackQuestions({ questions: raw.publicContent?.questions })
+  const legacyQuestionSet = resolveCanonicalPackQuestions({ questions: raw.questions, legacyContentQuestions: raw.content?.questions, legacyPublicQuestions: raw.publicContent?.questions })
   if (!legacyQuestionSet.length && raw.questions == null && raw.content?.questions == null && raw.publicContent?.questions == null) return null
   const isQuiz = raw.mode === 'quiz' || raw.gameTypeId === quizGameTypeId || raw.productId === quizProductId || defaults.mode === 'quiz'
   const resolvedGameTypeId = raw.gameTypeId || defaults.gameTypeId || (isQuiz ? quizGameTypeId : diagnosticGameTypeId)
   let module
   try { module = getGameModule(resolvedGameTypeId) } catch { return null }
-  const orderedQuestions = copyQuestions(isQuiz ? legacyQuestionSet : orderQuestionsByCategory(legacyQuestionSet))
+  const orderedQuestions = copyQuestions(normalizeQuestionsForMode(isQuiz ? 'quiz' : 'diagnostic', legacyQuestionSet))
   return {
     productId: raw.productId || defaults.productId || (isQuiz ? quizProductId : diagnosticProductId),
     gameTypeId: resolvedGameTypeId,
@@ -224,7 +215,7 @@ const normalizeContentPack = (value: unknown, _fallbackQuestions: Question[], de
 const createTemplateSnapshot = (source: ContentPack): TemplateSnapshot => {
   const module = getGameModule(source.gameTypeId)
   const isQuiz = source.mode === 'quiz' || source.gameTypeId === quizGameTypeId
-  const questions = copyQuestions(isQuiz ? source.questions : orderQuestionsByCategory(source.questions))
+  const questions = copyQuestions(normalizeQuestionsForMode(isQuiz ? 'quiz' : 'diagnostic', source.questions))
   return {
     ...source,
     mode: isQuiz ? 'quiz' : 'diagnostic',

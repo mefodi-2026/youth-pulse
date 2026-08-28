@@ -1,5 +1,5 @@
 import { categories } from '../data/questions'
-import type { CategoryId, Question } from '../types'
+import type { CategoryId, DiagnosticQuestion, Question } from '../types'
 
 export const diagnosticCategoryOrder = Object.keys(categories) as CategoryId[]
 
@@ -10,8 +10,10 @@ const isPositiveInteger = (value: unknown): value is number => typeof value === 
  * room snapshot. Existing questions without `categoryOrder` retain their
  * current relative order inside their category, then receive one on save.
  */
-export const orderQuestionsByCategory = (questionSet: Question[]): Question[] => {
-  const indexed = questionSet.map((question, index) => ({ question, index }))
+export const orderQuestionsByCategory = (questionSet: Question[]): DiagnosticQuestion[] => {
+  const diagnostic = questionSet.filter((question): question is DiagnosticQuestion => typeof question.category === 'string')
+  if (diagnostic.length !== questionSet.length) throw new Error('Диагностический набор содержит вопрос без категории.')
+  const indexed = diagnostic.map((question, index) => ({ question, index }))
   const known = diagnosticCategoryOrder.flatMap(category => {
     const group = indexed
       .filter(item => item.question.category === category)
@@ -25,13 +27,7 @@ export const orderQuestionsByCategory = (questionSet: Question[]): Question[] =>
     return orderedGroup.map((item, index) => ({ ...item.question, categoryOrder: index + 1 }))
   })
 
-  // Unknown categories are not expected in this diagnostic. Keep them intact
-  // at the end rather than dropping user data from an older pack.
-  const unknown = indexed
-    .filter(item => !diagnosticCategoryOrder.includes(item.question.category))
-    .map(item => ({ ...item.question }))
-
-  return [...known, ...unknown]
+  return known
 }
 
 export const nextCategoryQuestionOrder = (questionSet: Question[], category: CategoryId, excludedQuestionId?: string) =>

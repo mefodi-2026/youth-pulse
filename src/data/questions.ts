@@ -1,12 +1,12 @@
-import type { CategoryId, Question } from '../types'
+import type { CategoryId, DiagnosticQuestion } from '../types'
 
 export const categories: Record<CategoryId, string> = {"communication": "Общение и любовь", "forgiveness": "Прощение и единство", "service": "Духовная жизнь и служение", "care": "Забота и участие", "honesty": "Честность, характер и вера"}
 
-const make = (category: CategoryId, index: number, title: string, options: [string, string, string, string]): Question => ({
+const make = (category: CategoryId, index: number, title: string, options: [string, string, string, string]): DiagnosticQuestion => ({
   id: category + '-' + index, category, title, options: { A: options[0], B: options[1], C: options[2], D: options[3] }
 })
 
-export const questions: Question[] = [
+export const questions: DiagnosticQuestion[] = [
   make("communication", 1, "Как ты реагируешь, когда в молодёжь приходит новичок?", ["Сразу знакомлюсь и вовлекаю в общение.", "Здороваюсь, если оказываюсь рядом.", "Жду, пока он или она подойдёт сам(а).", "Обычно не обращаю внимания."]),
   make("communication", 2, "Как часто ты пишешь людям первым?", ["Регулярно, чтобы поддержать и узнать, как дела.", "Иногда, когда есть повод.", "Редко — обычно жду сообщения.", "Почти никогда."]),
   make("communication", 3, "Как ты поддерживаешь общение с людьми между встречами?", ["Регулярно поддерживаю связь: пишу, звоню и интересуюсь, как у людей дела.", "Иногда поддерживаю связь, когда есть повод.", "Редко проявляю инициативу и обычно жду, пока мне напишут.", "Почти не поддерживаю общение между встречами."]),

@@ -1,65 +1,46 @@
 import type { RoomMode } from '../types'
-import { diagnosticMode } from './diagnostic/contract'
-import { quizMode } from './quiz/contract'
+import type { GameModule, ModeDataContract, ModeSetupPolicy, ModeSurfaceLinks } from './contracts'
+import type { ComponentType } from 'react'
+import type { ParticipantQuestionScreenProps } from './participantTypes'
+import { diagnosticManifest } from './diagnostic/manifest'
+import { quizManifest } from './quiz/manifest'
 
-/**
- * Presentation-level metadata for modes. Game mechanics deliberately stay in
- * their mode contracts and gameRegistry; this file only drives host navigation
- * and makes a future mode additive instead of another App.tsx conditional.
- */
-export interface ModeDefinition {
-  mode: RoomMode
+export interface ModeManifest {
+  /** Registry ID can be extended in tests before RoomMode is expanded in production. */
+  id: string
+  mode: RoomMode | string
   title: string
   description: string
   icon: string
   menuLabel: string
-  setupTab: 'roomSetup'
-  participantRoute: '/join'
-  hostRoute: '/host'
-  resultsRoute: '/host'
+  productionMenu: boolean
+  runtime: GameModule
+  setupPolicy: ModeSetupPolicy
+  participantScreen: ComponentType<ParticipantQuestionScreenProps>
+  routes: { setup: string; participant: string; host: string; results: string }
+  surfaces: ModeSurfaceLinks
+  dataContract: ModeDataContract
   capabilities: readonly string[]
 }
 
-/**
- * Planned modules are intentionally metadata only: they are not routable,
- * cannot create rooms and do not extend RoomMode until their own isolated
- * folder, contract and security review are added.
- */
-export interface PlannedModeBlueprint {
-  id: string
-  title: string
-  description: string
+export const createModeRegistry = <T extends ModeManifest>(manifests: readonly T[]) => {
+  const entries = manifests.map(manifest => [manifest.id, manifest] as const)
+  if (new Set(entries.map(([id]) => id)).size !== entries.length) throw new Error('Mode registry contains duplicate IDs.')
+  return Object.freeze(Object.fromEntries(entries) as Readonly<Record<string, T>>)
 }
 
-export const plannedModeBlueprints: readonly PlannedModeBlueprint[] = [
-  { id: 'wheel-of-fortune', title: 'Колесо фортуны', description: 'Будущий игровой модуль с отдельным контрактом и UI.' },
-]
+const registry = createModeRegistry([diagnosticManifest, quizManifest] as const)
 
-export const modeRegistry: Record<RoomMode, ModeDefinition> = {
-  diagnostic: {
-    mode: diagnosticMode,
-    title: 'Диагностика',
-    description: 'Проведите диагностику атмосферы молодёжи и получите статистику по категориям.',
-    icon: '✦',
-    menuLabel: 'Диагностика',
-    setupTab: 'roomSetup',
-    participantRoute: '/join',
-    hostRoute: '/host',
-    resultsRoute: '/host',
-    capabilities: ['categories', 'personal-report', 'skip', 'scoring-presets'],
-  },
-  quiz: {
-    mode: quizMode,
-    title: 'Библейская викторина',
-    description: 'Проведите викторину по Библии и определите участников с лучшим результатом.',
-    icon: '✦',
-    menuLabel: 'Библейская викторина',
-    setupTab: 'roomSetup',
-    participantRoute: '/join',
-    hostRoute: '/host',
-    resultsRoute: '/host',
-    capabilities: ['difficulty', 'correct-answer', 'top-3', 'workspace-copy'],
-  },
+export const modeRegistry = registry as Readonly<Record<RoomMode, ModeManifest>>
+export const productionModes = Object.values(modeRegistry).filter(manifest => manifest.productionMenu)
+
+/** Old rooms without mode/gameTypeId remain diagnostics by contract. */
+export const getModeManifest = (mode?: string) => {
+  if (!mode) return diagnosticManifest
+  const manifest = registry[mode]
+  if (!manifest) throw new Error(`Неизвестный режим комнаты: ${mode}`)
+  return manifest
 }
 
-export const getModeDefinition = (mode?: RoomMode) => modeRegistry[mode || diagnosticMode]
+/** Compatibility name used by the current host shell. */
+export const getModeDefinition = getModeManifest

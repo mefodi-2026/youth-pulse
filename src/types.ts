@@ -27,14 +27,21 @@ export interface PackRuleConfig {
   scoringMode: 'diagnostic-3-2-1-0' | 'diagnostic-2-1-0-minus-1' | 'quiz-correct-1-0'
 }
 
-export interface Question {
+export interface BaseQuestion {
   id: string
-  category: CategoryId
-  /** Position inside the category. Legacy questions without it use their existing order as a fallback. */
-  categoryOrder?: number
   title: string
   options: Record<Answer, string>
 }
+export interface DiagnosticQuestion extends BaseQuestion {
+  category: CategoryId
+  /** Position inside the category. Legacy questions without it use their existing order as a fallback. */
+  categoryOrder?: number
+}
+/** Quiz content deliberately has no required diagnostic category. */
+export interface QuizQuestion extends BaseQuestion {
+  category?: never
+}
+export type Question = DiagnosticQuestion | QuizQuestion
 export interface PackSettings { [key: string]: boolean | number | string | null }
 export interface PackContent { questions: Question[] }
 /** Material that may be exposed while selecting a pack or playing a room. */
@@ -258,7 +265,7 @@ export interface PublicRoom {
   scoringTemplateId?: ScoringTemplateId
 }
 /** Question shape sent to a participant. Answer keys and explanations are excluded. */
-export type ParticipantQuestion = Omit<Question, 'correctAnswer' | 'explanation'>
+export type ParticipantQuestion = Question
 export interface ParticipantQuestionSet {
   roomId: string
   createdAt: number

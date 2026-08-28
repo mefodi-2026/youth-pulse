@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { questions } from './data/questions'
-import { ensureAuth, firebaseReady, subscribeSession, updatePhase } from './lib/firebase'
+import { ensureAuth, firebaseReady, subscribeSession, updatePhase } from './repositories/firebaseRepository'
 import { getGameModule } from './lib/gameRegistry'
 import { type Participant, type Session } from './types'
 import { appBasePath } from './lib/urls'

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { categories, questions } from './data/questions'
-import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeParticipantQuestionSet, subscribeParticipantQuizResult, subscribeParticipantRecord, subscribePublicRoom, subscribeRoomLobby, waitForAuthPersistence } from './lib/firebase'
+import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeParticipantQuestionSet, subscribeParticipantQuizResult, subscribeParticipantRecord, subscribePublicRoom, subscribeRoomLobby, waitForAuthPersistence } from './repositories/firebaseRepository'
 import { getGameModule } from './lib/gameRegistry'
+import { getModeManifest } from './modes/modeRegistry'
 import { downloadWishPng, printWish } from './lib/export'
 import { type Answer, type Participant, type ParticipantQuestionSet, type ParticipantQuizResult, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type Scores, type Session } from './types'
 
@@ -117,6 +118,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
     moduleError = error instanceof Error ? error.message : 'Не удалось определить режим комнаты.'
   }
   const isQuiz = session?.mode === 'quiz' || session?.gameTypeId === 'quiz' || lobby?.mode === 'quiz'
+  const modeManifest = getModeManifest(isQuiz ? 'quiz' : session?.gameTypeId || lobby?.mode)
   const introQuestionCount = isQuiz ? (session ? activeQuestions.length : 15) : activeQuestions.length
 
   useEffect(() => {
@@ -209,6 +211,6 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   if (participant.status === 'finished') return <PersonalReport participant={participant} scores={getGameModule(session?.gameTypeId).score(participant.answers || {}, activeQuestions, session)} onClose={() => setShowReport(false)} />
   const question = activeQuestions[participant.currentQuestionIndex]
   if (!question) return <Shell screen="waiting-screen"><p className="flow-label">ВОПРОС НЕДОСТУПЕН</p><h1>Не удалось открыть текущий вопрос</h1><p>Обновите страницу. Если проблема останется, обратитесь к ведущему.</p>{notice && <p className="flow-error">{notice}</p>}</Shell>
-  const done = Math.round(participant.currentQuestionIndex / activeQuestions.length * 100)
-  return <Shell screen="question-screen"><div className="question-top"><div><span>ВОПРОС {participant.currentQuestionIndex + 1} / {activeQuestions.length}</span><small>{isQuiz ? (session.packSnapshot?.title || 'Библейская викторина') : categories[question.category]}</small></div><b>{done}%</b></div><div className="question-progress"><i style={{ width: `${done}%` }} /></div><h1 className="question">{question.title}</h1><p>{isQuiz ? 'Выбери один правильный вариант ответа.' : 'Выбери вариант, который ближе всего к тебе.'}</p><div className="options answer-options">{(['A', 'B', 'C', 'D'] as Answer[]).map(letter => <button className="option" disabled={saving} key={letter} onClick={() => void answer(letter)}><b>{letter}</b><span>{question.options[letter]}</span></button>)}</div>{!isQuiz && <div className="question-footer"><Action secondary disabled={saving} onClick={() => void answer('SKIP')}>Пропустить вопрос</Action><small>Но это может стоить вам <b>баллов.</b></small></div>}{notice && <p className="flow-error">{notice}</p>}</Shell>
+  const ModeParticipantScreen = modeManifest.participantScreen
+  return <Shell screen="question-screen"><ModeParticipantScreen question={question} currentIndex={participant.currentQuestionIndex} total={activeQuestions.length} packTitle={session.packSnapshot?.title} saving={saving} notice={notice} onAnswer={value => void answer(value)} /></Shell>
 }

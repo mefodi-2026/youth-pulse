@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { platformProductDefaults, saveProductAsOwner, saveWorkspaceProductAsOwner } from './lib/firebase'
+import { platformProductDefaults, saveProductAsOwner, saveWorkspaceProductAsOwner } from './repositories/firebaseRepository'
 import type { ProductConfig, ProductStatus, Workspace, WorkspaceProduct } from './types'
 
 type ProductMap = Record<string, ProductConfig>

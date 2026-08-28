@@ -1,29 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { categories, questions } from './data/questions'
-import { archiveSession, copyQuizPackToWorkspace, createSession, createSessionRecord, defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, ensureParticipantRoomData, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, quizGameTypeId, registerLeader, saveAnswer, saveWorkspacePack, subscribeAuthUser, subscribeGlobalPack, subscribeLeaderProfile, subscribePublishedGlobalPacks, subscribeRoomQuizResults, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, subscribeWorkspaceQuizPacks, updatePhase, updateRoomTitle, updateSessionPilotCounts, type RoomPilotDetails } from './lib/firebase'
+import { defaultDiagnosticTemplateSelection, defaultRoomTitle, diagnosticPackId, ensureAuth, ensureParticipantRoomData, firebaseReady, isPlatformOwner, joinSession, loginLeader, logoutLeader, markPersonalViewed, quizGameTypeId, registerLeader, saveAnswer, subscribeAuthUser, subscribeGlobalPack, subscribeLeaderProfile, subscribePublishedGlobalPacks, subscribeRoomQuizResults, subscribeSession, subscribeSessionArchives, subscribeWorkspace, subscribeWorkspacePack, subscribeWorkspaceQuizPacks, updateRoomTitle, updateSessionPilotCounts, type RoomPilotDetails } from './repositories/firebaseRepository'
 import { getGameModule } from './lib/gameRegistry'
 import { resolveSessionScoring } from './lib/scoring'
 import { downloadWishPng, printWish } from './lib/export'
 import { StageDashboard } from './StageDashboard'
 import { MobileParticipantFlow } from './MobileParticipantFlow'
-import { type Answer, type ContentPack, type LeaderProfile, type Participant, type Question, type RoomMode, type Scores, type ScoringTemplateId, type Session, type SessionArchive, type SessionPhase, type TemplateSelection, type Workspace } from './types'
+import { type Answer, type ContentPack, type DiagnosticQuestion, type LeaderProfile, type Participant, type Question, type RoomMode, type Scores, type ScoringTemplateId, type Session, type SessionArchive, type SessionPhase, type TemplateSelection, type Workspace } from './types'
 import { appBasePath as getAppBasePath, createJoinUrl } from './lib/urls'
 import { nextCategoryQuestionOrder, orderQuestionsByCategory } from './lib/questionOrder'
 import { OwnerAdmin } from './OwnerAdmin'
-import { diagnosticMode, diagnosticSelection, isDiagnosticPack } from './modes/diagnostic/contract'
-import { initialQuizSelection, isQuizPack, quizMode, workspaceQuizSelection } from './modes/quiz/contract'
+import { diagnosticMode, isDiagnosticPack } from './modes/diagnostic/contract'
+import { isQuizPack, quizMode, workspaceQuizSelection } from './modes/quiz/contract'
 import { getModeDefinition, modeRegistry } from './modes/modeRegistry'
+import { changeRoomPhase, closeRoomAndArchive, createRoom } from './core/useCases/roomLifecycle'
+import { copyQuizWorkspacePack, saveDiagnosticWorkspacePack } from './core/useCases/packOperations'
+import { resolveResultSession, selectWorkspaceArchives } from './core/useCases/archiveResults'
+import { getDemoSession as getDemo, setDemoSession as setDemo } from './core/demoSessionStore'
+import { currentPath, go, queryRoom, replace, useRoute } from './core/navigation'
+import { useRoom } from './core/hooks/useRoom'
 
-const demoKey = (room: string) => `atmosphere-demo-${room}`
-const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
-const setDemo = (session: Session) => { localStorage.setItem(demoKey(session.roomId), JSON.stringify(session)); window.dispatchEvent(new StorageEvent('storage', { key: demoKey(session.roomId) })) }
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
-const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, '')
-const currentPath = () => window.location.pathname.replace(/\/+$/, '') || '/'
-const queryRoom = () => new URLSearchParams(window.location.search).get('room')?.toUpperCase() || ''
-const go = (path: string) => { window.history.pushState({}, '', `${appBasePath}${path}`); window.dispatchEvent(new PopStateEvent('popstate')) }
-const replace = (path: string) => { window.history.replaceState({}, '', `${appBasePath}${path}`); window.dispatchEvent(new PopStateEvent('popstate')) }
 
 const createFeedbackUrl = (formUrl: string, session: Session | null) => {
   if (!formUrl.trim() || !session) return ''
@@ -42,45 +40,6 @@ const createFeedbackUrl = (formUrl: string, session: Session | null) => {
 const Glass = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => <section className={`glass ${className}`}>{children}</section>
 const Button = ({ children, secondary = false, disabled, onClick, className = '' }: { children: React.ReactNode; secondary?: boolean; disabled?: boolean; onClick?: () => void; className?: string }) => <button className={`${secondary ? 'button secondary' : 'button'} ${className}`} disabled={disabled} onClick={onClick}>{children}</button>
 const phaseText = (phase: SessionPhase) => ({ lobby: 'Сбор участников', live: 'Диагностика идёт', personal: 'Личные результаты', resultsIntro: 'Готовим общий результат', resultsReal: 'Общий результат открыт', closed: 'Сессия завершена' })[phase]
-
-function useRoute() {
-  const [path, setPath] = useState(currentPath())
-  useEffect(() => { const listener = () => setPath(currentPath()); window.addEventListener('popstate', listener); return () => window.removeEventListener('popstate', listener) }, [])
-  return path
-}
-
-function useRoom(room: string) {
-  const [session, setSession] = useState<Session | null>(() => room ? getDemo(room) : null)
-  const [connection, setConnection] = useState<'idle' | 'connecting' | 'ready' | 'error'>(room ? 'connecting' : 'idle')
-  useEffect(() => {
-    if (!room) {
-      setSession(null)
-      setConnection('idle')
-      return
-    }
-    setSession(null)
-    if (firebaseReady) {
-      let active = true
-      let unsubscribe: () => void = () => undefined
-      setConnection('connecting')
-      void ensureAuth().then(() => {
-        if (!active) return
-        unsubscribe = subscribeSession(room, value => {
-          if (!active) return
-          setSession(value); setConnection('ready')
-          // Legacy rooms get a one-time public participant projection when
-          // their owner opens them. This avoids exposing full old snapshots.
-          if (value) void ensureParticipantRoomData(room, value).catch(error => console.warn('participant room projection was not prepared', { room, error }))
-        }, () => { if (active) setConnection('error') })
-      }).catch(() => { if (active) setConnection('error') })
-      return () => { active = false; unsubscribe() }
-    }
-    const sync = (event: StorageEvent) => { if (event.key === demoKey(room)) setSession(getDemo(room)) }
-    window.addEventListener('storage', sync); setSession(getDemo(room)); setConnection('ready')
-    return () => window.removeEventListener('storage', sync)
-  }, [room])
-  return [session?.roomId === room ? session : null, setSession, connection] as const
-}
 
 function App() {
   const path = useRoute()
@@ -250,7 +209,7 @@ function AccountPage({ profile }: { profile: LeaderProfile }) {
 }
 
 function HomePanel({ name, questionCount, onChooseMode }: { name: string; questionCount: number; onChooseMode: (mode: RoomMode) => void }) {
-  const modes = Object.values(modeRegistry)
+  const modes = Object.values(modeRegistry).map(mode => ({ ...mode, mode: mode.mode as RoomMode }))
   return <div className="home-panel"><div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><p className="home-feedback">Сейчас продукт находится на этапе разработки. Доступны две функции для тестирования: диагностика и викторина. Пожалуйста, протестируйте сервис и поделитесь обратной связью.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ДОСТУПНЫЕ РЕЖИМЫ</p><div className="landing-feature-list">{modes.map((mode, index) => <article key={mode.mode}><span>{String(index + 1).padStart(2, '0')}</span><div><b>{mode.title}</b><small>{mode.mode === diagnosticMode ? `${questionCount || '—'} вопросов · ${Object.keys(categories).length} тем · личные и общие результаты` : mode.description}</small><Button onClick={() => onChooseMode(mode.mode)}>Создать комнату</Button></div></article>)}</div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Выберите режим и настройте встречу.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Подключите участников и начните игру или диагностику.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте результаты и экспорт внутри комнаты или её истории.</p></article></div></section></div>
 }
 
@@ -327,7 +286,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [menuOpen, setMenuOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1080)
   const [resultRoom, setResultRoom] = useState(() => initialRoute.roomView === 'results' ? initialRoom || '' : '')
   const [archives, setArchives] = useState<Record<string, SessionArchive>>({})
-  const [questionBank, setQuestionBank] = useState<Question[]>(() => firebaseReady ? [] : questions)
+  const [questionBank, setQuestionBank] = useState<DiagnosticQuestion[]>(() => firebaseReady ? [] : questions)
   const templateKey = `atmosphere-template-selection-${leader.workspaceId}`
   const [templateSelection, setTemplateSelection] = useState<TemplateSelection>(() => {
     try {
@@ -342,7 +301,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [workspacePack, setWorkspacePack] = useState<ContentPack | null>(null)
   const [workspaceQuizPacks, setWorkspaceQuizPacks] = useState<Record<string, ContentPack>>({})
   const [quizActionError, setQuizActionError] = useState('')
-  const [questionDraft, setQuestionDraft] = useState({ category: 'communication' as Question['category'], title: '', options: ['', '', '', ''] })
+  const [questionDraft, setQuestionDraft] = useState({ category: 'communication' as DiagnosticQuestion['category'], title: '', options: ['', '', '', ''] })
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [questionSaving, setQuestionSaving] = useState(false)
   const [questionError, setQuestionError] = useState('')
@@ -364,7 +323,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const answering = participants.filter(p => p.status === 'answering').length
   const allFinished = participants.length > 0 && finished === participants.length
   const menu: HostMenuItem[] = [['main', 'Главное', '✦'], ['currentRoom', 'Текущая комната', '▣'], ['rooms', 'История комнат', '◫'], ['diagnostic', 'Диагностика', '◌'], ['quiz', 'Библейская викторина', '✦'], ['settings', 'Настройки', '⚙'], ['profile', 'Профиль', '◐'], ['rules', 'Правила', '?']]
-  const archiveEntries = useMemo(() => Object.values(archives).filter(archived => archived.hostUid === leader.uid && (!archived.workspaceId || archived.workspaceId === leader.workspaceId)).sort((a, b) => b.archivedAt - a.archivedAt), [archives, leader.uid, leader.workspaceId])
+  const archiveEntries = useMemo(() => selectWorkspaceArchives(archives, leader), [archives, leader])
   const filteredArchiveEntries = useMemo(() => archiveEntries.filter(archived => {
     const query = historyFilters.query.trim().toLocaleLowerCase('ru-RU')
     const haystack = `${archived.roomTitle || ''} ${archived.groupName || ''} ${archived.city || ''} ${archived.displayCode || archived.roomId}`.toLocaleLowerCase('ru-RU')
@@ -447,7 +406,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   }, [firebaseReady, leader.uid, session?.roomId, session?.hostUid, participants.length, finished])
   useEffect(() => {
     if (!firebaseReady) {
-      const stored = JSON.parse(localStorage.getItem(`atmosphere-question-bank-${leader.workspaceId}`) || 'null') as Question[] | null
+      const stored = JSON.parse(localStorage.getItem(`atmosphere-question-bank-${leader.workspaceId}`) || 'null') as DiagnosticQuestion[] | null
       setQuestionBank(stored?.length ? stored : questions)
       return
     }
@@ -492,7 +451,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     const selectedQuestions = selected?.questions?.length
       ? selected.questions
       : selected?.content?.questions
-    setQuestionBank(selectedQuestions?.length ? selectedQuestions : (firebaseReady ? [] : questions))
+    setQuestionBank(selectedQuestions?.length ? orderQuestionsByCategory(selectedQuestions) : (firebaseReady ? [] : questions))
   }, [systemDiagnosticPack, systemPacks, templateSelection, workspacePack])
   // A stale selection from an earlier build must not make the published
   // catalogue appear empty. Prefer the canonical diagnostic pack, then the
@@ -518,6 +477,20 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     if (tab === 'roomSetup') return
     setRoomTitleDraft(session?.phase === 'lobby' ? session.roomTitle || '' : '')
   }, [room, session?.phase, session?.roomTitle, tab])
+  const workspaceModePacks = useMemo(() => ({
+    ...workspaceQuizPacks,
+    ...(workspacePack ? { [workspacePack.packId]: workspacePack } : {}),
+  }), [workspacePack, workspaceQuizPacks])
+  const systemModePacks = useMemo(() => ({
+    ...systemPacks,
+    ...(systemDiagnosticPack ? { [systemDiagnosticPack.packId]: systemDiagnosticPack } : {}),
+  }), [systemDiagnosticPack, systemPacks])
+  const modePackContext = (mode: RoomMode, selection: TemplateSelection = templateSelection) => ({
+    defaultPackId: diagnosticPackId,
+    selection,
+    systemPacks: systemModePacks,
+    workspacePacks: workspaceModePacks,
+  })
   const openRoomSetup = (mode: RoomMode = 'diagnostic') => {
     setCreateError('')
     setActionError('')
@@ -528,18 +501,10 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       mode,
       estimatedParticipants: 30,
     })
-    setScoringTemplateId('standard-v1')
-    // A workspace diagnostic copy is intentionally editable per leader. Use
-    // it when it exists; otherwise use the published system pack directly.
-    if (mode === diagnosticMode) {
-      setTemplateSelection(workspacePack?.questions.length
-        ? { selectedPackId: diagnosticPackId, templateSource: 'workspace' }
-        : diagnosticSelection(diagnosticPackId))
-    }
-    else {
-      const selection = initialQuizSelection(workspaceQuizPacks, systemPacks)
-      if (selection) setTemplateSelection(selection)
-    }
+    const setupPolicy = getModeDefinition(mode).setupPolicy
+    setScoringTemplateId(setupPolicy.defaultScoringTemplateId)
+    const selection = setupPolicy.initialSelection(modePackContext(mode))
+    if (selection) setTemplateSelection(selection)
     navigate('roomSetup')
   }
   const create = async (title = roomTitleDraft) => {
@@ -555,21 +520,13 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
         mode: roomDetails.mode,
       }
       const selectionForRoom = templateSelection
-      const activePack = roomDetails.mode === 'quiz'
-        ? (templateSelection.templateSource === 'workspace' ? workspaceQuizPacks[templateSelection.selectedPackId] : systemPacks[templateSelection.selectedPackId])
-        : (templateSelection.templateSource === 'workspace' ? workspacePack || null : activeDiagnosticPack)
-      if (roomDetails.mode === 'quiz' && (templateSelection.templateSource !== 'workspace' || !workspaceQuizPacks[templateSelection.selectedPackId])) {
-        throw new Error('Сначала добавьте выбранный набор викторины в свой workspace, затем выберите его для комнаты.')
-      }
-      if (firebaseReady) {
-        if (!activePack) throw new Error(systemPacksState === 'error'
-          ? `Не удалось загрузить опубликованный диагностический набор: ${systemPacksError || 'проверьте подключение к Firebase.'}`
-          : 'Опубликованный диагностический набор пока недоступен. Обновите страницу и попробуйте снова.')
-        if (!activePack.questions.length) throw new Error('В опубликованном наборе нет вопросов. Создание комнаты невозможно.')
-        const user = await ensureAuth()
-        if (!user) throw new Error('Не удалось подтвердить вход в Firebase. Войдите в аккаунт ещё раз и повторите создание комнаты.')
-        await createSession(newRoom, user.uid, activePack.questions, leader.workspaceId, selectionForRoom, title, detailsForRoom, scoringTemplateId)
-      } else setDemo(createSessionRecord(newRoom, 'demo-host', activePack?.questions || questionBank, leader.workspaceId, undefined, selectionForRoom, title, detailsForRoom, scoringTemplateId))
+      const setupPolicy = getModeDefinition(roomDetails.mode).setupPolicy
+      const packContext = modePackContext(roomDetails.mode, selectionForRoom)
+      setupPolicy.validateSelection(packContext)
+      const activePack = setupPolicy.resolvePack(packContext)
+      if (!activePack && systemPacksState === 'error') throw new Error(`Не удалось загрузить опубликованный набор: ${systemPacksError || 'проверьте подключение к Firebase.'}`)
+      const created = await createRoom({ roomId: newRoom, leaderUid: leader.uid, workspaceId: leader.workspaceId, pack: activePack, legacyQuestions: questionBank, selection: selectionForRoom, title, details: detailsForRoom, scoringTemplateId })
+      if (created.demoSession) setDemo(created.demoSession)
       localStorage.setItem(roomKey, newRoom); localStorage.setItem(lastRoomKey, newRoom); localStorage.removeItem('atmosphere-host-room'); setLastClosedRoom(''); setResultRoom(''); setRoom(newRoom); navigate('overview', newRoom)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Не удалось создать комнату. Проверьте подключение к Firebase и повторите попытку.'
@@ -586,23 +543,18 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
         if (next === 'closed') {
           // Closing the live room is the source of truth. Archiving is a
           // separate best-effort operation and must not keep the room live.
-          await updatePhase(room, 'closed', session.hostUid)
-          const closedSession: Session = { ...session, phase: 'closed', closedAt: Date.now() }
+          const outcome = await closeRoomAndArchive(session)
+          const closedSession = outcome.closed
           setSession(closedSession)
           localStorage.removeItem(roomKey)
           localStorage.removeItem('atmosphere-host-room')
           localStorage.setItem(lastRoomKey, room)
           setLastClosedRoom(room)
-          try {
-            const archived = await archiveSession(closedSession)
-            setArchives(prev => ({ ...prev, [room]: archived }))
-          } catch (archiveError) {
-            const message = archiveError instanceof Error ? archiveError.message : 'Не удалось сохранить архив комнаты.'
-            setActionError(`Сессия завершена, но архив пока не сохранён: ${message}`)
-          }
+          if (outcome.archive) setArchives(prev => ({ ...prev, [room]: outcome.archive! }))
+          if (outcome.archiveError) setActionError(`Сессия завершена, но архив пока не сохранён: ${outcome.archiveError.message}`)
           return true
         }
-        await updatePhase(room, next, session.hostUid)
+        await changeRoomPhase(session, next)
       } else {
         const nextSession = { ...session, phase: next, ...(next === 'resultsIntro' ? { resultsIntroStartedAt: Date.now() } : {}), ...(next === 'closed' ? { closedAt: Date.now() } : {}) }
         setDemo(nextSession); setSession(nextSession)
@@ -652,12 +604,12 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     localStorage.setItem(lastRoomKey, archived.roomId)
     navigate('results', archived.roomId)
   }
-  const resultSession = resultRoom === room ? session : archives[resultRoom] || null
+  const resultSession = resolveResultSession(resultRoom, room, session, archives)
   if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} questionCount={systemDiagnosticPack?.questions.length || questionBank.length} onChooseMode={openRoomSetup} /></HostLayout>
   if (tab === 'rules') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ПОДСКАЗКИ ДЛЯ ВЕДУЩЕГО</p><h1>Правила</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><RulesPanel onStart={() => navigate('currentRoom')} /></HostLayout>
   if (tab === 'profile') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ВАШ АККАУНТ</p><h1>Профиль</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><ProfilePanel profile={leader} /></HostLayout>
   if (tab === 'results' && resultRoom && resultSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={resultSession} participants={Object.keys(resultSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode><header className="host-header host-results-header"><div><p className="eyebrow">РЕЗУЛЬТАТЫ · {resultRoom}</p><h1>Общая картина</h1></div><span className="status">СОХРАНЕНО</span></header><Results room={resultRoom} sessionOverride={resultSession} embedded /></HostLayout>
-  const resetQuestionDraft = (category: Question['category'] = 'communication') => {
+  const resetQuestionDraft = (category: DiagnosticQuestion['category'] = 'communication') => {
     const wasEditing = Boolean(editingQuestionId)
     setEditingQuestionId(null)
     setQuestionDraft({ category, title: '', options: ['', '', '', ''] })
@@ -671,7 +623,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     setQuestionError('')
     setQuestionEditorOpen(false)
   }
-  const editQuestion = (question: Question) => {
+  const editQuestion = (question: DiagnosticQuestion) => {
     setEditingQuestionId(question.id)
     setQuestionDraft({ category: question.category, title: question.title, options: [question.options.A, question.options.B, question.options.C, question.options.D] })
     setQuestionError('')
@@ -679,12 +631,12 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     navigate('questions')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-  const persistQuestionBank = async (nextBank: Question[]) => {
+  const persistQuestionBank = async (nextBank: DiagnosticQuestion[]) => {
     const orderedBank = orderQuestionsByCategory(nextBank)
     setQuestionError('')
     if (firebaseReady) {
       try {
-        await saveWorkspacePack(leader.workspaceId, orderedBank)
+        await saveDiagnosticWorkspacePack(leader.workspaceId, orderedBank)
         setTemplateSelection({ selectedPackId: diagnosticPackId, templateSource: 'workspace' })
       } catch (error) {
         throw new Error(`Не удалось сохранить личную копию вопросника: ${error instanceof Error ? error.message : 'проверьте Firebase Rules'}`)
@@ -704,7 +656,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     const categoryOrder = currentQuestion && !categoryChanged && currentQuestion.categoryOrder
       ? currentQuestion.categoryOrder
       : nextCategoryQuestionOrder(editableBank, questionDraft.category, editingQuestionId || undefined)
-    const nextQuestion: Question = { id: editingQuestionId || `${questionDraft.category}-${Date.now()}`, category: questionDraft.category, categoryOrder, title: questionDraft.title.trim(), options: { A: questionDraft.options[0].trim(), B: questionDraft.options[1].trim(), C: questionDraft.options[2].trim(), D: questionDraft.options[3].trim() } }
+    const nextQuestion: DiagnosticQuestion = { id: editingQuestionId || `${questionDraft.category}-${Date.now()}`, category: questionDraft.category, categoryOrder, title: questionDraft.title.trim(), options: { A: questionDraft.options[0].trim(), B: questionDraft.options[1].trim(), C: questionDraft.options[2].trim(), D: questionDraft.options[3].trim() } }
     const nextBank = editingQuestionId
       ? categoryChanged
         ? [...editableBank.filter(question => question.id !== editingQuestionId), nextQuestion]
@@ -717,7 +669,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       setQuestionError(error instanceof Error ? error.message : 'Не удалось сохранить вопрос')
     } finally { setQuestionSaving(false) }
   }
-  const deleteQuestion = async (question: Question) => {
+  const deleteQuestion = async (question: DiagnosticQuestion) => {
     if (!window.confirm(`Удалить вопрос «${question.title}»?`)) return
     setQuestionSaving(true)
     try {
@@ -729,9 +681,11 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   }
   const warning = !firebaseReady ? 'Для работы с несколькими устройствами подключите Firebase: демо-режим синхронизируется только в этом браузере.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Этот QR ведёт на адрес компьютера. После публикации сайта здесь будет общий интернет-адрес.' : ''
   const activeDiagnosticPack = isDiagnosticPack(systemDiagnosticPack) ? systemDiagnosticPack : isDiagnosticPack(systemPacks[diagnosticPackId]) ? systemPacks[diagnosticPackId] : null
-  const diagnosticQuestions = templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === diagnosticPackId && workspacePack?.questions.length
-    ? workspacePack.questions
-    : activeDiagnosticPack?.questions || questionBank
+  const diagnosticQuestions: DiagnosticQuestion[] = orderQuestionsByCategory(
+    templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === diagnosticPackId && workspacePack?.questions.length
+      ? workspacePack.questions
+      : activeDiagnosticPack?.questions || questionBank,
+  )
   const quizSystemPacks = Object.values(systemPacks).filter(pack => isQuizPack(pack) && pack.status === 'published')
   const quizWorkspacePacks = Object.values(workspaceQuizPacks).filter(isQuizPack)
   // A system quiz pack is only a candidate to copy. It must never look like
@@ -739,11 +693,15 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const selectedQuizWorkspacePack = templateSelection.templateSource === 'workspace'
     ? workspaceQuizPacks[templateSelection.selectedPackId] || null
     : null
-  const activeSetupPack = roomDetails.mode === 'quiz' ? selectedQuizWorkspacePack : activeDiagnosticPack
+  const activeSetupPolicy = getModeDefinition(roomDetails.mode).setupPolicy
+  const activeSetupContext = modePackContext(roomDetails.mode)
+  const activeSetupPack = activeSetupPolicy.resolvePack(activeSetupContext)
+  let activeSetupValid = true
+  try { activeSetupPolicy.validateSelection(activeSetupContext) } catch { activeSetupValid = false }
   const addQuizPack = async (pack: ContentPack) => {
     setQuizActionError('')
     try {
-      const copied = await copyQuizPackToWorkspace(leader.workspaceId, pack.packId)
+      const copied = await copyQuizWorkspacePack(leader.workspaceId, pack)
       // The realtime listener will confirm the same value. Updating this
       // local view only after the server write resolves gives instant, honest
       // feedback without pretending a rejected copy succeeded.
@@ -762,7 +720,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     <h3>Настройте новую комнату</h3>
     <p>Название, формат и ожидаемое число участников сохраняются только в истории и экспорте ведущего.</p>
     <div className="room-pilot-fields">
-      <label>Формат<select value={roomDetails.mode} onChange={event => { const mode = event.target.value as RoomMode; setRoomDetails(previous => ({ ...previous, mode })); setQuizActionError(''); if (mode === diagnosticMode) setTemplateSelection(diagnosticSelection(diagnosticPackId)); else { const selection = initialQuizSelection(workspaceQuizPacks, systemPacks); if (selection) setTemplateSelection(selection) } }}><option value="diagnostic">Диагностика</option><option value="quiz">Библейская викторина</option></select></label>
+      <label>Формат<select value={roomDetails.mode} onChange={event => { const mode = event.target.value as RoomMode; const policy = getModeDefinition(mode).setupPolicy; setRoomDetails(previous => ({ ...previous, mode })); setQuizActionError(''); setScoringTemplateId(policy.defaultScoringTemplateId); const selection = policy.initialSelection(modePackContext(mode)); if (selection) setTemplateSelection(selection) }}><option value="diagnostic">Диагностика</option><option value="quiz">Библейская викторина</option></select></label>
       <label>Предполагаемое количество участников<select value={roomDetails.estimatedParticipants} onChange={event => setRoomDetails(previous => ({ ...previous, estimatedParticipants: Number(event.target.value) }))}>{[10, 15, 20, 25, 30].map(count => <option value={count} key={count}>{count} участников</option>)}</select></label>
       {roomDetails.mode === 'diagnostic' ? <label>Шаблон подсчёта<select value={scoringTemplateId} onChange={event => setScoringTemplateId(event.target.value as ScoringTemplateId)}><option value="standard-v1">Стандартный: A 3 · B 2 · C 1 · D 0 · пропуск −1</option><option value="strict-v1">Строгий: A 2 · B 1 · C 0 · D −1 · пропуск −2</option></select></label> : <label>Подсчёт ответов<input disabled value="Верный ответ — 1 балл · неверный — 0" /></label>}
     </div>
@@ -800,7 +758,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   </Glass>
   if (tab === 'roomSetup') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">НОВАЯ ВСТРЕЧА</p><h1>Настройка комнаты</h1><p className="room-header-title">Сначала подтвердите параметры — комната появится только после нажатия кнопки ниже.</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
-    <Glass className="start-panel"><p className="eyebrow">ШАГ 1 · ПАРАМЕТРЫ</p><h2>Создайте новую комнату</h2><p>Выберите формат, ожидаемое число участников и набор вопросов. Комната и QR-код появятся только после подтверждения.</p>{roomPilotDetailsControl}{packSelectionControl}<label className="room-title-input">Название комнаты<input value={roomTitleDraft} onChange={event => setRoomTitleDraft(event.target.value)} placeholder={defaultRoomTitle()} maxLength={80} /></label><div className="control-actions"><Button disabled={busy || systemPacksState === 'loading' || (firebaseReady && (!activeSetupPack || activeSetupPack.questions.length === 0 || (roomDetails.mode === 'quiz' && templateSelection.templateSource !== 'workspace')))} onClick={() => void create()}>{busy ? 'Создаём…' : 'Подтвердить и создать комнату'}</Button><Button secondary disabled={busy} onClick={() => navigate(session && session.phase !== 'closed' ? 'currentRoom' : 'overview')}>Отмена</Button></div>{createError && <p className="connection-warning">{createError}</p>}{actionError && <p className="connection-warning">{actionError}</p>}</Glass>
+    <Glass className="start-panel"><p className="eyebrow">ШАГ 1 · ПАРАМЕТРЫ</p><h2>Создайте новую комнату</h2><p>Выберите формат, ожидаемое число участников и набор вопросов. Комната и QR-код появятся только после подтверждения.</p>{roomPilotDetailsControl}{packSelectionControl}<label className="room-title-input">Название комнаты<input value={roomTitleDraft} onChange={event => setRoomTitleDraft(event.target.value)} placeholder={defaultRoomTitle()} maxLength={80} /></label><div className="control-actions"><Button disabled={busy || systemPacksState === 'loading' || (firebaseReady && (!activeSetupValid || !activeSetupPack || activeSetupPack.questions.length === 0))} onClick={() => void create()}>{busy ? 'Создаём…' : 'Подтвердить и создать комнату'}</Button><Button secondary disabled={busy} onClick={() => navigate(session && session.phase !== 'closed' ? 'currentRoom' : 'overview')}>Отмена</Button></div>{createError && <p className="connection-warning">{createError}</p>}{actionError && <p className="connection-warning">{actionError}</p>}</Glass>
   </HostLayout>
   const feedbackUrl = createFeedbackUrl(feedbackFormUrl, session)
   const selectedQuizPreview = selectedQuizWorkspacePack || quizSystemPacks[0] || null
@@ -858,7 +816,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   if (tab === 'diagnostic') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">РЕЖИМ · ДИАГНОСТИКА</p><h1>{getModeDefinition(diagnosticMode).title}</h1><p className="room-header-title">{getModeDefinition(diagnosticMode).description}</p></div></header>
     <Glass className="mode-intro"><p className="eyebrow">ОПУБЛИКОВАННЫЙ НАБОР</p><h2>{displayPackTitle(activeDiagnosticPack?.title)}</h2><p>{diagnosticQuestions.length} вопросов · категории, проценты, пропуск и личные пожелания сохраняются только в диагностике.</p><div className="control-actions"><Button onClick={() => openRoomSetup(diagnosticMode)}>Создать комнату</Button><Button secondary onClick={() => resetQuestionDraft('communication')}>Добавить вопрос в личную копию</Button></div><small>Глобальный набор доступен только для просмотра. Изменения создают и редактируют только личную workspace-копию.</small></Glass>
-    {questionEditorOpen && <Glass className="question-editor"><p className="eyebrow">{editingQuestionId ? 'РЕДАКТИРОВАНИЕ ЛИЧНОЙ КОПИИ' : 'НОВЫЙ ВОПРОС'}</p><label>Категория<select value={questionDraft.category} onChange={event => setQuestionDraft(previous => ({ ...previous, category: event.target.value as Question['category'] }))}>{Object.entries(categories).map(([id, title]) => <option value={id} key={id}>{title}</option>)}</select></label><label>Текст вопроса<textarea value={questionDraft.title} onChange={event => setQuestionDraft(previous => ({ ...previous, title: event.target.value }))} /></label>{questionDraft.options.map((option, index) => <label key={index}>Вариант {String.fromCharCode(65 + index)}<input value={option} onChange={event => setQuestionDraft(previous => ({ ...previous, options: previous.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} /></label>)}{questionError && <p className="connection-warning">{questionError}</p>}<div className="control-actions"><Button disabled={questionSaving} onClick={() => void saveQuestion()}>{questionSaving ? 'Сохраняем…' : 'Сохранить вопрос'}</Button><Button secondary onClick={closeQuestionEditor}>Отмена</Button></div></Glass>}
+    {questionEditorOpen && <Glass className="question-editor"><p className="eyebrow">{editingQuestionId ? 'РЕДАКТИРОВАНИЕ ЛИЧНОЙ КОПИИ' : 'НОВЫЙ ВОПРОС'}</p><label>Категория<select value={questionDraft.category} onChange={event => setQuestionDraft(previous => ({ ...previous, category: event.target.value as DiagnosticQuestion['category'] }))}>{Object.entries(categories).map(([id, title]) => <option value={id} key={id}>{title}</option>)}</select></label><label>Текст вопроса<textarea value={questionDraft.title} onChange={event => setQuestionDraft(previous => ({ ...previous, title: event.target.value }))} /></label>{questionDraft.options.map((option, index) => <label key={index}>Вариант {String.fromCharCode(65 + index)}<input value={option} onChange={event => setQuestionDraft(previous => ({ ...previous, options: previous.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} /></label>)}{questionError && <p className="connection-warning">{questionError}</p>}<div className="control-actions"><Button disabled={questionSaving} onClick={() => void saveQuestion()}>{questionSaving ? 'Сохраняем…' : 'Сохранить вопрос'}</Button><Button secondary onClick={closeQuestionEditor}>Отмена</Button></div></Glass>}
     <div className="question-groups">{Object.entries(categories).map(([categoryId, title]) => { const group = orderQuestionsByCategory(diagnosticQuestions.filter(question => question.category === categoryId)); return <Glass className="question-group" key={categoryId}><p className="eyebrow">{group.length} ВОПРОСОВ</p><h2>{title}</h2><p className="question-scoring">Стандартный scoring: 3 · 2 · 1 · 0</p>{group.map(question => <article className="question-row" key={question.id}><div><b>{question.categoryOrder || group.indexOf(question) + 1}. {question.title}</b><small>{Object.entries(question.options).map(([key, value]) => `${key}: ${value}`).join(' · ')}</small></div><div><Button secondary onClick={() => editQuestion(question)}>Редактировать</Button><Button secondary onClick={() => void deleteQuestion(question)}>Удалить</Button></div></article>)}</Glass> })}</div>
   </HostLayout>
 
@@ -899,7 +857,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     {(tab === 'overview' || tab === 'currentRoom') && (session.phase === 'closed' ? <Glass className="closed-room-panel"><p className="eyebrow">КОМНАТА ЗАВЕРШЕНА</p><h2>Эта диагностика завершена</h2><p>Участники и ответы сохранены. Чтобы провести новую диагностику или викторину, сначала настройте новую комнату.</p><div className="control-actions"><Button onClick={openRoomSetup}>Создать новую комнату</Button><Button secondary onClick={() => openArchivedResult(session)}>Посмотреть старые результаты</Button><Button secondary onClick={() => navigate('results')}>Библиотека результатов</Button><Button secondary onClick={() => navigate('export')}>Открыть экспорт</Button>{feedbackUrl && <Button secondary onClick={() => window.open(feedbackUrl, '_blank', 'noopener,noreferrer')}>Оставить обратную связь</Button>}</div>{!feedbackUrl && <p className="connection-warning">Добавьте ссылку на Google Form в настройках, чтобы после встречи собирать обратную связь.</p>}{actionError && <p className="connection-warning">{actionError}</p>}</Glass> : <><div className="metrics"><Metric label="Подключились" value={participants.length} note={`из ${session.maxParticipants} участников`} /><Metric label="Сейчас отвечают" value={answering} note="в своём темпе" /><Metric label="Завершили" value={finished} note={allFinished ? 'все готовы' : 'ждём завершения'} /></div><div className="overview-grid"><Glass className="control-panel"><p className="eyebrow">ТЕКУЩАЯ ФАЗА</p><h2>{phaseText(session.phase)}</h2><p>{session.phase === 'lobby' ? 'Покажите QR-код. После запуска у вас автоматически откроется отдельный экран с живым прогрессом.' : allFinished ? 'Все участники завершили ответы. Можно открыть общую визуализацию на большом экране.' : 'Экран прогресса обновляется в реальном времени — без личных ответов и имён.'}</p>{session.phase === 'lobby' && <div className="room-title-editor"><label className="room-title-input">Название комнаты<input value={roomTitleDraft} onChange={event => setRoomTitleDraft(event.target.value)} placeholder={defaultRoomTitle(session.createdAt)} maxLength={80} /></label><div><Button secondary disabled={roomTitleSaving || roomTitleDraft.trim() === (session.roomTitle || '')} onClick={() => void saveRoomTitle()}>{roomTitleSaving ? 'Сохраняем…' : 'Сохранить название'}</Button><Button secondary onClick={() => void navigator.clipboard.writeText(session.displayCode || room).catch(error => setActionError(error instanceof Error ? error.message : 'Не удалось скопировать код'))}>Скопировать код {session.displayCode || room}</Button></div><small>После запуска диагностики название будет заблокировано.</small></div>}<div className="control-actions">{session.phase === 'lobby' && <Button disabled={!participants.length} onClick={start}>Запустить диагностику</Button>}{session.phase !== 'lobby' && <Button secondary onClick={() => window.open(hostUrl(`/stage?room=${room}`), 'atmosphere-stage')}>Открыть экран прогресса</Button>}<Button onClick={showResults} disabled={!allFinished || session.phase === 'resultsIntro' || session.phase === 'resultsReal'}>Показать общие результаты</Button><Button secondary onClick={closeRoom}>Завершить комнату</Button></div><div className="results-lock"><span className={allFinished ? 'ready' : ''}>{allFinished ? '✓' : '⌕'}</span><div><b>{allFinished ? 'Общий результат готов' : 'Общий результат пока закрыт'}</b><small>{allFinished ? 'Нажмите кнопку выше, чтобы начать показ.' : `Завершили ${finished} из ${participants.length || '—'} участников.`}</small></div></div><div className="phase-track">{(['lobby', 'live', 'resultsIntro', 'resultsReal'] as SessionPhase[]).map(item => <span className={session.phase === item ? 'active' : ''} key={item}>{phaseText(item)}</span>)}</div></Glass><Glass className="qr-panel"><p className="eyebrow">ПОДКЛЮЧЕНИЕ УЧАСТНИКОВ</p>{qr && <img src={qr} alt="QR-код для подключения" className="qr" />}<code>{joinUrl}</code><Button secondary onClick={() => void navigator.clipboard.writeText(joinUrl).catch(error => setActionError(error instanceof Error ? error.message : 'Не удалось скопировать ссылку'))}>Скопировать ссылку</Button>{warning && <p className="connection-warning">{warning}</p>}</Glass></div><Glass className="participants-panel"><div className="participants-panel-header"><div><p className="eyebrow">УЧАСТНИКИ В КОМНАТЕ</p><h3>{participants.length ? `${participants.length} подключились` : 'Пока никто не подключился'}</h3></div><span>{session.displayCode || room}</span></div>{participants.length ? <ul className="participant-list">{participants.sort((a, b) => a.joinedAt - b.joinedAt).map(person => <li key={person.id}><span className={`participant-status ${person.status}`} /><div><b>{person.nickname}</b><small>{person.status === 'waiting' ? 'Ожидает' : person.status === 'answering' ? 'Отвечает' : 'Завершил'}</small></div></li>)}</ul> : <p className="participants-empty">Пока никто не подключился. Отправьте участникам QR-код или ссылку для подключения.</p>}</Glass></>) }
     {tab === 'rooms' && <div className="stack"><Glass className="room-row"><div><p className="eyebrow">{session.phase === 'closed' ? 'ЗАВЕРШЁННАЯ' : 'ТЕКУЩАЯ'}</p><h2>{session.roomTitle || `Комната ${room}`}</h2><p>Код {session.displayCode || room} · {phaseText(session.phase)} · {participants.length} подключились · {finished} завершили</p></div><Button onClick={openRoomSetup}>Создать новую комнату</Button></Glass>{actionError && <p className="connection-warning">{actionError}</p>}{historyFiltersControl}<div className="archive-list">{filteredArchiveEntries.map(archived => <Glass className="archive-card" key={archived.roomId}><div><p className="eyebrow">АРХИВ · {new Date(archived.archivedAt).toLocaleDateString('ru-RU')}</p><h3>{archived.roomTitle || `Комната ${archived.displayCode || archived.roomId}`}</h3><p>{archived.groupName || 'Молодёжка не указана'} · {archived.city || 'Город не указан'} · {archived.mode === 'quiz' ? 'Викторина' : 'Диагностика'}</p><p>Код {archived.displayCode || archived.roomId} · {archived.participantCount ?? Object.keys(archived.participants || {}).length} участников · {archived.completedCount ?? Object.values(archived.participants || {}).filter(person => person.status === 'finished').length} завершили</p></div><div className="archive-actions"><Button secondary onClick={() => openArchivedResult(archived)}>Открыть результаты</Button><Button secondary onClick={() => exportCsv(archived, leader)}>Экспортировать CSV</Button></div></Glass>)}</div>{!archiveEntries.length && <Glass className="empty-state"><h3>История комнат пока пуста</h3><p>После завершения комнаты она появится здесь вместе с ответами участников.</p></Glass>}{archiveEntries.length > 0 && !filteredArchiveEntries.length && <Glass className="empty-state"><h3>По фильтрам ничего не найдено</h3><p>Сбросьте поиск, формат или диапазон дат.</p></Glass>}</div>}
     {tab === 'results' && !resultRoom && <div className="results-library"><div className="results-library-intro"><p className="eyebrow">БИБЛИОТЕКА РЕЗУЛЬТАТОВ</p><h2>Завершённые встречи</h2><p>Выберите комнату, чтобы посмотреть общую картину или выгрузить ответы. Доступны только результаты вашей молодёжной группы.</p></div>{historyFiltersControl}<div className="archive-list">{filteredArchiveEntries.map(archived => <Glass className="archive-card results-library-card" key={archived.roomId}><div><p className="eyebrow">{archived.mode === 'quiz' ? 'ВИКТОРИНА' : 'ДИАГНОСТИКА'} · {new Date(archived.createdAt).toLocaleDateString('ru-RU')}</p><h3>{archived.roomTitle || `Комната ${archived.roomId}`}</h3><p>{archived.groupName || 'Молодёжка не указана'} · {archived.city || 'Город не указан'}</p><p>Завершена: {archived.closedAt ? new Date(archived.closedAt).toLocaleString('ru-RU') : 'дата не указана'} · {archived.participantCount ?? Object.keys(archived.participants || {}).length} участников · {archived.completedCount ?? Object.values(archived.participants || {}).filter(person => person.status === 'finished').length} завершили</p></div><div className="archive-actions"><Button onClick={() => openArchivedResult(archived)}>Открыть результаты</Button><Button secondary onClick={() => exportCsv(archived, leader)}>Экспортировать CSV</Button></div></Glass>)}</div>{!archiveEntries.length && <Glass className="empty-state"><h3>Библиотека пока пуста</h3><p>Завершите первую комнату — её результаты и экспорт останутся здесь после обновления и повторного входа.</p></Glass>}{archiveEntries.length > 0 && !filteredArchiveEntries.length && <Glass className="empty-state"><h3>По фильтрам ничего не найдено</h3><p>Сбросьте поиск, формат или диапазон дат.</p></Glass>}</div>}
-    {tab === 'questions' && <div className="question-admin"><Glass className="question-editor"><p className="eyebrow">{editingQuestionId ? 'РЕДАКТИРОВАНИЕ' : 'НОВЫЙ ВОПРОС'}</p><h3>{editingQuestionId ? 'Изменить вопрос' : 'Добавить вопрос в банк'}</h3><select value={questionDraft.category} onChange={event => setQuestionDraft(prev => ({ ...prev, category: event.target.value as Question['category'] }))}>{Object.entries(categories).map(([id, title]) => <option value={id} key={id}>{title}</option>)}</select><input value={questionDraft.title} onChange={event => setQuestionDraft(prev => ({ ...prev, title: event.target.value }))} placeholder="Текст вопроса" />{questionDraft.options.map((option, index) => <input key={index} value={option} onChange={event => setQuestionDraft(prev => ({ ...prev, options: prev.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} placeholder={`Вариант ${String.fromCharCode(65 + index)}`} />)}<div className="question-editor-actions"><Button disabled={questionSaving} onClick={() => void saveQuestion()}>{questionSaving ? 'Сохраняем…' : editingQuestionId ? 'Сохранить изменения' : 'Добавить вопрос'}</Button>{editingQuestionId && <Button secondary onClick={() => resetQuestionDraft()}>Отмена</Button>}</div>{questionError && <p className="connection-warning">{questionError}</p>}</Glass><div className="question-admin-list">{Object.entries(categories).map(([id, title]) => { const categoryId = id as Question['category']; const categoryQuestions = questionBank.filter(question => question.category === categoryId); return <Glass key={id} className="question-group"><div className="question-group-header"><div><p className="eyebrow">{categoryQuestions.length} ВОПРОСОВ</p><h3>{title}</h3></div><Button secondary onClick={() => resetQuestionDraft(categoryId)}>Добавить</Button></div>{categoryQuestions.map((question, index) => <div className="question-row" key={question.id}><span>{index + 1}</span><div className="question-row-content"><b>{question.title}</b><small>{question.options.A} · {question.options.B} · {question.options.C} · {question.options.D}</small></div><div className="question-row-actions"><button type="button" onClick={() => editQuestion(question)}>Редактировать</button><button type="button" onClick={() => void deleteQuestion(question)}>Удалить</button></div></div>)}</Glass> })}</div></div>}
+    {tab === 'questions' && <div className="question-admin"><Glass className="question-editor"><p className="eyebrow">{editingQuestionId ? 'РЕДАКТИРОВАНИЕ' : 'НОВЫЙ ВОПРОС'}</p><h3>{editingQuestionId ? 'Изменить вопрос' : 'Добавить вопрос в банк'}</h3><select value={questionDraft.category} onChange={event => setQuestionDraft(prev => ({ ...prev, category: event.target.value as DiagnosticQuestion['category'] }))}>{Object.entries(categories).map(([id, title]) => <option value={id} key={id}>{title}</option>)}</select><input value={questionDraft.title} onChange={event => setQuestionDraft(prev => ({ ...prev, title: event.target.value }))} placeholder="Текст вопроса" />{questionDraft.options.map((option, index) => <input key={index} value={option} onChange={event => setQuestionDraft(prev => ({ ...prev, options: prev.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} placeholder={`Вариант ${String.fromCharCode(65 + index)}`} />)}<div className="question-editor-actions"><Button disabled={questionSaving} onClick={() => void saveQuestion()}>{questionSaving ? 'Сохраняем…' : editingQuestionId ? 'Сохранить изменения' : 'Добавить вопрос'}</Button>{editingQuestionId && <Button secondary onClick={() => resetQuestionDraft()}>Отмена</Button>}</div>{questionError && <p className="connection-warning">{questionError}</p>}</Glass><div className="question-admin-list">{Object.entries(categories).map(([id, title]) => { const categoryId = id as DiagnosticQuestion['category']; const categoryQuestions = questionBank.filter(question => question.category === categoryId); return <Glass key={id} className="question-group"><div className="question-group-header"><div><p className="eyebrow">{categoryQuestions.length} ВОПРОСОВ</p><h3>{title}</h3></div><Button secondary onClick={() => resetQuestionDraft(categoryId)}>Добавить</Button></div>{categoryQuestions.map((question, index) => <div className="question-row" key={question.id}><span>{index + 1}</span><div className="question-row-content"><b>{question.title}</b><small>{question.options.A} · {question.options.B} · {question.options.C} · {question.options.D}</small></div><div className="question-row-actions"><button type="button" onClick={() => editQuestion(question)}>Редактировать</button><button type="button" onClick={() => void deleteQuestion(question)}>Удалить</button></div></div>)}</Glass> })}</div></div>}
     {tab === 'export' && <div className="stack"><Glass className="export-panel"><p className="eyebrow">ВЫГРУЗКА ДАННЫХ</p><h2>Результаты сессии {room}</h2><p>CSV содержит сведения для анализа пилота: ведущий, молодёжка, город, формат, даты и агрегированные показатели комнаты. Личные ответы участников в общий экран не попадают.</p><Button onClick={() => exportCsv(session, leader)}>Скачать CSV</Button></Glass></div>}
     {tab === 'settings' && <div className="stack"><Glass className="settings-panel"><p className="eyebrow">ПОДКЛЮЧЕНИЕ ПО QR</p><h2>Адрес для участников</h2><p>Один и тот же адрес используется в QR-коде, под ним и в кнопке копирования. Для GitHub Pages базовый путь добавляется ровно один раз.</p><input value={publicOrigin} onChange={event => setPublicOrigin(event.target.value)} placeholder="https://ваш-сайт.web.app" /><small>Firebase: {firebaseReady ? 'подключён' : 'не настроен'}</small></Glass><Glass className="settings-panel"><p className="eyebrow">ОБРАТНАЯ СВЯЗЬ ПОСЛЕ ВСТРЕЧИ</p><h2>Google Form</h2><p>Вставьте ссылку на форму. После закрытия комнаты кнопка добавит roomId, workspaceId, groupName и hostUid как query parameters. Для заполнения конкретных полей Google Form используйте её pre-filled URL и подставьте в него маркеры {'{{roomId}}'}, {'{{workspaceId}}'}, {'{{groupName}}'}, {'{{hostUid}}'}.</p><input value={feedbackFormUrl} onChange={event => setFeedbackFormUrl(event.target.value)} placeholder="https://docs.google.com/forms/d/e/.../viewform" />{feedbackFormUrl && !feedbackUrl && <p className="connection-warning">Проверьте адрес Google Form: ссылка должна быть полной, начиная с https://.</p>}</Glass><Glass className="settings-panel"><p className="eyebrow">СЕССИЯ</p><h2>Завершение</h2><p>После завершения участники больше не смогут отвечать. Участники, ответы, результаты и экспорт останутся в архиве.</p><Button secondary disabled={session.phase === 'closed'} onClick={closeRoom}>{session.phase === 'closed' ? 'Комната завершена' : 'Завершить комнату'}</Button>{actionError && <p className="connection-warning">{actionError}</p>}</Glass></div>}
   </HostLayout>
