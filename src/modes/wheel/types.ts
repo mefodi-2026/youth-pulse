@@ -16,6 +16,7 @@ export type WheelPhase =
 
 export type WheelPoolItemStatus = 'available' | 'selected' | 'used' | 'pending'
 export type WheelRoundStatus = 'completed' | 'pending'
+export type WheelSpinTarget = 'name' | 'task'
 
 export interface WheelConfig {
   inputMode: WheelInputMode
@@ -44,6 +45,11 @@ export interface WheelCurrentRound {
   selectedNameText?: string
   selectedTaskText?: string
   createdAt: number
+}
+
+export interface WheelPublicRound {
+  selectedNameText?: string
+  selectedTaskText?: string
 }
 
 export interface WheelRound extends WheelCurrentRound {

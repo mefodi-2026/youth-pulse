@@ -89,7 +89,10 @@
         "roomTitle": { ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)" },
         "wheel": {
           ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)",
-          ".validate": "!newData.exists() || (newData.hasChildren(['inputMode','drawOrder','phase','nameCount','taskCount','submissionCount']) && (newData.child('inputMode').val() === 'participants' || newData.child('inputMode').val() === 'host') && (newData.child('drawOrder').val() === 'name_then_task' || newData.child('drawOrder').val() === 'task_then_name') && (newData.child('phase').val() === 'collecting' || newData.child('phase').val() === 'ready' || newData.child('phase').val() === 'completed'))"
+          ".validate": "!newData.exists() || (newData.hasChildren(['inputMode','drawOrder','phase','version','nameCount','taskCount','submissionCount','roundCount','pendingCount']) && (newData.child('inputMode').val() === 'participants' || newData.child('inputMode').val() === 'host') && (newData.child('drawOrder').val() === 'name_then_task' || newData.child('drawOrder').val() === 'task_then_name') && (newData.child('phase').val() === 'collecting' || newData.child('phase').val() === 'ready' || newData.child('phase').val() === 'spinning_name' || newData.child('phase').val() === 'name_revealed' || newData.child('phase').val() === 'spinning_task' || newData.child('phase').val() === 'task_revealed' || newData.child('phase').val() === 'decision' || newData.child('phase').val() === 'completed') && newData.child('version').isNumber() && newData.child('version').val() >= 1 && newData.child('nameCount').isNumber() && newData.child('nameCount').val() >= 0 && newData.child('taskCount').isNumber() && newData.child('taskCount').val() >= 0 && newData.child('submissionCount').isNumber() && newData.child('submissionCount').val() >= 0 && newData.child('roundCount').isNumber() && newData.child('roundCount').val() >= 0 && newData.child('pendingCount').isNumber() && newData.child('pendingCount').val() >= 0 && !newData.child('pools').exists() && !newData.child('participants').exists() && !newData.child('rounds').exists() && !newData.child('pendingTasks').exists())",
+          "currentRound": {
+            ".validate": "!newData.exists() || ((!newData.child('selectedNameText').exists() || (newData.child('selectedNameText').isString() && newData.child('selectedNameText').val().length >= 1 && newData.child('selectedNameText').val().length <= 60)) && (!newData.child('selectedTaskText').exists() || (newData.child('selectedTaskText').isString() && newData.child('selectedTaskText').val().length >= 1 && newData.child('selectedTaskText').val().length <= 240)) && !newData.child('selectedNameId').exists() && !newData.child('selectedTaskId').exists() && !newData.child('roundId').exists())"
+          }
         }
       }
     },
@@ -150,6 +153,8 @@
         },
         "wheel": {
           ".read": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)",
+          ".write": "auth != null && (auth.token.platformAdmin === true || (root.child('sessions').child($roomId).child('hostUid').val() === auth.uid && root.child('users').child(auth.uid).child('status').val() === 'active' && root.child('sessions').child($roomId).child('phase').val() !== 'closed'))",
+          ".validate": "newData.hasChildren(['mode','modeVersion','config','phase','version']) && newData.child('mode').val() === 'wheel' && newData.child('modeVersion').val() === 'wheel-v1' && newData.child('version').isNumber() && newData.child('version').val() >= 1",
           "config": {
             ".read": "auth != null",
             ".validate": "newData.hasChildren(['inputMode','drawOrder']) && (newData.child('inputMode').val() === 'participants' || newData.child('inputMode').val() === 'host') && (newData.child('drawOrder').val() === 'name_then_task' || newData.child('drawOrder').val() === 'task_then_name') && (!data.exists() || newData.val() === data.val())"
@@ -159,8 +164,9 @@
           "phase": {
             ".read": "auth != null",
             ".write": "auth != null && (auth.token.platformAdmin === true || (root.child('sessions').child($roomId).child('hostUid').val() === auth.uid && root.child('users').child(auth.uid).child('status').val() === 'active'))",
-            ".validate": "newData.val() === 'collecting' || newData.val() === 'ready' || newData.val() === 'completed'"
+            ".validate": "newData.val() === 'collecting' || newData.val() === 'ready' || newData.val() === 'spinning_name' || newData.val() === 'name_revealed' || newData.val() === 'spinning_task' || newData.val() === 'task_revealed' || newData.val() === 'decision' || newData.val() === 'completed'"
           },
+          "version": { ".validate": "newData.isNumber() && newData.val() >= 1" },
           "participants": {
             "$participantId": {
               ".read": "auth != null && (auth.uid === $participantId || auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)",
@@ -172,13 +178,13 @@
             "names": {
               "$itemId": {
                 ".write": "auth != null && root.child('sessions').child($roomId).child('wheel').child('phase').val() === 'collecting' && (root.child('sessions').child($roomId).child('hostUid').val() === auth.uid || (auth.uid === $itemId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('wheel').child('config').child('inputMode').val() === 'participants' && newData.child('sourceParticipantId').val() === auth.uid))",
-                ".validate": "!newData.exists() || (newData.hasChildren(['itemId','text','status']) && newData.child('itemId').val() === $itemId && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 60 && newData.child('status').val() === 'available')"
+                ".validate": "!newData.exists() || (newData.hasChildren(['itemId','text','status']) && newData.child('itemId').val() === $itemId && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 60 && (newData.child('status').val() === 'available' || newData.child('status').val() === 'selected' || newData.child('status').val() === 'used' || newData.child('status').val() === 'pending'))"
               }
             },
             "tasks": {
               "$itemId": {
                 ".write": "auth != null && root.child('sessions').child($roomId).child('wheel').child('phase').val() === 'collecting' && (root.child('sessions').child($roomId).child('hostUid').val() === auth.uid || (auth.uid === $itemId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('wheel').child('config').child('inputMode').val() === 'participants' && newData.child('sourceParticipantId').val() === auth.uid))",
-                ".validate": "!newData.exists() || (newData.hasChildren(['itemId','text','status']) && newData.child('itemId').val() === $itemId && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 240 && newData.child('status').val() === 'available')"
+                ".validate": "!newData.exists() || (newData.hasChildren(['itemId','text','status']) && newData.child('itemId').val() === $itemId && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 240 && (newData.child('status').val() === 'available' || newData.child('status').val() === 'selected' || newData.child('status').val() === 'used' || newData.child('status').val() === 'pending'))"
               }
             }
           }

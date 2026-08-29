@@ -267,14 +267,18 @@ export interface PublicRoom {
   packTitle?: string
   difficulty?: QuizDifficulty
   scoringTemplateId?: ScoringTemplateId
-  /** Participant-safe wheel status. Names and tasks are never mirrored here. */
+  /** Participant-safe wheel status. Full pools, participant IDs and history are never mirrored here. */
   wheel?: {
     inputMode: 'participants' | 'host'
     drawOrder: 'name_then_task' | 'task_then_name'
-    phase: 'collecting' | 'ready' | 'completed'
+    phase: import('./modes/wheel/types').WheelPhase
+    version?: number
     nameCount: number
     taskCount: number
     submissionCount: number
+    roundCount?: number
+    pendingCount?: number
+    currentRound?: import('./modes/wheel/types').WheelPublicRound
   }
 }
 /** Question shape sent to a participant. Answer keys and explanations are excluded. */

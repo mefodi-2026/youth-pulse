@@ -555,6 +555,36 @@
 .wheel-mobile textarea { min-height:112px; }
 .wheel-waiting { align-content:center; text-align:center; }
 .wheel-stage-grid { width:min(980px,100%); margin:clamp(28px,7vh,70px) auto 0; }
+.wheel-game-panel { display:grid; gap:22px; padding:clamp(20px,3vw,34px); }
+.wheel-audience { display:grid; gap:clamp(16px,2.5vw,28px); width:min(1080px,100%); margin:auto; }
+.wheel-audience h1 { margin:0; font-size:clamp(2rem,5vw,4.75rem); line-height:.98; }
+.wheel-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.wheel-pair article { display:grid; align-content:center; gap:8px; min-height:clamp(150px,24vw,280px); padding:clamp(20px,4vw,44px); overflow:hidden; border:1px solid var(--line); border-radius:28px; color:var(--muted); background:radial-gradient(circle at 20% 15%,rgba(51,215,154,.08),transparent 42%),rgba(7,43,33,.58); }
+.wheel-pair article.is-revealed { border-color:rgba(51,215,154,.58); color:var(--text); box-shadow:0 0 50px rgba(51,215,154,.10); }
+.wheel-pair small { color:var(--mint); font-weight:900; letter-spacing:.14em; }
+.wheel-pair strong { overflow-wrap:anywhere; font-size:clamp(1.5rem,3.8vw,4.2rem); line-height:1.05; }
+.wheel-spin-indicator { display:flex; align-items:center; gap:14px; color:var(--muted); }
+.wheel-spin-indicator i { width:42px; height:42px; flex:0 0 auto; border:4px solid rgba(51,215,154,.18); border-top-color:var(--mint); border-radius:50%; animation:wheel-spin .8s linear infinite; }
+.wheel-live-stats { display:flex; flex-wrap:wrap; gap:10px; }
+.wheel-live-stats span { padding:9px 13px; border:1px solid var(--line); border-radius:999px; color:var(--muted); background:rgba(7,43,33,.46); font-size:12px; }
+.wheel-live-stats b { color:var(--text); }
+.wheel-complete-note { margin:0; color:var(--mint); font-weight:700; }
+.wheel-game-actions { display:flex; flex-wrap:wrap; gap:10px; }
+.wheel-pending { display:grid; gap:16px; padding:clamp(20px,3vw,30px); }
+.wheel-pending h2 { margin:4px 0 0; }
+.wheel-pending ul { display:grid; gap:10px; margin:0; padding:0; list-style:none; }
+.wheel-pending li { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:14px; padding:14px; border:1px solid var(--line); border-radius:16px; background:rgba(7,43,33,.5); }
+.wheel-pending li>div { display:grid; gap:5px; min-width:0; }
+.wheel-pending li span { color:var(--muted); overflow-wrap:anywhere; }
+.wheel-stage .wheel-audience { position:relative; z-index:1; align-content:center; min-height:min(76vh,850px); }
+@keyframes wheel-spin { to { transform:rotate(360deg); } }
 @media (max-width:980px) {
   .wheel-setup fieldset,.wheel-host-input,.wheel-pools,.wheel-counters,.wheel-stage-grid { grid-template-columns:1fr; }
+}
+@media (max-width:720px) {
+  .wheel-pair { grid-template-columns:1fr; }
+  .wheel-pair article { min-height:120px; border-radius:20px; }
+  .wheel-game-actions { display:grid; }
+  .wheel-pending li { grid-template-columns:1fr; }
+  .wheel-mobile .wheel-audience h1 { font-size:clamp(1.8rem,9vw,3rem); }
 }

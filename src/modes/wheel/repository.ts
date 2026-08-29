@@ -1,4 +1,4 @@
-import { get, onValue, push, ref, remove, set, update } from 'firebase/database'
+import { get, onValue, push, ref, remove, runTransaction, set, update } from 'firebase/database'
 import { signInAnonymously } from 'firebase/auth'
 import { firebaseAuth, firebaseAuthPersistence, firebaseDb, firebaseReady } from '../../repositories/firebaseClient'
 import type { PublicRoom, Session } from '../../types'
@@ -6,6 +6,14 @@ import { createInitialWheelState } from './stateMachine'
 import { wheelGameTypeId, wheelProductId } from './contract'
 import { canStartWheel, validateWheelDisplayName, validateWheelParticipantEntry, validateWheelTaskText } from './validation'
 import type { WheelConfig, WheelParticipantEntry, WheelPoolItem, WheelRoomState } from './types'
+import {
+  cancelWheelSelectionTransition,
+  completePendingWheelTaskTransition,
+  decideWheelRoundTransition,
+  getAvailableWheelCount,
+  revealWheelSelectionTransition,
+  startWheelSpinTransition,
+} from './engine'
 
 const runtime = () => {
   if (!firebaseReady || !firebaseDb || !firebaseAuth) throw new Error('Firebase не настроен для Колеса фортуны.')
@@ -84,7 +92,7 @@ export async function createWheelRoom(input: { leaderUid: string; workspaceId: s
     productId: wheelProductId,
     packId: 'wheel-runtime-v1',
     packTitle: 'Колесо фортуны',
-    wheel: { ...input.config, phase: 'collecting', nameCount: 0, taskCount: 0, submissionCount: 0 },
+    wheel: { ...input.config, phase: 'collecting', version: 1, nameCount: 0, taskCount: 0, submissionCount: 0, roundCount: 0, pendingCount: 0 },
   }
   await set(ref(db, `sessions/${roomId}`), session)
   await set(ref(db, `publicRooms/${roomId}`), publicRoom)
@@ -150,17 +158,92 @@ export async function deleteWheelHostItem(roomId: string, pool: 'names' | 'tasks
 
 export async function markWheelReady(roomId: string) {
   const { db, session } = await assertHostCollecting(roomId)
-  const names = Object.keys(session.wheel?.pools?.names || {}).length
-  const tasks = Object.keys(session.wheel?.pools?.tasks || {}).length
   if (!canStartWheel(session.wheel)) throw new Error('Для начала нужны минимум два имени и два задания.')
+  const wheel = await runWheelHostTransaction(roomId, state => ({ ...state, phase: 'ready', version: (state.version || 0) + 1 }))
   await update(ref(db), {
-    [`sessions/${roomId}/wheel/phase`]: 'ready',
     [`sessions/${roomId}/phase`]: 'live',
     [`sessions/${roomId}/startedAt`]: now(),
-    [`publicRooms/${roomId}/wheel/phase`]: 'ready',
-    [`publicRooms/${roomId}/wheel/nameCount`]: names,
-    [`publicRooms/${roomId}/wheel/taskCount`]: tasks,
-    [`publicRooms/${roomId}/wheel/submissionCount`]: Object.keys(session.wheel?.participants || {}).length,
     [`publicRooms/${roomId}/phase`]: 'live',
   })
+  await syncWheelPublicState(roomId, wheel)
+}
+
+const publicWheelState = (state: WheelRoomState): NonNullable<PublicRoom['wheel']> => {
+  const phase = state.phase
+  const current = state.currentRound
+  const nameVisible = Boolean(current?.selectedNameText) && ['name_revealed', 'spinning_task', 'task_revealed', 'decision'].includes(phase)
+  const taskVisible = Boolean(current?.selectedTaskText) && ['task_revealed', 'spinning_name', 'name_revealed', 'decision'].includes(phase)
+  const visibleRound = nameVisible || taskVisible ? {
+    ...(nameVisible ? { selectedNameText: current?.selectedNameText } : {}),
+    ...(taskVisible ? { selectedTaskText: current?.selectedTaskText } : {}),
+  } : undefined
+  return {
+    ...state.config,
+    phase,
+    version: state.version || 1,
+    nameCount: getAvailableWheelCount(state, 'name'),
+    taskCount: getAvailableWheelCount(state, 'task'),
+    submissionCount: Object.keys(state.participants || {}).length,
+    roundCount: Object.keys(state.rounds || {}).length,
+    pendingCount: Object.values(state.pendingTasks || {}).filter(item => item.status === 'pending').length,
+    ...(visibleRound ? { currentRound: visibleRound } : {}),
+  }
+}
+
+async function syncWheelPublicState(roomId: string, state: WheelRoomState) {
+  const { db } = runtime()
+  await set(ref(db, `publicRooms/${roomId}/wheel`), publicWheelState(state))
+}
+
+async function assertWheelHost(roomId: string) {
+  const { db, auth } = runtime()
+  await firebaseAuthPersistence
+  const user = auth.currentUser
+  if (!user || user.isAnonymous) throw new Error('Войдите в аккаунт ведущего ещё раз.')
+  const session = await get(ref(db, `sessions/${roomId}`))
+  if (!session.exists() || session.child('mode').val() !== 'wheel') throw new Error('Комната Колеса фортуны не найдена.')
+  if (session.child('hostUid').val() !== user.uid) throw new Error('Управлять колесом может только ведущий этой комнаты.')
+  if (session.child('phase').val() === 'closed') throw new Error('Сессия уже завершена.')
+  return { db }
+}
+
+async function runWheelHostTransaction(roomId: string, transition: (state: WheelRoomState) => WheelRoomState) {
+  const { db } = await assertWheelHost(roomId)
+  const result = await runTransaction(ref(db, `sessions/${roomId}/wheel`), value => {
+    if (!value || value.mode !== 'wheel') throw new Error('Состояние Колеса фортуны не найдено.')
+    return transition(value as WheelRoomState)
+  }, { applyLocally: false })
+  if (!result.committed || !result.snapshot.exists()) throw new Error('Состояние изменилось на другом экране. Повторите действие.')
+  const state = result.snapshot.val() as WheelRoomState
+  await syncWheelPublicState(roomId, state)
+  return state
+}
+
+export async function startWheelSpin(roomId: string) {
+  const roundId = push(ref(runtime().db, `sessions/${roomId}/wheel/rounds`)).key || `round-${now()}`
+  return runWheelHostTransaction(roomId, state => startWheelSpinTransition(state, {
+    roundId,
+    createdAt: now(),
+    random: Math.random(),
+  }))
+}
+
+export async function revealWheelSelection(roomId: string) {
+  return runWheelHostTransaction(roomId, revealWheelSelectionTransition)
+}
+
+export async function cancelWheelSelection(roomId: string) {
+  return runWheelHostTransaction(roomId, cancelWheelSelectionTransition)
+}
+
+export async function markWheelRoundCompleted(roomId: string) {
+  return runWheelHostTransaction(roomId, state => decideWheelRoundTransition(state, 'completed', now()))
+}
+
+export async function markWheelRoundPending(roomId: string) {
+  return runWheelHostTransaction(roomId, state => decideWheelRoundTransition(state, 'pending', now()))
+}
+
+export async function completeWheelPendingTask(roomId: string, pendingId: string) {
+  return runWheelHostTransaction(roomId, state => completePendingWheelTaskTransition(state, pendingId, now()))
 }
