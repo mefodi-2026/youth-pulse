@@ -86,7 +86,11 @@
         ".validate": "newData.hasChildren(['roomId','phase','maxParticipants','createdAt']) && newData.child('roomId').val() === $roomId && !newData.child('hostUid').exists() && !newData.child('workspaceId').exists() && !newData.child('participants').exists() && !newData.child('questions').exists()",
         "phase": { ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)" },
         "closedAt": { ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)" },
-        "roomTitle": { ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)" }
+        "roomTitle": { ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)" },
+        "wheel": {
+          ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)",
+          ".validate": "!newData.exists() || (newData.hasChildren(['inputMode','drawOrder','phase','nameCount','taskCount','submissionCount']) && (newData.child('inputMode').val() === 'participants' || newData.child('inputMode').val() === 'host') && (newData.child('drawOrder').val() === 'name_then_task' || newData.child('drawOrder').val() === 'task_then_name') && (newData.child('phase').val() === 'collecting' || newData.child('phase').val() === 'ready' || newData.child('phase').val() === 'completed'))"
+        }
       }
     },
     "roomParticipantQuestions": {
@@ -122,7 +126,7 @@
       "$roomId": {
         ".read": "auth != null && (data.child('hostUid').val() === auth.uid || auth.token.platformAdmin === true)",
         ".write": "auth != null && (auth.token.platformAdmin === true || (!data.exists() && auth.token.firebase.sign_in_provider !== 'anonymous' && newData.child('roomId').val() === $roomId && newData.child('hostUid').val() === auth.uid && newData.child('workspaceId').isString() && newData.child('productId').isString() && root.child('users').child(auth.uid).child('workspaceId').val() === newData.child('workspaceId').val() && root.child('users').child(auth.uid).child('status').val() === 'active' && root.child('workspaces').child(newData.child('workspaceId').val()).child('ownerUid').val() === auth.uid))",
-        ".validate": "(data.exists() && !data.child('snapshotId').exists()) || (newData.hasChildren(['roomId','createdAt','phase','maxParticipants','hostUid','workspaceId','productId','mode','packId','packVersion','snapshotId','packSnapshot','settings']) && newData.child('roomId').val() === $roomId && (newData.child('mode').val() === 'diagnostic' || newData.child('mode').val() === 'quiz') && (newData.child('phase').val() === 'lobby' || newData.child('phase').val() === 'live' || newData.child('phase').val() === 'personal' || newData.child('phase').val() === 'resultsIntro' || newData.child('phase').val() === 'resultsReal' || newData.child('phase').val() === 'closed'))",
+        ".validate": "(data.exists() && !data.child('snapshotId').exists()) || (newData.hasChildren(['roomId','createdAt','phase','maxParticipants','hostUid','workspaceId','productId','mode','packId','packVersion','snapshotId','packSnapshot','settings']) && newData.child('roomId').val() === $roomId && (newData.child('mode').val() === 'diagnostic' || newData.child('mode').val() === 'quiz' || newData.child('mode').val() === 'wheel') && (newData.child('phase').val() === 'lobby' || newData.child('phase').val() === 'live' || newData.child('phase').val() === 'personal' || newData.child('phase').val() === 'resultsIntro' || newData.child('phase').val() === 'resultsReal' || newData.child('phase').val() === 'closed'))",
         "mode": { ".validate": "!data.exists() || newData.val() === data.val()" },
         "packId": { ".validate": "!data.exists() || newData.val() === data.val()" },
         "packVersion": { ".validate": "!data.exists() || newData.val() === data.val()" },
@@ -142,6 +146,41 @@
         "events": {
           "$eventId": {
             ".write": "auth != null && !data.exists() && ((root.child('sessions').child($roomId).child('hostUid').val() === auth.uid && auth.token.firebase.sign_in_provider !== 'anonymous') || (auth.uid === newData.child('participantId').val() && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('phase').val() !== 'closed'))"
+          }
+        },
+        "wheel": {
+          ".read": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)",
+          "config": {
+            ".read": "auth != null",
+            ".validate": "newData.hasChildren(['inputMode','drawOrder']) && (newData.child('inputMode').val() === 'participants' || newData.child('inputMode').val() === 'host') && (newData.child('drawOrder').val() === 'name_then_task' || newData.child('drawOrder').val() === 'task_then_name') && (!data.exists() || newData.val() === data.val())"
+          },
+          "mode": { ".validate": "newData.val() === 'wheel' && (!data.exists() || newData.val() === data.val())" },
+          "modeVersion": { ".validate": "newData.val() === 'wheel-v1' && (!data.exists() || newData.val() === data.val())" },
+          "phase": {
+            ".read": "auth != null",
+            ".write": "auth != null && (auth.token.platformAdmin === true || (root.child('sessions').child($roomId).child('hostUid').val() === auth.uid && root.child('users').child(auth.uid).child('status').val() === 'active'))",
+            ".validate": "newData.val() === 'collecting' || newData.val() === 'ready' || newData.val() === 'completed'"
+          },
+          "participants": {
+            "$participantId": {
+              ".read": "auth != null && (auth.uid === $participantId || auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)",
+              ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('phase').val() !== 'closed' && root.child('sessions').child($roomId).child('wheel').child('phase').val() === 'collecting' && root.child('sessions').child($roomId).child('wheel').child('config').child('inputMode').val() === 'participants' && newData.child('participantId').val() === auth.uid",
+              ".validate": "newData.hasChildren(['participantId','displayName','taskText','createdAt','updatedAt']) && newData.child('displayName').isString() && newData.child('displayName').val().length >= 1 && newData.child('displayName').val().length <= 60 && newData.child('taskText').isString() && newData.child('taskText').val().length >= 1 && newData.child('taskText').val().length <= 240"
+            }
+          },
+          "pools": {
+            "names": {
+              "$itemId": {
+                ".write": "auth != null && root.child('sessions').child($roomId).child('wheel').child('phase').val() === 'collecting' && (root.child('sessions').child($roomId).child('hostUid').val() === auth.uid || (auth.uid === $itemId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('wheel').child('config').child('inputMode').val() === 'participants' && newData.child('sourceParticipantId').val() === auth.uid))",
+                ".validate": "!newData.exists() || (newData.hasChildren(['itemId','text','status']) && newData.child('itemId').val() === $itemId && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 60 && newData.child('status').val() === 'available')"
+              }
+            },
+            "tasks": {
+              "$itemId": {
+                ".write": "auth != null && root.child('sessions').child($roomId).child('wheel').child('phase').val() === 'collecting' && (root.child('sessions').child($roomId).child('hostUid').val() === auth.uid || (auth.uid === $itemId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('wheel').child('config').child('inputMode').val() === 'participants' && newData.child('sourceParticipantId').val() === auth.uid))",
+                ".validate": "!newData.exists() || (newData.hasChildren(['itemId','text','status']) && newData.child('itemId').val() === $itemId && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 240 && newData.child('status').val() === 'available')"
+              }
+            }
           }
         },
         "participants": {

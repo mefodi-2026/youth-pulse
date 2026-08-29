@@ -1,7 +1,7 @@
 import type { ModeManifest } from '../modeRegistry'
 import { wheelDataContract, wheelGameTypeId } from './contract'
 import { wheelGameModule } from './gameModule'
-import { WheelLandingScreen, WheelParticipantPlaceholder, WheelSetupPlaceholder } from './screens'
+import { WheelHostScreen, WheelLandingScreen, WheelMainScreen, WheelParticipantFlow, WheelParticipantPlaceholder, WheelSetupScreen } from './screens'
 
 export const wheelManifest: ModeManifest = {
   id: wheelGameTypeId,
@@ -16,11 +16,14 @@ export const wheelManifest: ModeManifest = {
     defaultScoringTemplateId: 'standard-v1',
     initialSelection: () => null,
     resolvePack: () => null,
-    validateSelection: () => { throw new Error('Создание wheel-комнаты будет доступно после подключения ввода данных.') },
+    validateSelection: () => undefined,
   },
   participantScreen: WheelParticipantPlaceholder,
+  participantFlow: WheelParticipantFlow,
+  hostScreen: WheelHostScreen,
+  mainScreen: WheelMainScreen,
   landingScreen: WheelLandingScreen,
-  setupScreen: WheelSetupPlaceholder,
+  setupScreen: WheelSetupScreen,
   routes: { setup: '/host?tab=roomSetup&mode=wheel', participant: '/join', host: '/host?tab=currentRoom', results: '/host?tab=currentRoom&view=results' },
   surfaces: {
     setup: 'modes/wheel/setup',

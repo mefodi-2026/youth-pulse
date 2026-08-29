@@ -768,7 +768,21 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const ModeSetupScreen = setupModeManifest.setupScreen
   if (tab === 'roomSetup' && ModeSetupScreen) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">РЕЖИМ · {setupModeManifest.menuLabel.toUpperCase()}</p><h1>{setupModeManifest.title}</h1><p className="room-header-title">{setupModeManifest.description}</p></div></header>
-    <ModeSetupScreen onBack={() => navigate(setupModeManifest.mode as HostTab)} />
+    <ModeSetupScreen
+      onBack={() => navigate(setupModeManifest.mode as HostTab)}
+      leaderUid={leader.uid}
+      workspaceId={leader.workspaceId}
+      defaultTitle={roomTitleDraft || setupModeManifest.title}
+      onCreated={createdRoom => {
+        localStorage.setItem(roomKey, createdRoom)
+        localStorage.setItem(lastRoomKey, createdRoom)
+        localStorage.removeItem('atmosphere-host-room')
+        setLastClosedRoom('')
+        setResultRoom('')
+        setRoom(createdRoom)
+        navigate('currentRoom', createdRoom)
+      }}
+    />
   </HostLayout>
   if (tab === 'roomSetup') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">НОВАЯ ВСТРЕЧА</p><h1>Настройка комнаты</h1><p className="room-header-title">Сначала подтвердите параметры — комната появится только после нажатия кнопки ниже.</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
@@ -812,6 +826,10 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     if (!session || session.phase === 'closed') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={lastClosedRoom} session={null} participants={0} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
       <header className="host-header"><div><p className="eyebrow">ТЕКУЩАЯ КОМНАТА</p><h1>У вас пока нет активной комнаты</h1></div></header>
       <Glass className="empty-state"><p>Создайте комнату, чтобы увидеть участников, статистику и результаты.</p><Button onClick={() => openRoomSetup(diagnosticMode)}>Создать комнату</Button>{lastClosedRoom && <Button secondary onClick={() => navigate('rooms')}>Посмотреть историю комнат</Button>}</Glass>
+    </HostLayout>
+    const ModeHostScreen = getModeDefinition(session.gameTypeId || session.mode).hostScreen
+    if (ModeHostScreen) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={Object.keys(session.wheel?.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
+      <ModeHostScreen session={session} joinUrl={joinUrl} onClose={closeRoom} />
     </HostLayout>
     return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
       <header className="host-header"><div><p className="eyebrow">ТЕКУЩАЯ КОМНАТА · {(session.mode || diagnosticMode) === quizMode ? 'ВИКТОРИНА' : 'ДИАГНОСТИКА'}</p><h1>{session.roomTitle || session.displayCode || room}</h1><p className="room-header-title">{phaseText(session.phase)}</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО'}</span></header>

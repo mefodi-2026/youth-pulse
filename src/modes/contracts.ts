@@ -25,7 +25,19 @@ export interface ModeLandingScreenProps {
 
 export interface ModeSetupScreenProps {
   onBack: () => void
+  leaderUid?: string
+  workspaceId?: string
+  defaultTitle?: string
+  onCreated?: (roomId: string) => void
 }
+
+export interface ModeParticipantFlowProps { room: string }
+export interface ModeHostScreenProps {
+  session: Session
+  joinUrl: string
+  onClose: () => void
+}
+export interface ModeMainScreenProps { session: Session }
 
 export interface ModeOptionalScreens {
   landingScreen?: ComponentType<ModeLandingScreenProps>

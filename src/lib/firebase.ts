@@ -1,7 +1,6 @@
-import { initializeApp } from 'firebase/app'
-import { browserLocalPersistence, createUserWithEmailAndPassword, deleteUser, getAuth, onAuthStateChanged, setPersistence, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
-import { equalTo, get, getDatabase, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
-import { getFunctions, httpsCallable } from 'firebase/functions'
+import { createUserWithEmailAndPassword, deleteUser, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
+import { equalTo, get, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
+import { httpsCallable } from 'firebase/functions'
 import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
 import { bibleQuizGameModule, diagnosticGameModule, getGameModule } from './gameRegistry'
@@ -9,19 +8,10 @@ import { getScoringTemplate } from './scoring'
 import { orderQuestionsByCategory } from './questionOrder'
 import { participantQuestionsPath, participantResultPath, publicRoomPath, roomParticipantPath, roomParticipantResultsPath, roomPath } from '../core/roomService'
 import { normalizeQuestionsForMode, resolveCanonicalPackQuestions } from '../modes/contentPackAdapter'
+import { firebaseAuth as auth, firebaseAuthPersistence as authPersistence, firebaseDb as db, firebaseFunctions as functions, firebaseReady } from '../repositories/firebaseClient'
 import { getSessionQuestions, type Answer, type ContentPack, type FeedbackItem, type Invite, type LeaderProfile, type Participant, type ParticipantQuestion, type ParticipantQuestionSet, type ParticipantQuizResult, type ProductConfig, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type RoomMode, type ScoringTemplateId, type Session, type SessionArchive, type SessionEvent, type SessionEventType, type SessionPhase, type TemplateSelection, type TemplateSnapshot, type UserStatus, type Workspace, type WorkspaceProduct } from '../types'
 
-const config = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-}
-
-export const firebaseReady = Boolean(config.apiKey && config.databaseURL && config.projectId)
+export { firebaseReady }
 export const diagnosticProductId = diagnosticGameModule.productId
 export const diagnosticGameTypeId = diagnosticGameModule.gameTypeId
 export const quizProductId = bibleQuizGameModule.productId
@@ -58,12 +48,7 @@ export const platformProductDefaults: Record<string, ProductConfig> = {
     updatedAt: 0,
   },
 }
-const app = firebaseReady ? initializeApp(config) : null
-const auth = app ? getAuth(app) : null
-const db = app ? getDatabase(app) : null
-const functions = app ? getFunctions(app, 'europe-west1') : null
 let pendingAnonymousSignIn: Promise<NonNullable<typeof auth>['currentUser']> | null = null
-const authPersistence = auth ? setPersistence(auth, browserLocalPersistence) : Promise.resolve()
 
 export interface RegisterLeaderInput { fullName: string; phone: string; email: string; password: string; workspaceName: string; city: string; inviteCode?: string }
 export interface RoomPilotDetails {
@@ -110,6 +95,18 @@ const createPublicRoom = (session: Session): PublicRoom => ({
   ...(session.packSnapshot?.title ? { packTitle: session.packSnapshot.title } : {}),
   ...(session.difficulty ? { difficulty: session.difficulty } : {}),
   ...(session.scoringTemplateId ? { scoringTemplateId: session.scoringTemplateId } : {}),
+  ...(session.mode === 'wheel' && session.wheel ? {
+    wheel: {
+      inputMode: session.wheel.config.inputMode,
+      drawOrder: session.wheel.config.drawOrder,
+      phase: session.wheel.phase === 'collecting' || session.wheel.phase === 'ready' || session.wheel.phase === 'completed'
+        ? session.wheel.phase
+        : 'collecting',
+      nameCount: Object.keys(session.wheel.pools?.names || {}).length,
+      taskCount: Object.keys(session.wheel.pools?.tasks || {}).length,
+      submissionCount: Object.keys(session.wheel.participants || {}).length,
+    },
+  } : {}),
 })
 
 const toParticipantQuestion = (question: Question): ParticipantQuestion => ({
@@ -296,10 +293,11 @@ const inviteStatus = async (inviteCode?: string): Promise<UserStatus> => {
 
 export const subscribeAuthUser = (callback: (user: User | null) => void) => {
   if (!auth) { callback(null); return () => undefined }
+  const currentAuth = auth
   let active = true
   let unsubscribe: () => void = () => undefined
   void authPersistence.then(() => {
-    if (active) unsubscribe = onAuthStateChanged(auth, callback)
+    if (active) unsubscribe = onAuthStateChanged(currentAuth, callback)
   }).catch(() => { if (active) callback(null) })
   return () => { active = false; unsubscribe() }
 }
@@ -498,7 +496,8 @@ export const subscribePublishedGlobalPacks = (callback: (value: Record<string, C
 
 export const subscribeWorkspacePack = (workspaceId: string, packId: string, callback: (value: ContentPack | null) => void, onError?: (error: Error) => void) => {
   if (!db || !workspaceId) return () => undefined
-  const canonical = ref(db, `workspaces/${workspaceId}/workspacePacks/${packId}`)
+  const currentDb = db
+  const canonical = ref(currentDb, `workspaces/${workspaceId}/workspacePacks/${packId}`)
   let stopLegacy: () => void = () => undefined
   const stopCanonical = onValue(canonical, snapshot => {
     const pack = normalizeContentPack(snapshot.val(), builtInQuestions, { workspaceId, packId, templateOrigin: 'workspace' })
@@ -506,7 +505,7 @@ export const subscribeWorkspacePack = (workspaceId: string, packId: string, call
     // Legacy root is read-only compatibility only. It is intentionally never
     // merged with canonical data, so duplicates cannot be created by a read.
     stopLegacy()
-    stopLegacy = onValue(ref(db, `workspacePacks/${workspaceId}/${packId}`), legacy => callback(normalizeContentPack(legacy.val(), builtInQuestions, { workspaceId, packId, templateOrigin: 'workspace' })), error => onError?.(error))
+    stopLegacy = onValue(ref(currentDb, `workspacePacks/${workspaceId}/${packId}`), legacy => callback(normalizeContentPack(legacy.val(), builtInQuestions, { workspaceId, packId, templateOrigin: 'workspace' })), error => onError?.(error))
   }, error => onError?.(error))
   return () => { stopCanonical(); stopLegacy() }
 }
@@ -955,7 +954,9 @@ export const ensureParticipantRoomData = async (roomId: string, knownSession?: S
   ])
   const patch: Record<string, unknown> = {}
   if (!publicSnapshot.exists()) patch[publicRoomPath(roomId)] = createPublicRoom(session)
-  if (!participantQuestionsSnapshot.exists()) patch[participantQuestionsPath(roomId)] = createParticipantQuestionSet(session)
+  // Wheel rooms do not use question packs. Writing an empty participant question
+  // set would be rejected by the immutable question-set rules and is unnecessary.
+  if (session.mode !== 'wheel' && !participantQuestionsSnapshot.exists()) patch[participantQuestionsPath(roomId)] = createParticipantQuestionSet(session)
   if (Object.keys(patch).length) await update(ref(services.db), patch)
 }
 

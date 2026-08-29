@@ -1,4 +1,4 @@
-import type { WheelConfig, WheelDrawOrder, WheelInputMode } from './types'
+import type { WheelConfig, WheelDrawOrder, WheelInputMode, WheelRoomState } from './types'
 
 export const wheelInputModes: readonly WheelInputMode[] = ['participants', 'host']
 export const wheelDrawOrders: readonly WheelDrawOrder[] = ['name_then_task', 'task_then_name']
@@ -22,3 +22,10 @@ export const validateWheelParticipantEntry = (value: { displayName: string; task
   displayName: validateWheelDisplayName(value.displayName),
   taskText: validateWheelTaskText(value.taskText),
 })
+
+export const canStartWheel = (state?: WheelRoomState | null) => Boolean(
+  state
+  && state.phase === 'collecting'
+  && Object.keys(state.pools?.names || {}).length >= 2
+  && Object.keys(state.pools?.tasks || {}).length >= 2,
+)

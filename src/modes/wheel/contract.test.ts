@@ -1,5 +1,5 @@
 import { createInitialWheelState, canTransitionWheelPhase } from './stateMachine'
-import { normalizeWheelConfig, validateWheelParticipantEntry } from './validation'
+import { canStartWheel, normalizeWheelConfig, validateWheelParticipantEntry } from './validation'
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(`Wheel contract failed: ${message}`)
@@ -25,5 +25,27 @@ assert(!canTransitionWheelPhase('setup', 'completed'), 'state machine must rejec
 const participant = validateWheelParticipantEntry({ displayName: '  Анна  ', taskText: '  Назвать любимый стих  ' })
 assert(participant.displayName === 'Анна', 'participant display name must be normalized')
 assert(participant.taskText === 'Назвать любимый стих', 'participant task must be normalized')
+
+const duplicateNames = {
+  ...createInitialWheelState({ inputMode: 'participants' }),
+  phase: 'collecting' as const,
+  participants: {
+    uidA: { participantId: 'uidA', displayName: 'Саша', taskText: 'Задание один', createdAt: 1, updatedAt: 1 },
+    uidB: { participantId: 'uidB', displayName: 'Саша', taskText: 'Задание два', createdAt: 2, updatedAt: 2 },
+  },
+  pools: {
+    names: {
+      uidA: { itemId: 'uidA', text: 'Саша', sourceParticipantId: 'uidA', status: 'available' as const },
+      uidB: { itemId: 'uidB', text: 'Саша', sourceParticipantId: 'uidB', status: 'available' as const },
+    },
+    tasks: {
+      uidA: { itemId: 'uidA', text: 'Задание один', sourceParticipantId: 'uidA', status: 'available' as const },
+      uidB: { itemId: 'uidB', text: 'Задание два', sourceParticipantId: 'uidB', status: 'available' as const },
+    },
+  },
+}
+assert(Object.keys(duplicateNames.participants).length === 2, 'duplicate display names must retain stable participant IDs')
+assert(canStartWheel(duplicateNames), 'two valid names and tasks must enable the game')
+assert(!canStartWheel({ ...duplicateNames, phase: 'ready' }), 'ready state must lock further collection')
 
 export const wheelContractPassed = true

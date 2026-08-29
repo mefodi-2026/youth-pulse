@@ -21,6 +21,7 @@ assert(diagnostic.runtime !== quiz.runtime, 'each mode must own an independent r
 assert(wheel.runtime !== diagnostic.runtime && wheel.runtime !== quiz.runtime, 'wheel must own an independent runtime')
 assert(wheel.dataContract.roomStateSchema === 'wheel-room-state-v1', 'wheel state schema must be explicit')
 assert(wheel.runtime.getQuestions({}, []).length === 0, 'wheel must not inherit question-pack fallback logic')
+assert(Boolean(wheel.setupScreen && wheel.participantFlow && wheel.hostScreen && wheel.mainScreen), 'wheel Prompt 2 screens must be registered through the manifest')
 
 const legacySession = { questions: diagnosticQuestions.slice(0, 3), gameTypeId: 'diagnostic' as const }
 assert(diagnostic.runtime.getQuestions(legacySession, diagnosticQuestions).length === 3, 'legacy room questions must not fall back to 70')

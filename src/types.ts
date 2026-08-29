@@ -1,3 +1,5 @@
+import type { WheelRoomState } from './modes/wheel/types'
+
 export type CategoryId = 'communication' | 'forgiveness' | 'service' | 'care' | 'honesty'
 export type Answer = 'A' | 'B' | 'C' | 'D'
 export type ResponseValue = Answer | 'SKIP'
@@ -218,6 +220,8 @@ export interface Session {
   questions?: Question[]
   participants: Record<string, Participant>
   events?: Record<string, SessionEvent>
+  /** Mode-owned state. Diagnostic and quiz never read or write this branch. */
+  wheel?: WheelRoomState
 }
 export interface SessionArchive extends Session { archivedAt: number }
 /** Feedback belongs to a leader workspace and is visible only to the platform owner. */
@@ -263,6 +267,15 @@ export interface PublicRoom {
   packTitle?: string
   difficulty?: QuizDifficulty
   scoringTemplateId?: ScoringTemplateId
+  /** Participant-safe wheel status. Names and tasks are never mirrored here. */
+  wheel?: {
+    inputMode: 'participants' | 'host'
+    drawOrder: 'name_then_task' | 'task_then_name'
+    phase: 'collecting' | 'ready' | 'completed'
+    nameCount: number
+    taskCount: number
+    submissionCount: number
+  }
 }
 /** Question shape sent to a participant. Answer keys and explanations are excluded. */
 export type ParticipantQuestion = Question

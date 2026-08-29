@@ -1,5 +1,5 @@
 import type { RoomMode } from '../types'
-import type { GameModule, ModeDataContract, ModeLandingScreenProps, ModeSetupPolicy, ModeSetupScreenProps, ModeSurfaceLinks } from './contracts'
+import type { GameModule, ModeDataContract, ModeHostScreenProps, ModeLandingScreenProps, ModeMainScreenProps, ModeParticipantFlowProps, ModeSetupPolicy, ModeSetupScreenProps, ModeSurfaceLinks } from './contracts'
 import type { ComponentType } from 'react'
 import type { ParticipantQuestionScreenProps } from './participantTypes'
 import { diagnosticManifest } from './diagnostic/manifest'
@@ -18,6 +18,9 @@ export interface ModeManifest {
   runtime: GameModule
   setupPolicy: ModeSetupPolicy
   participantScreen: ComponentType<ParticipantQuestionScreenProps>
+  participantFlow?: ComponentType<ModeParticipantFlowProps>
+  hostScreen?: ComponentType<ModeHostScreenProps>
+  mainScreen?: ComponentType<ModeMainScreenProps>
   landingScreen?: ComponentType<ModeLandingScreenProps>
   setupScreen?: ComponentType<ModeSetupScreenProps>
   routes: { setup: string; participant: string; host: string; results: string }

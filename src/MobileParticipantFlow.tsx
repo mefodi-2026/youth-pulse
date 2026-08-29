@@ -119,6 +119,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   }
   const isQuiz = session?.mode === 'quiz' || session?.gameTypeId === 'quiz' || lobby?.mode === 'quiz'
   const modeManifest = getModeManifest(isQuiz ? 'quiz' : session?.gameTypeId || lobby?.mode)
+  const FullParticipantFlow = modeManifest.participantFlow
   const introQuestionCount = isQuiz ? (session ? activeQuestions.length : 15) : activeQuestions.length
 
   useEffect(() => {
@@ -194,6 +195,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   }
   const openReport = async () => { if (!participant) return; try { if (firebaseReady) await markPersonalViewed(room, participant.id); else if (session) { const next = { ...participant, personalViewedAt: Date.now() }; const demo = { ...session, participants: { ...session.participants, [participant.id]: next } }; setDemo(demo); setSession(demo); setParticipant(next) } } finally { setShowReport(true) } }
 
+  if (FullParticipantFlow && room) return <FullParticipantFlow room={room} />
   if (!room) return <Shell screen="intro-screen"><p className="flow-label">ОНЛАЙН-ДИАГНОСТИКА</p><h1>Нужен QR-код ведущего</h1><p>Отсканируйте код, чтобы открыть личную ссылку на диагностику.</p></Shell>
   if (firebaseReady && !authReady) return <Shell screen="waiting-screen"><p className="flow-label">ПОДКЛЮЧАЕМ</p><h1>Проверяем подключение</h1><p>Восстанавливаем безопасную сессию участника.</p></Shell>
   if (moduleError) return <Shell screen="waiting-screen"><p className="flow-label">КОМНАТА НЕДОСТУПНА</p><h1>Неизвестный режим комнаты</h1><p>{moduleError} Попросите ведущего создать комнату заново.</p></Shell>
