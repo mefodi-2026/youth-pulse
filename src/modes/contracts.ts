@@ -1,4 +1,5 @@
 import type { ContentPack, PackRuleConfig, Question, ResponseValue, Scores, ScoringTemplateId, Session, TemplateSelection } from '../types'
+import type { ComponentType } from 'react'
 
 export interface GameModule {
   productId: string
@@ -15,6 +16,20 @@ export interface ModeDataContract {
   participantQuestionSchema: string
   resultSchema: string
   legacySessionFallback: boolean
+  roomStateSchema?: string
+}
+
+export interface ModeLandingScreenProps {
+  onSetup: () => void
+}
+
+export interface ModeSetupScreenProps {
+  onBack: () => void
+}
+
+export interface ModeOptionalScreens {
+  landingScreen?: ComponentType<ModeLandingScreenProps>
+  setupScreen?: ComponentType<ModeSetupScreenProps>
 }
 
 export interface ModeSurfaceLinks {

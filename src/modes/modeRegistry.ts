@@ -1,9 +1,10 @@
 import type { RoomMode } from '../types'
-import type { GameModule, ModeDataContract, ModeSetupPolicy, ModeSurfaceLinks } from './contracts'
+import type { GameModule, ModeDataContract, ModeLandingScreenProps, ModeSetupPolicy, ModeSetupScreenProps, ModeSurfaceLinks } from './contracts'
 import type { ComponentType } from 'react'
 import type { ParticipantQuestionScreenProps } from './participantTypes'
 import { diagnosticManifest } from './diagnostic/manifest'
 import { quizManifest } from './quiz/manifest'
+import { wheelManifest } from './wheel/manifest'
 
 export interface ModeManifest {
   /** Registry ID can be extended in tests before RoomMode is expanded in production. */
@@ -17,6 +18,8 @@ export interface ModeManifest {
   runtime: GameModule
   setupPolicy: ModeSetupPolicy
   participantScreen: ComponentType<ParticipantQuestionScreenProps>
+  landingScreen?: ComponentType<ModeLandingScreenProps>
+  setupScreen?: ComponentType<ModeSetupScreenProps>
   routes: { setup: string; participant: string; host: string; results: string }
   surfaces: ModeSurfaceLinks
   dataContract: ModeDataContract
@@ -29,7 +32,7 @@ export const createModeRegistry = <T extends ModeManifest>(manifests: readonly T
   return Object.freeze(Object.fromEntries(entries) as Readonly<Record<string, T>>)
 }
 
-const registry = createModeRegistry([diagnosticManifest, quizManifest] as const)
+const registry = createModeRegistry([diagnosticManifest, quizManifest, wheelManifest] as const)
 
 export const modeRegistry = registry as Readonly<Record<RoomMode, ModeManifest>>
 export const productionModes = Object.values(modeRegistry).filter(manifest => manifest.productionMenu)

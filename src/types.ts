@@ -3,7 +3,7 @@ export type Answer = 'A' | 'B' | 'C' | 'D'
 export type ResponseValue = Answer | 'SKIP'
 export type SessionPhase = 'lobby' | 'live' | 'personal' | 'resultsIntro' | 'resultsReal' | 'closed'
 /** A session format selected by a leader. Quiz is reserved for the future game module. */
-export type RoomMode = 'diagnostic' | 'quiz'
+export type RoomMode = 'diagnostic' | 'quiz' | 'wheel'
 export type QuizDifficulty = 'easy' | 'medium' | 'hard'
 export type SessionEventType = 'room_created' | 'room_started' | 'participant_joined' | 'participant_finished' | 'report_viewed' | 'room_closed'
 export type UserStatus = 'pending' | 'active' | 'paused' | 'revoked'
@@ -22,9 +22,9 @@ export interface TemplateSelection { selectedPackId: PackId; templateSource: Tem
 export type PackStatus = 'draft' | 'published' | 'archived' | 'active'
 export interface PackRuleConfig {
   allowSkip: boolean
-  answerMode: 'single-choice'
+  answerMode: 'single-choice' | 'none'
   questionOrder: 'fixed' | 'shuffled'
-  scoringMode: 'diagnostic-3-2-1-0' | 'diagnostic-2-1-0-minus-1' | 'quiz-correct-1-0'
+  scoringMode: 'diagnostic-3-2-1-0' | 'diagnostic-2-1-0-minus-1' | 'quiz-correct-1-0' | 'none'
 }
 
 export interface BaseQuestion {

@@ -2,6 +2,8 @@ import { questions as diagnosticQuestions } from '../data/questions'
 import { getModeManifest, productionModes } from './modeRegistry'
 import { resolveCanonicalPackQuestions } from './contentPackAdapter'
 import type { ContentPack } from '../types'
+import './modeRegistry.contract.test'
+import './wheel/contract.test'
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(`Architecture contract failed: ${message}`)
@@ -9,11 +11,16 @@ const assert: (condition: unknown, message: string) => asserts condition = (cond
 
 const diagnostic = getModeManifest()
 const quiz = getModeManifest('quiz')
+const wheel = getModeManifest('wheel')
 
-assert(productionModes.length === 2, 'production registry must contain diagnostic and quiz only')
+assert(productionModes.length === 3, 'production registry must contain diagnostic, quiz and wheel')
 assert(diagnostic.id === 'diagnostic', 'legacy rooms without mode must resolve to diagnostic')
 assert(quiz.id === 'quiz', 'quiz must resolve through the registry')
+assert(wheel.id === 'wheel', 'wheel must resolve through the registry')
 assert(diagnostic.runtime !== quiz.runtime, 'each mode must own an independent runtime')
+assert(wheel.runtime !== diagnostic.runtime && wheel.runtime !== quiz.runtime, 'wheel must own an independent runtime')
+assert(wheel.dataContract.roomStateSchema === 'wheel-room-state-v1', 'wheel state schema must be explicit')
+assert(wheel.runtime.getQuestions({}, []).length === 0, 'wheel must not inherit question-pack fallback logic')
 
 const legacySession = { questions: diagnosticQuestions.slice(0, 3), gameTypeId: 'diagnostic' as const }
 assert(diagnostic.runtime.getQuestions(legacySession, diagnosticQuestions).length === 3, 'legacy room questions must not fall back to 70')

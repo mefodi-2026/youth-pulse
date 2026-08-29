@@ -13,7 +13,7 @@ import { nextCategoryQuestionOrder, orderQuestionsByCategory } from './lib/quest
 import { OwnerAdmin } from './OwnerAdmin'
 import { diagnosticMode, isDiagnosticPack } from './modes/diagnostic/contract'
 import { isQuizPack, quizMode, workspaceQuizSelection } from './modes/quiz/contract'
-import { getModeDefinition, modeRegistry } from './modes/modeRegistry'
+import { getModeDefinition, modeRegistry, productionModes } from './modes/modeRegistry'
 import { changeRoomPhase, closeRoomAndArchive, createRoom } from './core/useCases/roomLifecycle'
 import { copyQuizWorkspacePack, saveDiagnosticWorkspacePack } from './core/useCases/packOperations'
 import { resolveResultSession, selectWorkspaceArchives } from './core/useCases/archiveResults'
@@ -209,8 +209,8 @@ function AccountPage({ profile }: { profile: LeaderProfile }) {
 }
 
 function HomePanel({ name, questionCount, onChooseMode }: { name: string; questionCount: number; onChooseMode: (mode: RoomMode) => void }) {
-  const modes = Object.values(modeRegistry).map(mode => ({ ...mode, mode: mode.mode as RoomMode }))
-  return <div className="home-panel"><div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><p className="home-feedback">Сейчас продукт находится на этапе разработки. Доступны две функции для тестирования: диагностика и викторина. Пожалуйста, протестируйте сервис и поделитесь обратной связью.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ДОСТУПНЫЕ РЕЖИМЫ</p><div className="landing-feature-list">{modes.map((mode, index) => <article key={mode.mode}><span>{String(index + 1).padStart(2, '0')}</span><div><b>{mode.title}</b><small>{mode.mode === diagnosticMode ? `${questionCount || '—'} вопросов · ${Object.keys(categories).length} тем · личные и общие результаты` : mode.description}</small><Button onClick={() => onChooseMode(mode.mode)}>Создать комнату</Button></div></article>)}</div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Выберите режим и настройте встречу.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Подключите участников и начните игру или диагностику.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте результаты и экспорт внутри комнаты или её истории.</p></article></div></section></div>
+  const modes = productionModes.map(mode => ({ ...mode, mode: mode.mode as RoomMode }))
+  return <div className="home-panel"><div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><p className="home-feedback">Диагностика и викторина доступны для тестирования. «Колесо фортуны» подключено как отдельный режим и пока показывает безопасный экран подготовки к следующему этапу.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ДОСТУПНЫЕ РЕЖИМЫ</p><div className="landing-feature-list">{modes.map((mode, index) => <article key={mode.mode}><span>{String(index + 1).padStart(2, '0')}</span><div><b>{mode.title}</b><small>{mode.mode === diagnosticMode ? `${questionCount || '—'} вопросов · ${Object.keys(categories).length} тем · личные и общие результаты` : mode.description}</small><Button onClick={() => onChooseMode(mode.mode)}>{mode.setupScreen ? 'Открыть режим' : 'Создать комнату'}</Button></div></article>)}</div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Выберите режим и настройте встречу.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Подключите участников и начните игру или диагностику.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте результаты и экспорт внутри комнаты или её истории.</p></article></div></section></div>
 }
 
 function RulesPanel({ onStart }: { onStart: () => void }) {
@@ -233,14 +233,14 @@ function ProfilePanel({ profile }: { profile: LeaderProfile }) {
 }
 
 /** Legacy tabs remain readable so saved bookmarks keep working. */
-type KnownHostTab = 'main' | 'roomSetup' | 'currentRoom' | 'rooms' | 'diagnostic' | 'quiz' | 'settings' | 'profile' | 'rules' | 'overview' | 'results' | 'questions' | 'export'
+type KnownHostTab = 'main' | 'roomSetup' | 'currentRoom' | 'rooms' | 'diagnostic' | 'quiz' | 'wheel' | 'settings' | 'profile' | 'rules' | 'overview' | 'results' | 'questions' | 'export'
 // The open string branch keeps old bookmarked tabs harmlessly redirectable
 // without letting TypeScript erase their compatibility branches as unreachable.
 type HostTab = KnownHostTab | (string & {})
 type HostMenuItem = [HostTab, string, string]
 type RoomViewTab = 'overview' | 'participants' | 'results' | 'export'
 type CanonicalHostTab = Exclude<HostTab, 'overview' | 'results' | 'questions' | 'export'>
-const hostTabs: HostTab[] = ['main', 'roomSetup', 'currentRoom', 'rooms', 'diagnostic', 'quiz', 'settings', 'profile', 'rules', 'overview', 'results', 'questions', 'export']
+const hostTabs: HostTab[] = ['main', 'roomSetup', 'currentRoom', 'rooms', ...productionModes.map(mode => mode.id as HostTab), 'settings', 'profile', 'rules', 'overview', 'results', 'questions', 'export']
 const legacyTabRedirect: Record<'overview' | 'results' | 'questions' | 'export', { tab: CanonicalHostTab; roomView?: RoomViewTab }> = {
   overview: { tab: 'currentRoom', roomView: 'overview' },
   results: { tab: 'currentRoom', roomView: 'results' },
@@ -259,6 +259,10 @@ const readHostTab = (): HostTab | undefined => {
 const readRoomView = (): RoomViewTab | undefined => {
   const value = new URLSearchParams(window.location.search).get('view')
   return value === 'overview' || value === 'participants' || value === 'results' || value === 'export' ? value : undefined
+}
+const readRoomSetupMode = (): RoomMode | undefined => {
+  const value = new URLSearchParams(window.location.search).get('mode')
+  return value && modeRegistry[value as RoomMode] ? value as RoomMode : undefined
 }
 
 function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, setMenuOpen, children, resultsMode = false }: { menu: HostMenuItem[]; tab: HostTab; onTab: (tab: HostTab) => void; room: string; session: Session | null; participants: number; menuOpen: boolean; setMenuOpen: (value: boolean) => void; children: React.ReactNode; resultsMode?: boolean }) {
@@ -309,7 +313,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [roomTitleDraft, setRoomTitleDraft] = useState('')
   const [roomTitleSaving, setRoomTitleSaving] = useState(false)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
-  const [roomDetails, setRoomDetails] = useState<RoomPilotDetails>({ groupName: '', city: '', mode: 'diagnostic', estimatedParticipants: 30 })
+  const [roomDetails, setRoomDetails] = useState<RoomPilotDetails>({ groupName: '', city: '', mode: initialTab === 'roomSetup' ? readRoomSetupMode() || 'diagnostic' : 'diagnostic', estimatedParticipants: 30 })
   const [scoringTemplateId, setScoringTemplateId] = useState<ScoringTemplateId>('standard-v1')
   const creatingRoomRef = useRef(false)
   const [historyFilters, setHistoryFilters] = useState({ query: '', mode: 'all' as 'all' | RoomMode, from: '', to: '' })
@@ -322,7 +326,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const finished = participants.filter(p => p.status === 'finished').length
   const answering = participants.filter(p => p.status === 'answering').length
   const allFinished = participants.length > 0 && finished === participants.length
-  const menu: HostMenuItem[] = [['main', 'Главное', '✦'], ['currentRoom', 'Текущая комната', '▣'], ['rooms', 'История комнат', '◫'], ['diagnostic', 'Диагностика', '◌'], ['quiz', 'Библейская викторина', '✦'], ['settings', 'Настройки', '⚙'], ['profile', 'Профиль', '◐'], ['rules', 'Правила', '?']]
+  const menu: HostMenuItem[] = [['main', 'Главное', '✦'], ['currentRoom', 'Текущая комната', '▣'], ['rooms', 'История комнат', '◫'], ...productionModes.map(mode => [mode.id as HostTab, mode.menuLabel, mode.icon] as HostMenuItem), ['settings', 'Настройки', '⚙'], ['profile', 'Профиль', '◐'], ['rules', 'Правила', '?']]
   const archiveEntries = useMemo(() => selectWorkspaceArchives(archives, leader), [archives, leader])
   const filteredArchiveEntries = useMemo(() => archiveEntries.filter(archived => {
     const query = historyFilters.query.trim().toLocaleLowerCase('ru-RU')
@@ -332,7 +336,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     const to = historyFilters.to ? new Date(`${historyFilters.to}T23:59:59`) : null
     return (!query || haystack.includes(query)) && (historyFilters.mode === 'all' || archived.mode === historyFilters.mode) && (!from || created >= from) && (!to || created <= to)
   }), [archiveEntries, historyFilters])
-  const navigate = (next: HostTab, targetRoom = room, requestedRoomView?: RoomViewTab) => {
+  const navigate = (next: HostTab, targetRoom = room, requestedRoomView?: RoomViewTab, requestedMode?: RoomMode) => {
     const normalized = normalizeHostTab(next)
     const nextView = requestedRoomView || normalized.roomView || (normalized.tab === 'currentRoom' ? 'overview' : undefined)
     setTab(normalized.tab)
@@ -341,6 +345,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     if (nextView === 'results') { setResultRoom(targetRoom); setMenuOpen(false) }
     const params = new URLSearchParams({ tab: normalized.tab })
     if (nextView) params.set('view', nextView)
+    if (normalized.tab === 'roomSetup' && requestedMode) params.set('mode', requestedMode)
     if (targetRoom) params.set('room', targetRoom)
     go(`/host?${params.toString()}`)
   }
@@ -351,11 +356,14 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   useEffect(() => {
     const normalized = normalizeHostTab(initialTab)
     const requestedView = readRoomView() || normalized.roomView || (normalized.tab === 'currentRoom' ? 'overview' : undefined)
+    const requestedMode = normalized.tab === 'roomSetup' ? readRoomSetupMode() : undefined
     setTab(normalized.tab)
     if (requestedView) setRoomView(requestedView)
+    if (requestedMode) setRoomDetails(previous => ({ ...previous, mode: requestedMode }))
     if (requestedView === 'results' && initialRoom) setResultRoom(initialRoom)
     const params = new URLSearchParams({ tab: normalized.tab })
     if (requestedView) params.set('view', requestedView)
+    if (requestedMode) params.set('mode', requestedMode)
     if (initialRoom) params.set('room', initialRoom)
     const canonicalPath = `/host?${params.toString()}`
     if (currentPath().endsWith('/results') || initialTab !== normalized.tab || window.location.search !== `?${params.toString()}`) replace(canonicalPath)
@@ -505,7 +513,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     setScoringTemplateId(setupPolicy.defaultScoringTemplateId)
     const selection = setupPolicy.initialSelection(modePackContext(mode))
     if (selection) setTemplateSelection(selection)
-    navigate('roomSetup')
+    navigate('roomSetup', room, undefined, mode)
   }
   const create = async (title = roomTitleDraft) => {
     if (busy || creatingRoomRef.current) return
@@ -756,6 +764,12 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
             {quizActionError && <p className="connection-warning">{quizActionError}</p>}
           </>}
   </Glass>
+  const setupModeManifest = getModeDefinition(roomDetails.mode)
+  const ModeSetupScreen = setupModeManifest.setupScreen
+  if (tab === 'roomSetup' && ModeSetupScreen) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
+    <header className="host-header"><div><p className="eyebrow">РЕЖИМ · {setupModeManifest.menuLabel.toUpperCase()}</p><h1>{setupModeManifest.title}</h1><p className="room-header-title">{setupModeManifest.description}</p></div></header>
+    <ModeSetupScreen onBack={() => navigate(setupModeManifest.mode as HostTab)} />
+  </HostLayout>
   if (tab === 'roomSetup') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">НОВАЯ ВСТРЕЧА</p><h1>Настройка комнаты</h1><p className="room-header-title">Сначала подтвердите параметры — комната появится только после нажатия кнопки ниже.</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
     <Glass className="start-panel"><p className="eyebrow">ШАГ 1 · ПАРАМЕТРЫ</p><h2>Создайте новую комнату</h2><p>Выберите формат, ожидаемое число участников и набор вопросов. Комната и QR-код появятся только после подтверждения.</p>{roomPilotDetailsControl}{packSelectionControl}<label className="room-title-input">Название комнаты<input value={roomTitleDraft} onChange={event => setRoomTitleDraft(event.target.value)} placeholder={defaultRoomTitle()} maxLength={80} /></label><div className="control-actions"><Button disabled={busy || systemPacksState === 'loading' || (firebaseReady && (!activeSetupValid || !activeSetupPack || activeSetupPack.questions.length === 0))} onClick={() => void create()}>{busy ? 'Создаём…' : 'Подтвердить и создать комнату'}</Button><Button secondary disabled={busy} onClick={() => navigate(session && session.phase !== 'closed' ? 'currentRoom' : 'overview')}>Отмена</Button></div>{createError && <p className="connection-warning">{createError}</p>}{actionError && <p className="connection-warning">{actionError}</p>}</Glass>
@@ -811,6 +825,13 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     <header className="host-header"><div><p className="eyebrow">БИБЛИОТЕКА ВСТРЕЧ</p><h1>История комнат</h1><p className="room-header-title">Завершённые комнаты доступны для просмотра результатов и выгрузки.</p></div></header>
     <Glass className="history-filters"><p className="eyebrow">ФИЛЬТРЫ ИСТОРИИ</p><div><label>Поиск<input value={historyFilters.query} placeholder="Название, код или молодёжка" onChange={event => setHistoryFilters(previous => ({ ...previous, query: event.target.value }))} /></label><label>Формат<select value={historyFilters.mode} onChange={event => setHistoryFilters(previous => ({ ...previous, mode: event.target.value as typeof previous.mode }))}><option value="all">Все форматы</option><option value="diagnostic">Диагностика</option><option value="quiz">Викторина</option></select></label><label>От<input type="date" value={historyFilters.from} onChange={event => setHistoryFilters(previous => ({ ...previous, from: event.target.value }))} /></label><label>До<input type="date" value={historyFilters.to} onChange={event => setHistoryFilters(previous => ({ ...previous, to: event.target.value }))} /></label></div></Glass>
     <div className="stack">{filteredArchiveEntries.length ? filteredArchiveEntries.map(archived => <Glass className="room-row archive-card" key={archived.roomId}><div><p className="eyebrow">{(archived.mode || diagnosticMode) === quizMode ? 'БИБЛЕЙСКАЯ ВИКТОРИНА' : 'ДИАГНОСТИКА'}</p><h2>{archived.roomTitle || archived.displayCode || archived.roomId}</h2><p>{new Date(archived.createdAt).toLocaleDateString('ru-RU')} · {Object.keys(archived.participants || {}).length} участников</p></div><div className="archive-actions"><Button secondary onClick={() => openArchivedResult(archived)}>Результаты</Button><Button secondary onClick={() => { setRoom(archived.roomId); setResultRoom(archived.roomId); navigate('currentRoom', archived.roomId, 'export') }}>Экспорт</Button></div></Glass>) : <Glass className="empty-state"><h3>Завершённых комнат пока нет</h3><p>После завершения комнаты её результаты и экспорт появятся здесь.</p><Button onClick={() => openRoomSetup(diagnosticMode)}>Создать комнату</Button></Glass>}</div>
+  </HostLayout>
+
+  const activeModeManifest = modeRegistry[tab as RoomMode]
+  const ModeLandingScreen = activeModeManifest?.landingScreen
+  if (activeModeManifest && ModeLandingScreen) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
+    <header className="host-header"><div><p className="eyebrow">РЕЖИМ · {activeModeManifest.menuLabel.toUpperCase()}</p><h1>{activeModeManifest.title}</h1><p className="room-header-title">{activeModeManifest.description}</p></div></header>
+    <ModeLandingScreen onSetup={() => openRoomSetup(activeModeManifest.mode as RoomMode)} />
   </HostLayout>
 
   if (tab === 'diagnostic') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
