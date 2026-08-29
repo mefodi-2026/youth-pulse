@@ -369,6 +369,10 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     if (currentPath().endsWith('/results') || initialTab !== normalized.tab || window.location.search !== `?${params.toString()}`) replace(canonicalPath)
   }, [initialRoom, initialTab])
 
+  useEffect(() => {
+    if (tab === 'currentRoom' && session?.mode === 'wheel') setMenuOpen(false)
+  }, [tab, session?.roomId, session?.mode])
+
   // A closed room is kept in Firebase and its archive, but it must never be
   // restored as the active room for the leader after a reload.
   useEffect(() => {

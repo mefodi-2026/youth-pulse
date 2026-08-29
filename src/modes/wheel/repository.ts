@@ -22,6 +22,12 @@ const runtime = () => {
 
 const makeRoomId = () => Math.random().toString(36).slice(2, 8).toUpperCase()
 const now = () => Date.now()
+const secureRandom = () => {
+  const value = new Uint32Array(1)
+  globalThis.crypto.getRandomValues(value)
+  return value[0] / 0x100000000
+}
+const animationNonce = () => globalThis.crypto.randomUUID?.() || `${now()}-${Math.round(secureRandom() * 1e9)}`
 
 export async function prepareWheelParticipantAuth() {
   const { auth } = runtime()
@@ -143,8 +149,13 @@ async function assertHostCollecting(roomId: string) {
 }
 
 export async function addWheelHostItem(roomId: string, pool: 'names' | 'tasks', raw: string) {
-  const { db } = await assertHostCollecting(roomId)
+  const { db, session } = await assertHostCollecting(roomId)
   const text = pool === 'names' ? validateWheelDisplayName(raw) : validateWheelTaskText(raw)
+  const items = Object.values(session.wheel?.pools?.[pool] || {})
+  if (items.length >= 50) throw new Error('В одном колесе может быть не больше 50 элементов.')
+  if (pool === 'names' && items.some(item => item.text.toLocaleLowerCase('ru-RU') === text.toLocaleLowerCase('ru-RU'))) {
+    throw new Error('Такое имя уже есть в списке.')
+  }
   const itemRef = push(ref(db, `sessions/${roomId}/wheel/pools/${pool}`))
   const item: WheelPoolItem = { itemId: itemRef.key!, text, status: 'available' }
   await set(itemRef, item)
@@ -156,9 +167,14 @@ export async function deleteWheelHostItem(roomId: string, pool: 'names' | 'tasks
   await remove(ref(db, `sessions/${roomId}/wheel/pools/${pool}/${itemId}`))
 }
 
+export async function clearWheelHostPool(roomId: string, pool: 'names' | 'tasks') {
+  const { db } = await assertHostCollecting(roomId)
+  await remove(ref(db, `sessions/${roomId}/wheel/pools/${pool}`))
+}
+
 export async function markWheelReady(roomId: string) {
   const { db, session } = await assertHostCollecting(roomId)
-  if (!canStartWheel(session.wheel)) throw new Error('Для начала нужны минимум два имени и два задания.')
+  if (!canStartWheel(session.wheel)) throw new Error('Для начала нужны одинаковые списки от 2 до 50 имён и заданий.')
   const wheel = await runWheelHostTransaction(roomId, 'markReady', state => ({ ...state, phase: 'ready', version: (state.version || 0) + 1 }))
   await update(ref(db), {
     [`sessions/${roomId}/phase`]: 'live',
@@ -186,6 +202,19 @@ const publicWheelState = (state: WheelRoomState): NonNullable<PublicRoom['wheel'
     submissionCount: Object.keys(state.participants || {}).length,
     roundCount: Object.keys(state.rounds || {}).length,
     pendingCount: Object.values(state.pendingTasks || {}).filter(item => item.status === 'pending').length,
+    ...(state.activeSpin ? {
+      activeSpin: {
+        ...state.activeSpin,
+        items: state.activeSpin.items.map((item, index) => ({ itemId: `sector-${index}`, text: item.text })),
+        selectedItemId: `sector-${state.activeSpin.selectedIndex}`,
+      },
+    } : {}),
+    history: Object.values(state.rounds || {}).map(round => ({
+      roundId: round.roundId,
+      nameText: round.nameText,
+      taskText: round.taskText,
+      status: round.status,
+    })),
     ...(visibleRound ? { currentRound: visibleRound } : {}),
   }
 }
@@ -243,7 +272,9 @@ export async function startWheelSpin(roomId: string) {
   return runWheelHostTransaction(roomId, 'startSpin', state => startWheelSpinTransition(state, {
     roundId,
     createdAt: now(),
-    random: Math.random(),
+    random: secureRandom(),
+    animationNonce: animationNonce(),
+    durationMs: 4200,
   }))
 }
 

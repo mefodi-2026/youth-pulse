@@ -47,9 +47,33 @@ export interface WheelCurrentRound {
   createdAt: number
 }
 
+export interface WheelSpinItem {
+  itemId: string
+  text: string
+}
+
+export interface WheelSpinAnimation {
+  target: WheelSpinTarget
+  items: WheelSpinItem[]
+  selectedItemId: string
+  selectedIndex: number
+  animationNonce: string
+  targetRotation: number
+  durationMs: number
+  startedAt: number
+  endsAt: number
+}
+
 export interface WheelPublicRound {
   selectedNameText?: string
   selectedTaskText?: string
+}
+
+export interface WheelPublicHistoryItem {
+  roundId: string
+  nameText: string
+  taskText: string
+  status: WheelRoundStatus
 }
 
 export interface WheelRound extends WheelCurrentRound {
@@ -82,6 +106,7 @@ export interface WheelRoomState {
     tasks: Record<string, WheelPoolItem>
   }
   currentRound: WheelCurrentRound | null
+  activeSpin: WheelSpinAnimation | null
   rounds: Record<string, WheelRound>
   pendingTasks: Record<string, WheelPendingTask>
 }

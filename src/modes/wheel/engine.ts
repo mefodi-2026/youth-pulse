@@ -1,10 +1,12 @@
-import type { WheelCurrentRound, WheelPendingTask, WheelPoolItem, WheelRoomState, WheelRound, WheelRoundStatus, WheelSpinTarget } from './types'
+import type { WheelCurrentRound, WheelPendingTask, WheelPoolItem, WheelRoomState, WheelRound, WheelRoundStatus, WheelSpinAnimation, WheelSpinTarget } from './types'
 
 const cloneItems = (items?: Record<string, WheelPoolItem>) => Object.fromEntries(
   Object.entries(items || {}).map(([id, item]) => [id, { ...item }]),
 )
 
-const availableItems = (items?: Record<string, WheelPoolItem>) => Object.values(items || {}).filter(item => item.status === 'available')
+const availableItems = (items?: Record<string, WheelPoolItem>) => Object.values(items || {})
+  .filter(item => item.status === 'available')
+  .sort((left, right) => left.itemId.localeCompare(right.itemId))
 
 export const getAvailableWheelCount = (state: WheelRoomState | null | undefined, target: WheelSpinTarget) => (
   availableItems(target === 'name' ? state?.pools?.names : state?.pools?.tasks).length
@@ -27,13 +29,29 @@ const selectAvailableItem = (items: Record<string, WheelPoolItem>, random: numbe
 
 export const startWheelSpinTransition = (
   state: WheelRoomState,
-  input: { roundId: string; createdAt: number; random: number },
+  input: { roundId: string; createdAt: number; random: number; animationNonce?: string; durationMs?: number },
 ): WheelRoomState => {
   const target = getWheelNextSpinTarget(state)
   if (!target) throw new Error('Сейчас нельзя запускать следующее колесо.')
   const names = cloneItems(state.pools?.names)
   const tasks = cloneItems(state.pools?.tasks)
+  const available = availableItems(target === 'name' ? names : tasks)
   const item = selectAvailableItem(target === 'name' ? names : tasks, input.random)
+  const selectedIndex = available.findIndex(candidate => candidate.itemId === item.itemId)
+  const durationMs = Math.min(Math.max(input.durationMs || 4200, 1800), 8000)
+  const sectorAngle = 360 / available.length
+  const targetRotation = (6 * 360) + (360 - ((selectedIndex + 0.5) * sectorAngle % 360))
+  const activeSpin: WheelSpinAnimation = {
+    target,
+    items: available.map(candidate => ({ itemId: candidate.itemId, text: candidate.text })),
+    selectedItemId: item.itemId,
+    selectedIndex,
+    animationNonce: input.animationNonce || `${input.roundId}-${target}-${state.version + 1}`,
+    targetRotation,
+    durationMs,
+    startedAt: input.createdAt,
+    endsAt: input.createdAt + durationMs,
+  }
   const currentRound: WheelCurrentRound = state.currentRound
     ? { ...state.currentRound }
     : { roundId: input.roundId, createdAt: input.createdAt }
@@ -52,6 +70,7 @@ export const startWheelSpinTransition = (
     version: (state.version || 0) + 1,
     pools: { names, tasks },
     currentRound,
+    activeSpin,
   }
 }
 
@@ -74,7 +93,7 @@ export const cancelWheelSelectionTransition = (state: WheelRoomState): WheelRoom
   const tasks = cloneItems(state.pools?.tasks)
   if (current.selectedNameId && names[current.selectedNameId]?.status === 'selected') names[current.selectedNameId] = { ...names[current.selectedNameId], status: 'available' }
   if (current.selectedTaskId && tasks[current.selectedTaskId]?.status === 'selected') tasks[current.selectedTaskId] = { ...tasks[current.selectedTaskId], status: 'available' }
-  return { ...state, phase: 'ready', version: (state.version || 0) + 1, pools: { names, tasks }, currentRound: null }
+  return { ...state, phase: 'ready', version: (state.version || 0) + 1, pools: { names, tasks }, currentRound: null, activeSpin: null }
 }
 
 export const decideWheelRoundTransition = (
@@ -118,6 +137,7 @@ export const decideWheelRoundTransition = (
     version: (state.version || 0) + 1,
     pools: { names, tasks },
     currentRound: null,
+    activeSpin: null,
     rounds,
     pendingTasks,
   }

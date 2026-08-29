@@ -28,6 +28,7 @@ export const createInitialWheelState = (config?: Partial<WheelConfig>): WheelRoo
   participants: {},
   pools: { names: {}, tasks: {} },
   currentRound: null,
+  activeSpin: null,
   rounds: {},
   pendingTasks: {},
 })

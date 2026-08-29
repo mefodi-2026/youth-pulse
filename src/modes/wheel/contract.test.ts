@@ -56,6 +56,7 @@ const duplicateNames = {
 }
 assert(Object.keys(duplicateNames.participants).length === 2, 'duplicate display names must retain stable participant IDs')
 assert(canStartWheel(duplicateNames), 'two valid names and tasks must enable the game')
+assert(!canStartWheel({ ...duplicateNames, pools: { ...duplicateNames.pools, tasks: { uidA: duplicateNames.pools.tasks.uidA } } }), 'unequal list sizes must block the game')
 assert(!canStartWheel({ ...duplicateNames, phase: 'ready' }), 'ready state must lock further collection')
 
 const expectFailure = (job: () => unknown, message: string) => {
@@ -86,6 +87,9 @@ let nameFirst = playableState('name_then_task')
 assert(getWheelNextSpinTarget(nameFirst) === 'name', 'name-first flow must start with the names wheel')
 nameFirst = startWheelSpinTransition(nameFirst, { roundId: 'round-a', createdAt: 10, random: 0 })
 assert(nameFirst.phase === 'spinning_name', 'name wheel must enter the spinning state')
+assert(nameFirst.activeSpin?.selectedIndex === 0, 'the canonical selected sector must be stored once')
+assert(nameFirst.activeSpin?.items.length === 3, 'the exact animated sectors must be stored with the spin')
+assert(nameFirst.activeSpin?.endsAt === 4210, 'the reveal deadline must be deterministic')
 expectFailure(
   () => startWheelSpinTransition(nameFirst, { roundId: 'duplicate', createdAt: 11, random: 0 }),
   'a repeated spin click must not select another item',
@@ -102,6 +106,7 @@ assert(nameFirst.phase === 'ready' && nameFirst.currentRound === null, 'cancella
 assert(!nameFirst.rounds['round-a'], 'cancellation must not create history')
 assert(nameFirst.pools.names[selectedNameId]?.status === 'available', 'cancellation must return the selected name')
 assert(nameFirst.pools.tasks[selectedTaskId]?.status === 'available', 'cancellation must return the selected task')
+assert(nameFirst.activeSpin === null, 'cancellation must clear the active animation')
 
 nameFirst = startWheelSpinTransition(nameFirst, { roundId: 'round-b', createdAt: 20, random: 0 })
 nameFirst = revealWheelSelectionTransition(nameFirst)

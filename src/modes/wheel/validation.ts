@@ -27,5 +27,6 @@ export const canStartWheel = (state?: WheelRoomState | null) => Boolean(
   state
   && state.phase === 'collecting'
   && Object.keys(state.pools?.names || {}).length >= 2
-  && Object.keys(state.pools?.tasks || {}).length >= 2,
+  && Object.keys(state.pools?.names || {}).length <= 50
+  && Object.keys(state.pools?.names || {}).length === Object.keys(state.pools?.tasks || {}).length,
 )

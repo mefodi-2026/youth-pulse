@@ -267,7 +267,7 @@ export interface PublicRoom {
   packTitle?: string
   difficulty?: QuizDifficulty
   scoringTemplateId?: ScoringTemplateId
-  /** Participant-safe wheel status. Full pools, participant IDs and history are never mirrored here. */
+  /** Participant-safe wheel status. Full pools and participant IDs are never mirrored here. */
   wheel?: {
     inputMode: 'participants' | 'host'
     drawOrder: 'name_then_task' | 'task_then_name'
@@ -279,6 +279,8 @@ export interface PublicRoom {
     roundCount?: number
     pendingCount?: number
     currentRound?: import('./modes/wheel/types').WheelPublicRound
+    activeSpin?: import('./modes/wheel/types').WheelSpinAnimation
+    history?: import('./modes/wheel/types').WheelPublicHistoryItem[]
   }
 }
 /** Question shape sent to a participant. Answer keys and explanations are excluded. */
