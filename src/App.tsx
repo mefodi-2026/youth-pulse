@@ -14,6 +14,7 @@ import { OwnerAdmin } from './OwnerAdmin'
 import { diagnosticMode, isDiagnosticPack } from './modes/diagnostic/contract'
 import { isQuizPack, quizMode, workspaceQuizSelection } from './modes/quiz/contract'
 import { getModeDefinition, modeRegistry, productionModes } from './modes/modeRegistry'
+import { createWheelRoom, stopWheelActivity } from './modes/wheel/repository'
 import { changeRoomPhase, closeRoomAndArchive, createRoom } from './core/useCases/roomLifecycle'
 import { copyQuizWorkspacePack, saveDiagnosticWorkspacePack } from './core/useCases/packOperations'
 import { resolveResultSession, selectWorkspaceArchives } from './core/useCases/archiveResults'
@@ -597,10 +598,45 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     navigate('results', room)
     window.setTimeout(() => { void changePhase('resultsReal') }, 20000)
   }
-  const closeRoom = () => {
-    if (!session || session.phase === 'closed') return
-    if (!window.confirm('После завершения участники больше не смогут отвечать в этой комнате. Участники, ответы и результаты будут сохранены в архиве.')) return
-    void changePhase('closed')
+  const closeRoom = async () => {
+    if (!session || session.phase === 'closed') return false
+    if (!window.confirm('После завершения участники больше не смогут отвечать в этой комнате. Участники, ответы и результаты будут сохранены в архиве.')) return false
+    return changePhase('closed')
+  }
+  const closeWheelRoom = async () => {
+    if (!session || session.mode !== 'wheel' || session.phase === 'closed') return false
+    try { await stopWheelActivity(session.roomId) }
+    catch (error) { console.warn('wheel animation could not be cleared before closing', error) }
+    return changePhase('closed')
+  }
+  const startWheelAgain = async () => {
+    const previous = session
+    if (!previous || previous.mode !== 'wheel' || !previous.wheel) return false
+    if (!await closeWheelRoom()) return false
+    try {
+      const nextRoom = await createWheelRoom({
+        leaderUid: leader.uid,
+        workspaceId: leader.workspaceId,
+        title: previous.roomTitle || 'Колесо фортуны',
+        config: previous.wheel.config,
+      })
+      localStorage.setItem(roomKey, nextRoom)
+      localStorage.setItem(lastRoomKey, previous.roomId)
+      localStorage.removeItem('atmosphere-host-room')
+      setLastClosedRoom(previous.roomId)
+      setResultRoom('')
+      setRoom(nextRoom)
+      navigate('currentRoom', nextRoom)
+      return true
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Не удалось создать новую игру.')
+      return false
+    }
+  }
+  const exitWheelToMain = async () => {
+    if (!await closeWheelRoom()) return false
+    navigate('main', '')
+    return true
   }
   const saveRoomTitle = async () => {
     if (!session || session.phase !== 'lobby') return
@@ -833,7 +869,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     </HostLayout>
     const ModeHostScreen = getModeDefinition(session.gameTypeId || session.mode).hostScreen
     if (ModeHostScreen) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={Object.keys(session.wheel?.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
-      <ModeHostScreen session={session} joinUrl={joinUrl} onClose={closeRoom} />
+      <ModeHostScreen session={session} joinUrl={joinUrl} onClose={session.mode === 'wheel' ? closeWheelRoom : closeRoom} onPlayAgain={session.mode === 'wheel' ? startWheelAgain : undefined} onExitToMain={session.mode === 'wheel' ? exitWheelToMain : undefined} />
     </HostLayout>
     return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
       <header className="host-header"><div><p className="eyebrow">ТЕКУЩАЯ КОМНАТА · {(session.mode || diagnosticMode) === quizMode ? 'ВИКТОРИНА' : 'ДИАГНОСТИКА'}</p><h1>{session.roomTitle || session.displayCode || room}</h1><p className="room-header-title">{phaseText(session.phase)}</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО'}</span></header>

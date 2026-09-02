@@ -35,7 +35,12 @@ export interface ModeParticipantFlowProps { room: string }
 export interface ModeHostScreenProps {
   session: Session
   joinUrl: string
-  onClose: () => void
+  /** Closes the current room and persists its archive before resolving. */
+  onClose: () => Promise<boolean>
+  /** Optional mode-owned continuation actions. They are intentionally absent
+   * from generic diagnostic and quiz host surfaces. */
+  onPlayAgain?: () => Promise<boolean>
+  onExitToMain?: () => Promise<boolean>
 }
 export interface ModeMainScreenProps { session: Session }
 

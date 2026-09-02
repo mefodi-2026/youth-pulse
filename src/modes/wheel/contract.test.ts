@@ -10,6 +10,7 @@ import {
   revealWheelSelectionTransition,
   startWheelRoundTransition,
   startWheelSpinTransition,
+  stopWheelForCloseTransition,
 } from './engine'
 import type { WheelDrawOrder, WheelRoomState } from './types'
 
@@ -28,6 +29,9 @@ assert(initialState.modeVersion === 'wheel-v1', 'room state version must be expl
 assert(initialState.phase === 'setup', 'new wheel state must start in setup')
 assert(initialState.config.inputMode === 'host', 'validated room config must be preserved')
 assert(Object.keys(initialState.rounds).length === 0, 'new room must not contain implicit rounds')
+assert(Object.keys(initialState.participants).length === 0, 'a replay room must start without previous participants')
+assert(Object.keys(initialState.pools.names).length === 0 && Object.keys(initialState.pools.tasks).length === 0, 'a replay room must start with empty wheel pools')
+assert(Object.keys(initialState.pendingTasks).length === 0 && initialState.currentRound === null && initialState.activeSpin === null, 'a replay room must not mix previous active state')
 
 assert(canTransitionWheelPhase('setup', 'collecting'), 'setup must allow data collection')
 assert(canTransitionWheelPhase('ready', 'spinning_task'), 'task-first flow must be representable')
@@ -109,6 +113,13 @@ assert(!nameFirst.rounds['round-a'], 'cancellation must not create history')
 assert(nameFirst.pools.names[selectedNameId]?.status === 'available', 'cancellation must return the selected name')
 assert(nameFirst.pools.tasks[selectedTaskId]?.status === 'available', 'cancellation must return the selected task')
 assert(nameFirst.activeSpin === null, 'cancellation must clear the active animation')
+
+let interrupted = playableState('name_then_task', 3)
+interrupted = startWheelSpinTransition(interrupted, { roundId: 'round-interrupted', createdAt: 15, random: 0 })
+const interruptedNameId = interrupted.currentRound?.selectedNameId || ''
+interrupted = stopWheelForCloseTransition(interrupted)
+assert(interrupted.activeSpin === null && interrupted.currentRound === null && interrupted.phase === 'ready', 'closing must stop an active spin and clear the transient round')
+assert(interrupted.pools.names[interruptedNameId]?.status === 'available', 'closing must return an unrevealed selected item to its pool')
 
 nameFirst = startWheelSpinTransition(nameFirst, { roundId: 'round-b', createdAt: 20, random: 0 })
 nameFirst = revealWheelSelectionTransition(nameFirst)

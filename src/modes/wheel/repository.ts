@@ -15,6 +15,7 @@ import {
   revealWheelSelectionTransition,
   startWheelRoundTransition,
   startWheelSpinTransition,
+  stopWheelForCloseTransition,
 } from './engine'
 
 const runtime = () => {
@@ -306,4 +307,9 @@ export async function completeWheelPendingTask(roomId: string, pendingId: string
 
 export async function openWheelPendingTask(roomId: string, pendingId: string) {
   return runWheelHostTransaction(roomId, 'openPendingTask', state => openPendingWheelTaskTransition(state, pendingId))
+}
+
+/** Stops a transient spin before the parent room is closed and archived. */
+export async function stopWheelActivity(roomId: string) {
+  return runWheelHostTransaction(roomId, 'stopForClose', stopWheelForCloseTransition)
 }

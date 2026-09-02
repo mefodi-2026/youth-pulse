@@ -96,6 +96,19 @@ export const cancelWheelSelectionTransition = (state: WheelRoomState): WheelRoom
   return { ...state, phase: 'ready', version: (state.version || 0) + 1, pools: { names, tasks }, currentRound: null, activeSpin: null }
 }
 
+/**
+ * Clears only transient UI state before the host closes a room. A selection
+ * that has not become a round is returned to the pool; saved history and the
+ * pending-task library are intentionally untouched.
+ */
+export const stopWheelForCloseTransition = (state: WheelRoomState): WheelRoomState => {
+  if (state.currentRound && ['spinning_name', 'name_revealed', 'spinning_task', 'task_revealed', 'decision'].includes(state.phase)) {
+    return cancelWheelSelectionTransition(state)
+  }
+  if (!state.activeSpin) return state
+  return { ...state, activeSpin: null, version: (state.version || 0) + 1 }
+}
+
 export const decideWheelRoundTransition = (
   state: WheelRoomState,
   status: WheelRoundStatus,

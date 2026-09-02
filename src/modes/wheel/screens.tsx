@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import QRCode from 'qrcode'
 import type { PublicRoom } from '../../types'
 import type { ModeHostScreenProps, ModeLandingScreenProps, ModeMainScreenProps, ModeParticipantFlowProps, ModeSetupScreenProps } from '../contracts'
 import type { ParticipantQuestionScreenProps } from '../participantTypes'
@@ -96,10 +97,10 @@ const fullVisibleRound = (wheel?: WheelRoomState): WheelPublicRound | undefined 
   return { ...(nameVisible ? { selectedNameText: current.selectedNameText } : {}), ...(taskVisible ? { selectedTaskText: current.selectedTaskText } : {}) }
 }
 
-type AudienceProps = { phase: keyof typeof phaseLabels; round?: WheelPublicRound; activeSpin?: WheelSpinAnimation; history?: WheelPublicHistoryItem[]; nameCount: number; taskCount: number; roundCount: number; pendingCount: number; idleItems?: WheelSpinItem[] }
+type AudienceProps = { phase: keyof typeof phaseLabels; round?: WheelPublicRound; activeSpin?: WheelSpinAnimation; history?: WheelPublicHistoryItem[]; nameCount: number; taskCount: number; roundCount: number; pendingCount: number; idleItems?: WheelSpinItem[]; stopAnimation?: boolean }
 
-function WheelAudiencePanel({ phase, round, activeSpin, history = [], nameCount, taskCount, roundCount, pendingCount, idleItems = [] }: AudienceProps) {
-  const spinning = phase === 'spinning_name' || phase === 'spinning_task'
+function WheelAudiencePanel({ phase, round, activeSpin, history = [], nameCount, taskCount, roundCount, pendingCount, idleItems = [], stopAnimation = false }: AudienceProps) {
+  const spinning = !stopAnimation && (phase === 'spinning_name' || phase === 'spinning_task')
   const items = activeSpin?.items || idleItems
   const selectedTitle = phase === 'name_revealed' ? 'ВЫПАЛО ИМЯ' : phase === 'task_revealed' ? 'ВЫПАЛО ЗАДАНИЕ' : null
   return <section className="wheel-audience">
@@ -136,9 +137,35 @@ function WheelList({ title, items, onDelete, onClear }: { title: string; items: 
   return <section className="wheel-pool"><div><div><p className="eyebrow">{title === 'Имена участников' ? '◉ УЧАСТНИКИ' : '◈ ЗАДАНИЯ'}</p><h3>{title}</h3></div><b>{available.length}</b></div>{available.length ? <ul>{available.map(item => <li key={item.itemId}><i aria-hidden="true">⠿</i><span>{item.text}</span>{onDelete && <button type="button" aria-label={`Удалить: ${item.text}`} onClick={() => onDelete(item.itemId)}>⌫</button>}</li>)}</ul> : <p>Список пока пуст.</p>}{onClear && available.length > 0 && <footer><span>В списке: <b>{available.length}</b></span><button type="button" onClick={onClear}>Очистить список</button></footer>}</section>
 }
 
-export function WheelHostScreen({ session, joinUrl, onClose }: ModeHostScreenProps) {
+function WheelJoinPanel({ joinUrl, entries }: { joinUrl: string; entries: Record<string, WheelParticipantEntry> }) {
+  const [qr, setQr] = useState('')
+  const [copyError, setCopyError] = useState('')
+  useEffect(() => {
+    let active = true
+    if (!joinUrl) { setQr(''); return () => { active = false } }
+    console.info('[wheel] joinUrl', { qr: joinUrl, copy: joinUrl, manual: joinUrl })
+    void QRCode.toDataURL(joinUrl, { width: 420, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#031b13', light: '#f8fff9' } })
+      .then(value => { if (active) setQr(value) })
+      .catch(reason => { if (active) setCopyError(reason instanceof Error ? reason.message : 'Не удалось сформировать QR-код.') })
+    return () => { active = false }
+  }, [joinUrl])
+  const copy = async () => {
+    setCopyError('')
+    try { await navigator.clipboard.writeText(joinUrl) }
+    catch (reason) { setCopyError(reason instanceof Error ? reason.message : 'Не удалось скопировать ссылку.') }
+  }
+  return <section className="glass wheel-join">
+    <div className="wheel-join-copy"><p className="eyebrow">ПОДКЛЮЧЕНИЕ УЧАСТНИКОВ</p><h2>Отсканируйте QR-код</h2><p>QR-код, ссылка и кнопка используют одну и ту же комнату.</p>{qr ? <img className="wheel-join-qr" src={qr} alt="QR-код для подключения к текущей игре" /> : <p>Генерируем QR-код…</p>}</div>
+    <div className="wheel-join-link"><code>{joinUrl}</code><button type="button" className="button secondary" onClick={() => void copy()}>Скопировать ссылку</button>{copyError && <p className="connection-warning">{copyError}</p>}<div className="wheel-entry-summary">{Object.values(entries).map(item => <span key={item.participantId}>{item.displayName}</span>)}</div></div>
+  </section>
+}
+
+type FinishIntent = 'close' | 'exit'
+
+export function WheelHostScreen({ session, joinUrl, onClose, onPlayAgain, onExitToMain }: ModeHostScreenProps) {
   const wheel = session.wheel
   const [name, setName] = useState(''); const [task, setTask] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('')
+  const [finishIntent, setFinishIntent] = useState<FinishIntent | null>(null); const [ending, setEnding] = useState(false)
   const names = wheel?.pools?.names || {}; const tasks = wheel?.pools?.tasks || {}; const entries = wheel?.participants || {}
   const collecting = wheel?.phase === 'collecting'; const valid = canStartWheel(wheel); const nextTarget = getWheelNextSpinTarget(wheel)
   const spinning = wheel?.phase === 'spinning_name' || wheel?.phase === 'spinning_task'; const decision = wheel?.phase === 'decision'; const performing = wheel?.phase === 'performing'
@@ -147,11 +174,11 @@ export function WheelHostScreen({ session, joinUrl, onClose }: ModeHostScreenPro
   const availableItems = useMemo(() => Object.values(nextTarget === 'task' ? tasks : names).filter(item => item.status === 'available').map(item => ({ itemId: item.itemId, text: item.text })), [names, nextTarget, tasks])
   const run = async (job: () => Promise<unknown>) => { setBusy(true); setError(''); try { await job() } catch (reason) { setError(reason instanceof Error ? reason.message : 'Операция не выполнена.') } finally { setBusy(false) } }
   useEffect(() => {
-    if (!spinning || !wheel?.activeSpin) return
+    if (ending || !spinning || !wheel?.activeSpin) return
     let active = true
     const timer = window.setTimeout(() => { void revealWheelSelection(session.roomId).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'Не удалось открыть результат вращения.') }) }, Math.max(0, wheel.activeSpin.endsAt - Date.now()) + 120)
     return () => { active = false; window.clearTimeout(timer) }
-  }, [session.roomId, spinning, wheel?.activeSpin?.animationNonce, wheel?.activeSpin?.endsAt])
+  }, [ending, session.roomId, spinning, wheel?.activeSpin?.animationNonce, wheel?.activeSpin?.endsAt])
   const add = (pool: 'names' | 'tasks') => void run(async () => { const value = pool === 'names' ? name : task; await addWheelHostItem(session.roomId, pool, value); pool === 'names' ? setName('') : setTask('') })
   const removeItem = (pool: 'names' | 'tasks', id: string) => void run(() => deleteWheelHostItem(session.roomId, pool, id))
   const clearItems = (pool: 'names' | 'tasks') => void run(() => clearWheelHostPool(session.roomId, pool))
@@ -159,21 +186,38 @@ export function WheelHostScreen({ session, joinUrl, onClose }: ModeHostScreenPro
   const confirmationLabel = wheel?.phase === 'name_revealed' ? 'Подтвердить имя' : 'Подтвердить задание'
   const activeRoundPending = performing && wheel?.currentRound ? pending.some(item => item.pendingId === wheel.currentRound?.roundId) : false
   const activeRoundItems = wheel?.activeSpin?.items || availableItems
+  const confirmFinish = async () => {
+    if (!finishIntent || ending) return
+    setEnding(true); setBusy(true); setError('')
+    try {
+      const completed = finishIntent === 'exit' ? await onExitToMain?.() : await onClose()
+      if (!completed) { setEnding(false); setError('Не удалось завершить игру. Повторите попытку.') }
+    } catch (reason) { setEnding(false); setError(reason instanceof Error ? reason.message : 'Не удалось завершить игру.') }
+    finally { setBusy(false) }
+  }
+  const playAgain = () => void run(async () => {
+    if (!onPlayAgain) throw new Error('Повторный запуск сейчас недоступен.')
+    const created = await onPlayAgain()
+    if (!created) throw new Error('Не удалось запустить новую игру.')
+  })
+  const disabled = busy || ending
   return <div className="wheel-host">
-    <header className="wheel-host-brand"><p>◉ КОЛЕСО ФОРТУНЫ</p><span>{wheel ? phaseLabels[wheel.phase] : 'Загрузка'}</span></header>
+    <header className="wheel-host-brand"><p>◉ КОЛЕСО ФОРТУНЫ</p><div><span>{wheel ? phaseLabels[wheel.phase] : 'Загрузка'}</span><button type="button" className="wheel-end-button" disabled={disabled} onClick={() => setFinishIntent('close')}>Завершить игру</button></div></header>
     {collecting && <><section className="wheel-prep-heading"><div><h1>Подготовка комнаты</h1><p>Добавьте имена и задания перед стартом</p></div><div className="wheel-counters"><article><span>◉ Имен</span><strong>{getAvailableWheelCount(wheel, 'name')}</strong></article><article><span>▣ Заданий</span><strong>{getAvailableWheelCount(wheel, 'task')}</strong></article><article><span>♙ Участников</span><strong>{Object.keys(entries).length}</strong></article></div></section>
-      {wheel?.config.inputMode === 'participants' && <section className="glass wheel-join"><h2>Подключение участников</h2><code>{joinUrl}</code><button type="button" className="button secondary" onClick={() => void navigator.clipboard.writeText(joinUrl)}>Скопировать ссылку</button><div className="wheel-entry-summary">{Object.values(entries).map(item => <span key={item.participantId}>{item.displayName}</span>)}</div></section>}
+      <WheelJoinPanel joinUrl={joinUrl} entries={entries} />
       {wheel?.config.inputMode === 'host' && <section className="wheel-host-input"><div><label>Введите имя участника<input value={name} onChange={event => setName(event.target.value)} maxLength={60} /></label><button type="button" className="button secondary" disabled={busy || !name.trim() || Object.keys(names).length >= 50} onClick={() => add('names')}>＋ Добавить имя</button></div><div><label>Введите задание<textarea value={task} onChange={event => setTask(event.target.value)} maxLength={240} /></label><button type="button" className="button secondary" disabled={busy || !task.trim() || Object.keys(tasks).length >= 50} onClick={() => add('tasks')}>＋ Добавить задание</button></div></section>}
       <div className="wheel-pools"><WheelList title="Имена участников" items={names} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('names', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('names') : undefined} /><WheelList title="Задания" items={tasks} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('tasks', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('tasks') : undefined} /></div>
-      <div className="wheel-prep-actions"><button type="button" className="button" disabled={busy || !valid} onClick={() => void run(() => markWheelReady(session.roomId))}>▶ Начать игру</button><button type="button" className="button secondary" disabled={busy} onClick={onClose}>Завершить комнату</button></div>{!valid && <p className="wheel-hint">Для начала нужны одинаковые списки: от 2 до 50 имён и столько же заданий. Сейчас: {Object.keys(names).length} / {Object.keys(tasks).length}.</p>}</>}
-    {!collecting && wheel && <section className="glass wheel-game-panel"><WheelAudiencePanel phase={wheel.phase} round={fullVisibleRound(wheel)} activeSpin={wheel.activeSpin || undefined} history={history} nameCount={getAvailableWheelCount(wheel, 'name')} taskCount={getAvailableWheelCount(wheel, 'task')} roundCount={history.length} pendingCount={pending.length} idleItems={activeRoundItems} /><div className="wheel-game-actions">
-      {nextTarget && !confirmation && <button type="button" className="button" disabled={busy} onClick={() => void run(() => startWheelSpin(session.roomId))}>{nextTarget === 'name' ? '▶ Крутить колесо имён' : '▶ Крутить колесо заданий'}</button>}
-      {confirmation && <><button type="button" className="button" disabled={busy} onClick={() => void run(() => startWheelSpin(session.roomId))}>{confirmationLabel}</button><button type="button" className="button secondary" disabled={busy} onClick={() => void run(() => cancelWheelSelection(session.roomId))}>Отменить выбор</button></>}
+      <div className="wheel-prep-actions"><button type="button" className="button" disabled={disabled || !valid} onClick={() => void run(() => markWheelReady(session.roomId))}>▶ Начать игру</button></div>{!valid && <p className="wheel-hint">Для начала нужны одинаковые списки: от 2 до 50 имён и столько же заданий. Сейчас: {Object.keys(names).length} / {Object.keys(tasks).length}.</p>}</>}
+    {!collecting && wheel && <section className="glass wheel-game-panel"><WheelAudiencePanel phase={wheel.phase} round={fullVisibleRound(wheel)} activeSpin={ending ? undefined : wheel.activeSpin || undefined} history={history} nameCount={getAvailableWheelCount(wheel, 'name')} taskCount={getAvailableWheelCount(wheel, 'task')} roundCount={history.length} pendingCount={pending.length} idleItems={activeRoundItems} stopAnimation={ending} /><div className="wheel-game-actions">
+      {nextTarget && !confirmation && <button type="button" className="button" disabled={disabled} onClick={() => void run(() => startWheelSpin(session.roomId))}>{nextTarget === 'name' ? '▶ Крутить колесо имён' : '▶ Крутить колесо заданий'}</button>}
+      {confirmation && <><button type="button" className="button" disabled={disabled} onClick={() => void run(() => startWheelSpin(session.roomId))}>{confirmationLabel}</button><button type="button" className="button secondary" disabled={disabled} onClick={() => void run(() => cancelWheelSelection(session.roomId))}>Отменить выбор</button></>}
       {spinning && <button type="button" className="button" disabled>Колесо вращается…</button>}
-      {decision && <><button type="button" className="button" disabled={busy} onClick={() => void run(() => startWheelRound(session.roomId))}>Выполнить сейчас</button><button type="button" className="button secondary" disabled={busy} onClick={() => void run(() => markWheelRoundPending(session.roomId))}>Добавить в библиотеку</button><button type="button" className="button secondary" disabled={busy} onClick={() => void run(() => cancelWheelSelection(session.roomId))}>Отменить выбор</button></>}
-      {performing && wheel.currentRound && <button type="button" className="button" disabled={busy} onClick={() => void run(() => activeRoundPending ? completeWheelPendingTask(session.roomId, wheel.currentRound!.roundId) : markWheelRoundCompleted(session.roomId))}>▣ Задание выполнено</button>}
+      {decision && <><button type="button" className="button" disabled={disabled} onClick={() => void run(() => startWheelRound(session.roomId))}>Выполнить сейчас</button><button type="button" className="button secondary" disabled={disabled} onClick={() => void run(() => markWheelRoundPending(session.roomId))}>Добавить в библиотеку</button><button type="button" className="button secondary" disabled={disabled} onClick={() => void run(() => cancelWheelSelection(session.roomId))}>Отменить выбор</button></>}
+      {performing && wheel.currentRound && <button type="button" className="button" disabled={disabled} onClick={() => void run(() => activeRoundPending ? completeWheelPendingTask(session.roomId, wheel.currentRound!.roundId) : markWheelRoundCompleted(session.roomId))}>▣ Задание выполнено</button>}
     </div></section>}
-    {pending.length > 0 && <section className="glass wheel-pending"><div><p className="eyebrow">▤ БИБЛИОТЕКА</p><h2>Отложенные задания</h2><p>Откройте сохранённую пару без нового вращения.</p></div><ul>{pending.map(item => <li key={item.pendingId}><div><b>{item.participantName}</b><span>{item.taskText}</span></div><button type="button" className="button secondary" disabled={busy || performing} onClick={() => void run(() => openWheelPendingTask(session.roomId, item.pendingId))}>Открыть задание</button></li>)}</ul></section>}
+    {pending.length > 0 && <section className="glass wheel-pending"><div><p className="eyebrow">▤ БИБЛИОТЕКА</p><h2>Отложенные задания</h2><p>Откройте сохранённую пару без нового вращения.</p></div><ul>{pending.map(item => <li key={item.pendingId}><div><b>{item.participantName}</b><span>{item.taskText}</span></div><button type="button" className="button secondary" disabled={disabled || performing} onClick={() => void run(() => openWheelPendingTask(session.roomId, item.pendingId))}>Открыть задание</button></li>)}</ul></section>}
+    {wheel?.phase === 'completed' && <section className="glass wheel-finish-screen"><p className="eyebrow">ИГРА ЗАВЕРШЕНА</p><h2>Все доступные пары разыграны</h2><p>История этой игры сохранится в архиве. Для нового состава участников создайте отдельную игровую сессию.</p><div><button type="button" className="button" disabled={disabled} onClick={playAgain}>Сыграть ещё раз</button><button type="button" className="button secondary" disabled={disabled} onClick={() => setFinishIntent('exit')}>Выйти в главное меню</button></div></section>}
+    {finishIntent && <div className="wheel-finish-dialog" role="dialog" aria-modal="true" aria-labelledby="wheel-finish-title"><section><p className="eyebrow">ЗАВЕРШЕНИЕ ИГРЫ</p><h2 id="wheel-finish-title">{finishIntent === 'exit' ? 'Выйти из игры?' : 'Завершить игру?'}</h2><p>Участники больше не смогут отправлять данные. История раундов и результаты останутся в архиве.</p><div><button type="button" className="button" disabled={disabled} onClick={() => void confirmFinish()}>{ending ? 'Завершаем…' : 'Подтвердить завершение'}</button><button type="button" className="button secondary" disabled={ending} onClick={() => setFinishIntent(null)}>Отмена</button></div></section></div>}
     {error && <p className="connection-warning">{error}</p>}
   </div>
 }
