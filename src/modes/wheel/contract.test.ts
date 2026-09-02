@@ -5,6 +5,7 @@ import {
   completePendingWheelTaskTransition,
   decideWheelRoundTransition,
   getAvailableWheelCount,
+  getWheelDisplayTarget,
   getWheelNextSpinTarget,
   openPendingWheelTaskTransition,
   revealWheelSelectionTransition,
@@ -37,6 +38,10 @@ assert(canTransitionWheelPhase('setup', 'collecting'), 'setup must allow data co
 assert(canTransitionWheelPhase('ready', 'spinning_task'), 'task-first flow must be representable')
 assert(canTransitionWheelPhase('decision', 'performing'), 'selected pair must be opened before completion')
 assert(!canTransitionWheelPhase('setup', 'completed'), 'state machine must reject phase skipping')
+assert(getWheelDisplayTarget('ready', 'name_then_task') === 'name', 'name-first ready screen must show the names wheel')
+assert(getWheelDisplayTarget('ready', 'task_then_name') === 'task', 'task-first ready screen must show the tasks wheel')
+assert(getWheelDisplayTarget('name_revealed', 'task_then_name') === 'name', 'a revealed name must retain the names context until confirmation')
+assert(getWheelDisplayTarget('spinning_task', 'name_then_task') === 'task', 'task spin must label the task wheel')
 
 const participant = validateWheelParticipantEntry({ displayName: '  Анна  ', taskText: '  Назвать любимый стих  ' })
 assert(participant.displayName === 'Анна', 'participant display name must be normalized')

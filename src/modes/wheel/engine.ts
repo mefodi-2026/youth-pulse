@@ -1,4 +1,4 @@
-import type { WheelCurrentRound, WheelPendingTask, WheelPoolItem, WheelRoomState, WheelRound, WheelRoundStatus, WheelSpinAnimation, WheelSpinTarget } from './types'
+import type { WheelCurrentRound, WheelDrawOrder, WheelPendingTask, WheelPhase, WheelPoolItem, WheelRoomState, WheelRound, WheelRoundStatus, WheelSpinAnimation, WheelSpinTarget } from './types'
 
 const cloneItems = (items?: Record<string, WheelPoolItem>) => Object.fromEntries(
   Object.entries(items || {}).map(([id, item]) => [id, { ...item }]),
@@ -17,6 +17,23 @@ export const getWheelNextSpinTarget = (state: WheelRoomState | null | undefined)
   if (state.phase === 'ready') return state.config.drawOrder === 'name_then_task' ? 'name' : 'task'
   if (state.phase === 'name_revealed' && !state.currentRound?.selectedTaskId) return 'task'
   if (state.phase === 'task_revealed' && !state.currentRound?.selectedNameId) return 'name'
+  return null
+}
+
+/**
+ * One source of truth for the target shown on host, stage and participant
+ * screens. It never chooses an item; it only describes the authoritative
+ * state that has already been stored in the room.
+ */
+export const getWheelDisplayTarget = (
+  phase: WheelPhase,
+  drawOrder: WheelDrawOrder,
+  activeSpinTarget?: WheelSpinTarget,
+): WheelSpinTarget | null => {
+  if (activeSpinTarget) return activeSpinTarget
+  if (phase === 'ready') return drawOrder === 'name_then_task' ? 'name' : 'task'
+  if (phase === 'spinning_name' || phase === 'name_revealed') return 'name'
+  if (phase === 'spinning_task' || phase === 'task_revealed') return 'task'
   return null
 }
 
