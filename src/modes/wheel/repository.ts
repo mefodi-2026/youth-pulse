@@ -61,6 +61,7 @@ export async function createWheelRoom(input: { leaderUid: string; workspaceId: s
     roomTitle: title,
     displayCode: roomId,
     createdAt,
+    lastActivityAt: createdAt,
     phase: 'lobby',
     status: 'lobby',
     maxParticipants: 30,
@@ -96,6 +97,7 @@ export async function createWheelRoom(input: { leaderUid: string; workspaceId: s
     phase: 'lobby',
     maxParticipants: 30,
     createdAt,
+    lastActivityAt: createdAt,
     mode: 'wheel',
     gameTypeId: wheelGameTypeId,
     productId: wheelProductId,
@@ -139,6 +141,9 @@ export async function saveWheelParticipantEntry(roomId: string, input: { display
     [`sessions/${roomId}/wheel/pools/names/${user.uid}`]: name,
     [`sessions/${roomId}/wheel/pools/tasks/${user.uid}`]: task,
   })
+  // The participant record must exist before Rules permit that anonymous UID
+  // to refresh the room activity marker.
+  await set(ref(db, `sessions/${roomId}/lastActivityAt`), createdAt)
   return entry
 }
 
@@ -149,6 +154,15 @@ async function assertHostCollecting(roomId: string) {
   if (!snapshot.exists() || snapshot.child('hostUid').val() !== auth.currentUser?.uid) throw new Error('Только ведущий этой комнаты может менять наборы.')
   if (snapshot.child('wheel/phase').val() !== 'collecting') throw new Error('После готовности наборы изменить нельзя.')
   return { db, session: snapshot.val() as Session }
+}
+
+async function touchWheelActivity(roomId: string) {
+  const { db } = await assertWheelHost(roomId)
+  const timestamp = now()
+  await update(ref(db), {
+    [`sessions/${roomId}/lastActivityAt`]: timestamp,
+    [`publicRooms/${roomId}/lastActivityAt`]: timestamp,
+  })
 }
 
 export async function addWheelHostItem(roomId: string, pool: 'names' | 'tasks', raw: string) {
@@ -162,17 +176,20 @@ export async function addWheelHostItem(roomId: string, pool: 'names' | 'tasks', 
   const itemRef = push(ref(db, `sessions/${roomId}/wheel/pools/${pool}`))
   const item: WheelPoolItem = { itemId: itemRef.key!, text, status: 'available' }
   await set(itemRef, item)
+  await touchWheelActivity(roomId)
   return item
 }
 
 export async function deleteWheelHostItem(roomId: string, pool: 'names' | 'tasks', itemId: string) {
   const { db } = await assertHostCollecting(roomId)
   await remove(ref(db, `sessions/${roomId}/wheel/pools/${pool}/${itemId}`))
+  await touchWheelActivity(roomId)
 }
 
 export async function clearWheelHostPool(roomId: string, pool: 'names' | 'tasks') {
   const { db } = await assertHostCollecting(roomId)
   await remove(ref(db, `sessions/${roomId}/wheel/pools/${pool}`))
+  await touchWheelActivity(roomId)
 }
 
 export async function markWheelReady(roomId: string) {
@@ -182,7 +199,9 @@ export async function markWheelReady(roomId: string) {
   await update(ref(db), {
     [`sessions/${roomId}/phase`]: 'live',
     [`sessions/${roomId}/startedAt`]: now(),
+    [`sessions/${roomId}/lastActivityAt`]: now(),
     [`publicRooms/${roomId}/phase`]: 'live',
+    [`publicRooms/${roomId}/lastActivityAt`]: now(),
   })
   await syncWheelPublicState(roomId, wheel)
 }
@@ -267,6 +286,7 @@ async function runWheelHostTransaction(roomId: string, operation: string, transi
   if (!result.committed || !result.snapshot.exists()) throw new Error('Состояние изменилось на другом экране. Повторите действие.')
   const state = result.snapshot.val() as WheelRoomState
   await runWheelWrite(operation, `publicRooms/${roomId}/wheel`, () => syncWheelPublicState(roomId, state))
+  await runWheelWrite(operation, `sessions/${roomId}/lastActivityAt`, () => touchWheelActivity(roomId))
   return state
 }
 

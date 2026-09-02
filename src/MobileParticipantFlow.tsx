@@ -5,6 +5,7 @@ import { getGameModule } from './lib/gameRegistry'
 import { getModeManifest } from './modes/modeRegistry'
 import { downloadWishPng, printWish } from './lib/export'
 import { type Answer, type Participant, type ParticipantQuestionSet, type ParticipantQuizResult, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type Scores, type Session } from './types'
+import { isSessionExpired } from './core/sessionLifecycle'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -57,6 +58,7 @@ function useParticipantSession(room: string, participantId?: string) {
       roomTitle: publicRoom.roomTitle,
       displayCode: publicRoom.displayCode,
       createdAt: publicRoom.createdAt,
+      lastActivityAt: publicRoom.lastActivityAt,
       phase: publicRoom.phase,
       status: publicRoom.phase,
       maxParticipants: publicRoom.maxParticipants,
@@ -159,7 +161,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   const join = async () => {
     if (!room || name.trim().length < 2) return setNotice('Введите никнейм от 2 до 20 символов.')
     try {
-      if (lobby?.phase === 'closed' || session?.phase === 'closed') throw new Error('Сессия завершена ведущим. Подключение больше недоступно.')
+      if (lobby?.phase === 'closed' || session?.phase === 'closed' || isSessionExpired(session || lobby)) throw new Error('Сессия завершена или срок её активности истёк. Подключение больше недоступно.')
       const user = firebaseReady ? await ensureAuth() : null
       const next: Participant = { id: user?.uid || crypto.randomUUID(), nickname: name.trim().slice(0, 20), joinedAt: Date.now(), status: 'waiting', currentQuestionIndex: 0, answers: {} }
       if (firebaseReady) await joinSession(room, next)
@@ -199,7 +201,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   if (!room) return <Shell screen="intro-screen"><p className="flow-label">ОНЛАЙН-ДИАГНОСТИКА</p><h1>Нужен QR-код ведущего</h1><p>Отсканируйте код, чтобы открыть личную ссылку на диагностику.</p></Shell>
   if (firebaseReady && !authReady) return <Shell screen="waiting-screen"><p className="flow-label">ПОДКЛЮЧАЕМ</p><h1>Проверяем подключение</h1><p>Восстанавливаем безопасную сессию участника.</p></Shell>
   if (moduleError) return <Shell screen="waiting-screen"><p className="flow-label">КОМНАТА НЕДОСТУПНА</p><h1>Неизвестный режим комнаты</h1><p>{moduleError} Попросите ведущего создать комнату заново.</p></Shell>
-  if (lobby?.phase === 'closed' || session?.phase === 'closed') return <Shell screen="waiting-screen"><div className="ready-spark">✓</div><p className="flow-label">СЕССИЯ ЗАВЕРШЕНА</p><h1>{isQuiz ? 'Эта викторина уже завершена' : 'Эта диагностика уже завершена'}</h1><p>Ведущий закрыл комнату. Ответы больше не принимаются, а подключиться по этой ссылке нельзя.</p></Shell>
+  if (lobby?.phase === 'closed' || session?.phase === 'closed' || isSessionExpired(session || lobby)) return <Shell screen="waiting-screen"><div className="ready-spark">✓</div><p className="flow-label">СЕССИЯ ЗАВЕРШЕНА</p><h1>{isQuiz ? 'Эта викторина уже завершена' : 'Эта диагностика уже завершена'}</h1><p>{isSessionExpired(session || lobby) ? 'Время активности этой комнаты истекло. Ответы больше не принимаются.' : 'Ведущий закрыл комнату. Ответы больше не принимаются, а подключиться по этой ссылке нельзя.'}</p></Shell>
   if (!participant && screen === 'intro') return <Shell screen="intro-screen"><p className="flow-label gold">{isQuiz ? 'БИБЛЕЙСКАЯ ВИКТОРИНА' : 'ОНЛАЙН-ДИАГНОСТИКА'}</p><h1>{isQuiz ? (lobby?.packTitle || session?.packSnapshot?.title || 'Библейская\nвикторина') : <>Атмосфера<br />нашей молодёжи</>}</h1><p>{isQuiz ? 'Проверь свои знания Библии. Выбери один правильный ответ в каждом вопросе.' : 'Небольшая анонимная диагностика, которая помогает увидеть сильные стороны и точки роста.'}</p><div className="intro-info"><b>✦</b><strong>{introQuestionCount} {isQuiz ? 'вопросов викторины' : 'простых вопросов'}</strong><small>{isQuiz ? '1 балл за верный ответ · без таймера' : `${Object.keys(categories).length} тем · в своём темпе · без оценок`}</small><i /><span>{isQuiz ? 'Общий результат появится, когда все участники завершат игру.' : 'В конце ты получишь личную карточку с результатами.'}</span></div><Action onClick={() => setScreen('nickname')}>{isQuiz ? 'Начать викторину' : 'Начать диагностику'}</Action><small className="flow-footnote">{isQuiz ? 'Отвечай внимательно — правильный ответ только один.' : 'Твоя искренность поможет нам стать ближе.'}</small></Shell>
   if (!participant) return <Shell screen="nickname-screen"><p className="flow-label">ШАГ 1 ИЗ 2</p><h1>Как тебя<br />называть?</h1><p>{isQuiz ? 'Укажи имя или никнейм — он появится в общем рейтинге после завершения игры.' : 'Можно указать имя или придумать никнейм — результаты всё равно останутся анонимными.'}</p><input value={name} onChange={event => setName(event.target.value)} placeholder="Например, «Свет»" maxLength={20} /><small className="input-help">{isQuiz ? 'Это имя увидят только в общем результате викторины.' : 'Это нужно только для твоей личной карточки.'}</small>{!isQuiz && <div className="flow-note"><b>Важно</b><p>Нет правильных или неправильных ответов. Главное — отвечать честно.</p></div>}<Action onClick={() => void join()}>Продолжить</Action>{notice && <p className="flow-error">{notice}</p>}</Shell>
   if (!session || session.phase === 'lobby') return <Shell screen="waiting-screen"><div className="waiting-orbit"><i /><i /><b>✦</b></div><p className="flow-label">ПОДКЛЮЧЕНИЕ ПОДТВЕРЖДЕНО</p><h1>Ждём ведущего</h1><p>Ты уже в комнате. Как только ведущий запустит {isQuiz ? 'викторину' : 'диагностику'}, первый вопрос появится автоматически.</p><div className="waiting-status"><span /><div><b>Собираем участников</b><small>Не закрывай эту страницу</small></div></div></Shell>

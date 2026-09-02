@@ -86,6 +86,8 @@
         ".validate": "newData.hasChildren(['roomId','phase','maxParticipants','createdAt']) && newData.child('roomId').val() === $roomId && !newData.child('hostUid').exists() && !newData.child('workspaceId').exists() && !newData.child('participants').exists() && !newData.child('questions').exists()",
         "phase": { ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)" },
         "closedAt": { ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)" },
+        "endedAt": { ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)" },
+        "lastActivityAt": { ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)", ".validate": "newData.isNumber() && newData.val() <= now + 60000" },
         "roomTitle": { ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)" },
         "wheel": {
           ".write": "auth != null && (auth.token.platformAdmin === true || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid)",
@@ -153,8 +155,11 @@
         "settings": { ".validate": "!data.exists() || newData.val() === data.val()" },
         "scoringMap": { ".validate": "!data.exists() || newData.val() === data.val()" },
         "phase": { ".write": "auth != null && (auth.token.platformAdmin === true || (data.parent().child('hostUid').val() === auth.uid && root.child('users').child(auth.uid).child('status').val() === 'active'))" },
+        "status": { ".write": "auth != null && (auth.token.platformAdmin === true || (data.parent().child('hostUid').val() === auth.uid && root.child('users').child(auth.uid).child('status').val() === 'active'))" },
         "startedAt": { ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid" },
         "closedAt": { ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid" },
+        "endedAt": { ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid" },
+        "lastActivityAt": { ".write": "auth != null && (auth.token.platformAdmin === true || data.parent().child('hostUid').val() === auth.uid || (auth.token.firebase.sign_in_provider === 'anonymous' && data.parent().child('phase').val() === 'live' && (data.parent().child('participants').child(auth.uid).exists() || data.parent().child('wheel').child('participants').child(auth.uid).exists())))", ".validate": "newData.isNumber() && newData.val() <= now + 60000" },
         "resultsIntroStartedAt": { ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid" },
         "participantCount": { ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid" },
         "completedCount": { ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid" },
@@ -212,10 +217,10 @@
           "$participantId": {
             ".read": "auth != null && (auth.uid === $participantId || root.child('sessions').child($roomId).child('hostUid').val() === auth.uid || auth.token.platformAdmin === true)",
             ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && !data.exists() && root.child('sessions').child($roomId).child('phase').val() !== 'closed' && newData.child('id').val() === auth.uid",
-            "answers": { "$questionId": { ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('mode').val() !== 'quiz' && root.child('sessions').child($roomId).child('phase').val() === 'live'" } },
-            "currentQuestionIndex": { ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('mode').val() !== 'quiz' && root.child('sessions').child($roomId).child('phase').val() === 'live'" },
-            "status": { ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('mode').val() !== 'quiz' && root.child('sessions').child($roomId).child('phase').val() === 'live'" },
-            "completedAt": { ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('mode').val() !== 'quiz' && root.child('sessions').child($roomId).child('phase').val() === 'live'" },
+            "answers": { "$questionId": { ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('mode').val() !== 'quiz' && root.child('sessions').child($roomId).child('phase').val() === 'live' && root.child('sessions').child($roomId).child('lastActivityAt').val() >= now - 600000" } },
+            "currentQuestionIndex": { ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('mode').val() !== 'quiz' && root.child('sessions').child($roomId).child('phase').val() === 'live' && root.child('sessions').child($roomId).child('lastActivityAt').val() >= now - 600000" },
+            "status": { ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('mode').val() !== 'quiz' && root.child('sessions').child($roomId).child('phase').val() === 'live' && root.child('sessions').child($roomId).child('lastActivityAt').val() >= now - 600000" },
+            "completedAt": { ".write": "auth != null && auth.uid === $participantId && auth.token.firebase.sign_in_provider === 'anonymous' && root.child('sessions').child($roomId).child('mode').val() !== 'quiz' && root.child('sessions').child($roomId).child('phase').val() === 'live' && root.child('sessions').child($roomId).child('lastActivityAt').val() >= now - 600000" },
             "personalViewedAt": { ".write": "auth != null && auth.uid === $participantId && root.child('sessions').child($roomId).child('phase').val() !== 'closed'" }
           }
         }

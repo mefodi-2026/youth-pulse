@@ -87,7 +87,9 @@ const createPublicRoom = (session: Session): PublicRoom => ({
   phase: session.phase,
   maxParticipants: session.maxParticipants,
   createdAt: session.createdAt,
+  ...(session.lastActivityAt ? { lastActivityAt: session.lastActivityAt } : {}),
   ...(session.closedAt ? { closedAt: session.closedAt } : {}),
+  ...(session.endedAt ? { endedAt: session.endedAt } : {}),
   ...(session.mode ? { mode: session.mode } : {}),
   ...(session.productId ? { productId: session.productId } : {}),
   ...(session.gameTypeId ? { gameTypeId: session.gameTypeId } : {}),
@@ -839,6 +841,7 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
     roomTitle: cleanTitle,
     displayCode: roomId,
     createdAt,
+    lastActivityAt: createdAt,
     phase: 'lobby',
     status: 'lobby',
     maxParticipants: 30,
@@ -980,6 +983,7 @@ export const joinSession = async (roomId: string, participant: Participant) => {
   if (participantSnapshot.exists()) return
   try {
     await set(ref(services.db, `sessions/${roomId}/participants/${participant.id}`), participant)
+    await set(ref(services.db, `sessions/${roomId}/lastActivityAt`), Date.now())
     await recordParticipantEvent(roomId, participant.id, 'participant_joined')
   } catch (error) {
     console.error('participant join rejected', { roomId, participantId: participant.id, error })
@@ -1001,21 +1005,36 @@ const assertCurrentUserIsRoomHost = async (roomId: string, expectedHostUid?: str
 
 export const updatePhase = async (roomId: string, phase: SessionPhase, expectedHostUid?: string) => {
   const services = await assertCurrentUserIsRoomHost(roomId, expectedHostUid)
-  if (services.session.phase === 'closed' && phase !== 'closed') throw new Error('Завершённую сессию нельзя запустить повторно.')
+  if (services.session.phase === 'closed') {
+    if (phase === 'closed') return
+    throw new Error('Завершённую сессию нельзя запустить повторно.')
+  }
   const timestamp = Date.now()
   const participantCount = Object.keys(services.session.participants || {}).length
   const completedCount = Object.values(services.session.participants || {}).filter(participant => participant.status === 'finished').length
   const eventType: SessionEventType | null = phase === 'live' ? 'room_started' : phase === 'closed' ? 'room_closed' : null
   const event: SessionEvent | null = eventType ? { id: eventType, type: eventType, roomId, ...(services.session.workspaceId ? { workspaceId: services.session.workspaceId } : {}), hostUid: services.session.hostUid, createdAt: timestamp } : null
   await ensureParticipantRoomData(roomId, services.session)
+  const activityPatch = { [`sessions/${roomId}/lastActivityAt`]: timestamp, [`${publicRoomPath(roomId)}/lastActivityAt`]: timestamp }
   const patch: Record<string, unknown> = phase === 'resultsIntro'
-    ? { [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/resultsIntroStartedAt`]: timestamp, [`${publicRoomPath(roomId)}/phase`]: phase }
+    ? { ...activityPatch, [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/status`]: phase, [`sessions/${roomId}/resultsIntroStartedAt`]: timestamp, [`${publicRoomPath(roomId)}/phase`]: phase }
     : phase === 'closed'
-      ? { [`sessions/${roomId}/phase`]: 'closed', [`sessions/${roomId}/closedAt`]: timestamp, [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount, [`sessions/${roomId}/events/${event?.id}`]: event, [`${publicRoomPath(roomId)}/phase`]: 'closed', [`${publicRoomPath(roomId)}/closedAt`]: timestamp }
+      ? { ...activityPatch, [`sessions/${roomId}/phase`]: 'closed', [`sessions/${roomId}/status`]: 'closed', [`sessions/${roomId}/closedAt`]: timestamp, [`sessions/${roomId}/endedAt`]: timestamp, [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount, [`sessions/${roomId}/events/${event?.id}`]: event, [`${publicRoomPath(roomId)}/phase`]: 'closed', [`${publicRoomPath(roomId)}/closedAt`]: timestamp, [`${publicRoomPath(roomId)}/endedAt`]: timestamp }
       : phase === 'live'
-        ? { [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/startedAt`]: services.session.startedAt || timestamp, [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount, [`sessions/${roomId}/events/${event?.id}`]: event, [`${publicRoomPath(roomId)}/phase`]: phase }
-        : { [`sessions/${roomId}/phase`]: phase, [`${publicRoomPath(roomId)}/phase`]: phase }
+        ? { ...activityPatch, [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/status`]: phase, [`sessions/${roomId}/startedAt`]: services.session.startedAt || timestamp, [`sessions/${roomId}/participantCount`]: participantCount, [`sessions/${roomId}/completedCount`]: completedCount, [`sessions/${roomId}/events/${event?.id}`]: event, [`${publicRoomPath(roomId)}/phase`]: phase }
+        : { ...activityPatch, [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/status`]: phase, [`${publicRoomPath(roomId)}/phase`]: phase }
   await update(ref(services.db), patch)
+}
+
+/** A deliberate host operation extends a room. Passive page views never call this. */
+export const touchSessionActivity = async (roomId: string, expectedHostUid?: string) => {
+  const services = await assertCurrentUserIsRoomHost(roomId, expectedHostUid)
+  if (services.session.phase === 'closed') return
+  const timestamp = Date.now()
+  await update(ref(services.db), {
+    [`sessions/${roomId}/lastActivityAt`]: timestamp,
+    [`${publicRoomPath(roomId)}/lastActivityAt`]: timestamp,
+  })
 }
 
 /** Keeps aggregate pilot counters current without exposing answers or participant names. */
@@ -1034,7 +1053,8 @@ export const updateRoomTitle = async (roomId: string, roomTitle: string, expecte
   const cleanTitle = roomTitle.trim().slice(0, 80)
   if (!cleanTitle) throw new Error('Введите название комнаты.')
   await ensureParticipantRoomData(roomId, services.session)
-  await update(ref(services.db), { [`sessions/${roomId}/roomTitle`]: cleanTitle, [`${publicRoomPath(roomId)}/roomTitle`]: cleanTitle })
+  const timestamp = Date.now()
+  await update(ref(services.db), { [`sessions/${roomId}/roomTitle`]: cleanTitle, [`${publicRoomPath(roomId)}/roomTitle`]: cleanTitle, [`sessions/${roomId}/lastActivityAt`]: timestamp, [`${publicRoomPath(roomId)}/lastActivityAt`]: timestamp })
 }
 
 /** Writes only an archive. The caller must close the live session first. */
@@ -1147,7 +1167,8 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
     [`sessions/${roomId}/participants/${participant.id}/answers/${questionId}`]: answer,
     [`sessions/${roomId}/participants/${participant.id}/currentQuestionIndex`]: next.currentQuestionIndex,
     [`sessions/${roomId}/participants/${participant.id}/status`]: next.status,
-    ...(next.completedAt ? { [`sessions/${roomId}/participants/${participant.id}/completedAt`]: next.completedAt } : {})
+    ...(next.completedAt ? { [`sessions/${roomId}/participants/${participant.id}/completedAt`]: next.completedAt } : {}),
+    [`sessions/${roomId}/lastActivityAt`]: Date.now(),
   })
   if (finished) await recordParticipantEvent(roomId, participant.id, 'participant_finished')
   return next

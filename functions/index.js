@@ -121,7 +121,7 @@ exports.createQuizRoom = onCall(async request => {
   const event = { id: 'room_created', type: 'room_created', roomId, workspaceId, hostUid: uid, createdAt: now }
   const session = {
     roomId, roomTitle: String(roomTitle || '').trim().slice(0, 80) || `Встреча молодёжки · ${new Date(now).toLocaleDateString('ru-RU')}`,
-    displayCode: roomId, createdAt: now, phase: 'lobby', status: 'lobby', maxParticipants: 30,
+    displayCode: roomId, createdAt: now, lastActivityAt: now, phase: 'lobby', status: 'lobby', maxParticipants: 30,
     hostUid: uid, createdBy: uid, workspaceId, groupName: String(details.groupName || workspace.name || ''), city: String(details.city || workspace.city || ''),
     mode: 'quiz', quizPackId: publicCopy.packId, quizPackVersion: publicCopy.packVersion,
     ...(source.difficulty ? { difficulty: source.difficulty } : {}),
@@ -135,7 +135,7 @@ exports.createQuizRoom = onCall(async request => {
     templateOrigin: 'workspace', templateSnapshot: { ...publicCopy, capturedAt: now }, questions: publicCopy.questions,
     participants: {}, events: { [event.id]: event },
   }
-  const publicRoom = { roomId, roomTitle: session.roomTitle, displayCode: roomId, phase: 'lobby', maxParticipants: 30, createdAt: now, mode: 'quiz', productId: publicCopy.productId, gameTypeId: 'quiz', packId: publicCopy.packId, packTitle: publicCopy.title, ...(source.difficulty ? { difficulty: source.difficulty } : {}) }
+  const publicRoom = { roomId, roomTitle: session.roomTitle, displayCode: roomId, phase: 'lobby', maxParticipants: 30, createdAt: now, lastActivityAt: now, mode: 'quiz', productId: publicCopy.productId, gameTypeId: 'quiz', packId: publicCopy.packId, packTitle: publicCopy.title, ...(source.difficulty ? { difficulty: source.difficulty } : {}) }
   const participantSet = { roomId, createdAt: now, mode: 'quiz', productId: publicCopy.productId, gameTypeId: 'quiz', packId: publicCopy.packId, packTitle: publicCopy.title, questions: publicCopy.questions }
   await db.ref().update({
     [`sessions/${roomId}`]: session,
@@ -187,6 +187,7 @@ exports.submitQuizAnswer = onCall(async request => {
   const publicSet = publicQuestionsSnap.val()
   const privateSet = privateQuestionsSnap.val()
   if (!room || room.mode !== 'quiz' || room.phase !== 'live') throw new HttpsError('failed-precondition', 'Викторина не принимает ответы.')
+  if (Date.now() - Number(room.lastActivityAt || room.createdAt || 0) >= 10 * 60 * 1000) throw new HttpsError('failed-precondition', 'Время активности комнаты истекло.')
   if (!participant || participant.id !== uid || participant.status === 'finished') throw new HttpsError('permission-denied', 'Участник не принадлежит этой комнате.')
   const publicQuestion = byQuestionId(publicSet?.questions, questionId)
   const privateQuestion = byQuestionId(privateSet?.questions, questionId)
@@ -200,6 +201,8 @@ exports.submitQuizAnswer = onCall(async request => {
     [`sessions/${roomId}/participants/${uid}/answers/${questionId}`]: answer,
     [`sessions/${roomId}/participants/${uid}/currentQuestionIndex`]: nextIndex,
     [`sessions/${roomId}/participants/${uid}/status`]: finished ? 'finished' : 'answering',
+    [`sessions/${roomId}/lastActivityAt`]: Date.now(),
+    [`publicRooms/${roomId}/lastActivityAt`]: Date.now(),
     ...(finished ? { [`sessions/${roomId}/participants/${uid}/completedAt`]: Date.now() } : {}),
   }
   if (finished) {

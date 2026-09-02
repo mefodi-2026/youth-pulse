@@ -215,7 +215,11 @@ export interface Session {
   templateOrigin?: TemplateOrigin
   templateSnapshot?: TemplateSnapshot
   resultsIntroStartedAt?: number
+  /** Persisted user-action timestamp used for cross-device session expiry. */
+  lastActivityAt?: number
   closedAt?: number
+  /** Canonical end timestamp. `closedAt` remains for historical rooms. */
+  endedAt?: number
   /** Legacy mirror retained so existing rooms continue to work during migration. */
   questions?: Question[]
   participants: Record<string, Participant>
@@ -259,7 +263,10 @@ export interface PublicRoom {
   phase: SessionPhase
   maxParticipants: number
   createdAt: number
+  /** Public expiry marker; it contains no host or workspace data. */
+  lastActivityAt?: number
   closedAt?: number
+  endedAt?: number
   mode?: RoomMode
   gameTypeId?: GameTypeId
   productId?: ProductId

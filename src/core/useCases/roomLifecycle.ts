@@ -81,7 +81,8 @@ export async function changeRoomPhase(session: Session, next: SessionPhase) {
 /** Closing is authoritative; archiving is deliberately a separate best effort. */
 export async function closeRoomAndArchive(session: Session): Promise<{ closed: Session; archive?: SessionArchive; archiveError?: Error }> {
   await changeRoomPhase(session, 'closed')
-  const closed: Session = { ...session, phase: 'closed', status: 'closed', closedAt: Date.now() }
+  const endedAt = session.closedAt || Date.now()
+  const closed: Session = { ...session, phase: 'closed', status: 'closed', closedAt: endedAt, endedAt, lastActivityAt: endedAt }
   try {
     return { closed, archive: await archiveSession(closed) }
   } catch (error) {

@@ -21,6 +21,8 @@ import { resolveResultSession, selectWorkspaceArchives } from './core/useCases/a
 import { getDemoSession as getDemo, setDemoSession as setDemo } from './core/demoSessionStore'
 import { currentPath, go, queryRoom, replace, useRoute } from './core/navigation'
 import { useRoom } from './core/hooks/useRoom'
+import { useSessionLifecycle } from './core/hooks/useSessionLifecycle'
+import { isSessionExpired } from './core/sessionLifecycle'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
 
@@ -209,9 +211,10 @@ function AccountPage({ profile }: { profile: LeaderProfile }) {
   return <main className="auth-page"><Glass className="auth-card account-card"><p className="eyebrow">АККАУНТ ВЕДУЩЕГО</p><h1>{profile.fullName}</h1><p className={`account-status ${profile.status}`}>{labels[profile.status]}</p><dl><div><dt>Молодёжка</dt><dd>{workspace?.name || profile.workspaceId}</dd></div>{workspace?.city && <div><dt>Город</dt><dd>{workspace.city}</dd></div>}<div><dt>Email</dt><dd>{profile.email}</dd></div><div><dt>Телефон</dt><dd>{profile.phone}</dd></div></dl>{profile.status === 'pending' && <p>Заявка сохранена. Доступ к панели появится после активации или регистрации по действующей invite-ссылке.</p>}{profile.status === 'paused' && <p>Доступ к панели временно приостановлен.</p>}{profile.status === 'revoked' && <p>Доступ к панели отозван. Обратитесь к администратору.</p>}{profile.status === 'active' && <Button onClick={() => go('/host')}>Открыть панель ведущего</Button>}<Button secondary onClick={() => void logoutLeader().then(() => go('/login'))}>Выйти</Button></Glass></main>
 }
 
-function HomePanel({ name, questionCount, onChooseMode }: { name: string; questionCount: number; onChooseMode: (mode: RoomMode) => void }) {
+function HomePanel({ name, questionCount, onChooseMode, activeSession, onResume, onCloseActive, notice }: { name: string; questionCount: number; onChooseMode: (mode: RoomMode) => void; activeSession: Session | null; onResume: () => void; onCloseActive: () => void; notice?: string }) {
   const modes = productionModes.map(mode => ({ ...mode, mode: mode.mode as RoomMode }))
-  return <div className="home-panel"><div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><p className="home-feedback">Диагностика и викторина доступны для тестирования. «Колесо фортуны» подключено как отдельный режим и пока показывает безопасный экран подготовки к следующему этапу.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ДОСТУПНЫЕ РЕЖИМЫ</p><div className="landing-feature-list">{modes.map((mode, index) => <article key={mode.mode}><span>{String(index + 1).padStart(2, '0')}</span><div><b>{mode.title}</b><small>{mode.mode === diagnosticMode ? `${questionCount || '—'} вопросов · ${Object.keys(categories).length} тем · личные и общие результаты` : mode.description}</small><Button onClick={() => onChooseMode(mode.mode)}>{mode.setupScreen ? 'Открыть режим' : 'Создать комнату'}</Button></div></article>)}</div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Выберите режим и настройте встречу.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Подключите участников и начните игру или диагностику.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте результаты и экспорт внутри комнаты или её истории.</p></article></div></section></div>
+  const expired = isSessionExpired(activeSession)
+  return <div className="home-panel">{notice && <p className="connection-warning">{notice}</p>}{activeSession && <Glass className="home-active-room"><p className="eyebrow">НЕЗАВЕРШЁННАЯ КОМНАТА</p><h3>{activeSession.roomTitle || activeSession.roomId}</h3><p>Последняя активность: {new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(activeSession.lastActivityAt || activeSession.createdAt))} · {expired ? 'срок активности истёк' : phaseText(activeSession.phase)}</p><div className="control-actions">{!expired && <Button onClick={onResume}>Вернуться в комнату</Button>}<Button secondary onClick={onCloseActive}>Завершить старую комнату</Button></div>{expired && <small>Просроченную комнату нельзя продолжить. Её можно завершить, а затем открыть результаты и экспорт в истории.</small>}</Glass>}<div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><p className="home-feedback">Диагностика и викторина доступны для тестирования. «Колесо фортуны» подключено как отдельный режим и пока показывает безопасный экран подготовки к следующему этапу.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ДОСТУПНЫЕ РЕЖИМЫ</p><div className="landing-feature-list">{modes.map((mode, index) => <article key={mode.mode}><span>{String(index + 1).padStart(2, '0')}</span><div><b>{mode.title}</b><small>{mode.mode === diagnosticMode ? `${questionCount || '—'} вопросов · ${Object.keys(categories).length} тем · личные и общие результаты` : mode.description}</small><Button onClick={() => onChooseMode(mode.mode)}>{mode.setupScreen ? 'Открыть режим' : 'Создать комнату'}</Button></div></article>)}</div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Выберите режим и настройте встречу.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Подключите участников и начните игру или диагностику.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте результаты и экспорт внутри комнаты или её истории.</p></article></div></section></div>
 }
 
 function RulesPanel({ onStart }: { onStart: () => void }) {
@@ -275,13 +278,14 @@ function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, s
 function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; initialTab?: HostTab; initialRoom?: string }) {
   const roomKey = `atmosphere-host-room-${leader.uid}`
   const lastRoomKey = `atmosphere-host-last-room-${leader.uid}`
-  const [room, setRoom] = useState(() => initialRoom || localStorage.getItem(roomKey) || localStorage.getItem(lastRoomKey) || localStorage.getItem('atmosphere-host-room') || '')
+  const [room, setRoom] = useState(() => initialRoom || localStorage.getItem(roomKey) || '')
   const [session, setSession] = useRoom(room)
   const [qr, setQr] = useState('')
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState('')
   const [createError, setCreateError] = useState('')
   const [lastClosedRoom, setLastClosedRoom] = useState('')
+  const [roomConflictMode, setRoomConflictMode] = useState<RoomMode | null>(null)
   const tabKey = `atmosphere-host-tab-${leader.uid}`
   const initialRoute = normalizeHostTab(initialTab)
   // Keep the legacy values in the state type while normalizeHostTab() keeps
@@ -382,6 +386,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     if (localStorage.getItem('atmosphere-host-room') === room) localStorage.removeItem('atmosphere-host-room')
     localStorage.setItem(lastRoomKey, room)
     setLastClosedRoom(room)
+    if (room) setRoom('')
+    if (tab !== 'main') navigate('main', '')
   }, [room, roomKey, lastRoomKey, session?.phase])
   useEffect(() => {
     if (!joinUrl) return
@@ -504,7 +510,11 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     systemPacks: systemModePacks,
     workspacePacks: workspaceModePacks,
   })
-  const openRoomSetup = (mode: RoomMode = 'diagnostic') => {
+  const openRoomSetup = (mode: RoomMode = 'diagnostic', forceNewRoom = false) => {
+    if (!forceNewRoom && session && session.phase !== 'closed' && !isSessionExpired(session)) {
+      setRoomConflictMode(mode)
+      return
+    }
     setCreateError('')
     setActionError('')
     setRoomTitleDraft('')
@@ -548,7 +558,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       setCreateError(message)
     } finally { creatingRoomRef.current = false; setBusy(false) }
   }
-  const changePhase = async (next: SessionPhase) => {
+  const changePhase = async (next: SessionPhase, options: { returnToMain?: boolean; inactivity?: boolean } = {}) => {
     if (!session) return false
     setActionError('')
     try {
@@ -565,11 +575,14 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
           setLastClosedRoom(room)
           if (outcome.archive) setArchives(prev => ({ ...prev, [room]: outcome.archive! }))
           if (outcome.archiveError) setActionError(`Сессия завершена, но архив пока не сохранён: ${outcome.archiveError.message}`)
+          setRoom('')
+          if (options.returnToMain !== false) navigate('main', '')
           return true
         }
         await changeRoomPhase(session, next)
       } else {
-        const nextSession = { ...session, phase: next, ...(next === 'resultsIntro' ? { resultsIntroStartedAt: Date.now() } : {}), ...(next === 'closed' ? { closedAt: Date.now() } : {}) }
+        const timestamp = Date.now()
+        const nextSession = { ...session, phase: next, status: next, lastActivityAt: timestamp, ...(next === 'resultsIntro' ? { resultsIntroStartedAt: timestamp } : {}), ...(next === 'closed' ? { closedAt: timestamp, endedAt: timestamp } : {}) }
         setDemo(nextSession); setSession(nextSession)
         if (next === 'closed') {
           const archived = { ...nextSession, archivedAt: Date.now() } as SessionArchive
@@ -580,6 +593,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
           localStorage.removeItem('atmosphere-host-room')
           localStorage.setItem(lastRoomKey, room)
           setLastClosedRoom(room)
+          setRoom('')
+          if (options.returnToMain !== false) navigate('main', '')
         }
       }
       return true
@@ -598,21 +613,21 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     navigate('results', room)
     window.setTimeout(() => { void changePhase('resultsReal') }, 20000)
   }
-  const closeRoom = async () => {
+  const closeRoom = async (skipConfirmation = false, options: { returnToMain?: boolean; inactivity?: boolean } = {}) => {
     if (!session || session.phase === 'closed') return false
-    if (!window.confirm('После завершения участники больше не смогут отвечать в этой комнате. Участники, ответы и результаты будут сохранены в архиве.')) return false
-    return changePhase('closed')
+    if (!skipConfirmation && !window.confirm('После завершения участники больше не смогут отвечать в этой комнате. Участники, ответы и результаты будут сохранены в архиве.')) return false
+    return changePhase('closed', options)
   }
-  const closeWheelRoom = async () => {
+  const closeWheelRoom = async (options: { returnToMain?: boolean; inactivity?: boolean } = {}) => {
     if (!session || session.mode !== 'wheel' || session.phase === 'closed') return false
     try { await stopWheelActivity(session.roomId) }
     catch (error) { console.warn('wheel animation could not be cleared before closing', error) }
-    return changePhase('closed')
+    return changePhase('closed', options)
   }
   const startWheelAgain = async () => {
     const previous = session
     if (!previous || previous.mode !== 'wheel' || !previous.wheel) return false
-    if (!await closeWheelRoom()) return false
+    if (!await closeWheelRoom({ returnToMain: false })) return false
     try {
       const nextRoom = await createWheelRoom({
         leaderUid: leader.uid,
@@ -635,9 +650,18 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   }
   const exitWheelToMain = async () => {
     if (!await closeWheelRoom()) return false
-    navigate('main', '')
     return true
   }
+  const expireCurrentRoom = async () => {
+    if (!session || session.phase === 'closed') return true
+    const closed = session.mode === 'wheel'
+      ? closeWheelRoom({ returnToMain: true, inactivity: true })
+      : closeRoom(true, { returnToMain: true, inactivity: true })
+    const completed = await closed
+    if (completed) setActionError('Сессия завершена автоматически после 10 минут бездействия.')
+    return completed
+  }
+  const { expiringSoon } = useSessionLifecycle(session, expireCurrentRoom)
   const saveRoomTitle = async () => {
     if (!session || session.phase !== 'lobby') return
     setRoomTitleSaving(true); setActionError('')
@@ -653,7 +677,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     navigate('results', archived.roomId)
   }
   const resultSession = resolveResultSession(resultRoom, room, session, archives)
-  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} questionCount={systemDiagnosticPack?.questions.length || questionBank.length} onChooseMode={openRoomSetup} /></HostLayout>
+  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} questionCount={systemDiagnosticPack?.questions.length || questionBank.length} onChooseMode={openRoomSetup} activeSession={session?.phase === 'closed' ? null : session} onResume={() => navigate('currentRoom', room)} onCloseActive={() => void (session?.mode === 'wheel' ? closeWheelRoom() : closeRoom())} notice={expiringSoon ? 'Сессия скоро завершится из-за отсутствия активности. Выполните действие в комнате, чтобы продолжить.' : actionError} />{roomConflictMode && session && <div className="wheel-finish-dialog" role="dialog" aria-modal="true"><section><p className="eyebrow">НЕЗАВЕРШЁННАЯ КОМНАТА</p><h2>Сначала выберите, что сделать с текущей комнатой</h2><p>Её данные не будут смешаны с новой игрой. Перед созданием новой старая комната будет корректно завершена и сохранена в архиве.</p><div><Button onClick={() => { setRoomConflictMode(null); navigate('currentRoom', room) }}>Вернуться в комнату</Button><Button secondary onClick={() => void (session.mode === 'wheel' ? closeWheelRoom() : closeRoom())}>Завершить старую комнату</Button><Button secondary onClick={() => void (async () => { const mode = roomConflictMode; if (!mode) return; const closed = session.mode === 'wheel' ? await closeWheelRoom({ returnToMain: false }) : await closeRoom(true, { returnToMain: false }); if (closed) { setRoomConflictMode(null); openRoomSetup(mode, true) } })()}>Завершить и создать новую</Button><Button secondary onClick={() => setRoomConflictMode(null)}>Отмена</Button></div></section></div>}</HostLayout>
   if (tab === 'rules') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ПОДСКАЗКИ ДЛЯ ВЕДУЩЕГО</p><h1>Правила</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><RulesPanel onStart={() => navigate('currentRoom')} /></HostLayout>
   if (tab === 'profile') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ВАШ АККАУНТ</p><h1>Профиль</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><ProfilePanel profile={leader} /></HostLayout>
   if (tab === 'results' && resultRoom && resultSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={resultSession} participants={Object.keys(resultSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode><header className="host-header host-results-header"><div><p className="eyebrow">РЕЗУЛЬТАТЫ · {resultRoom}</p><h1>Общая картина</h1></div><span className="status">СОХРАНЕНО</span></header><Results room={resultRoom} sessionOverride={resultSession} embedded /></HostLayout>
