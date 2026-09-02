@@ -12,6 +12,7 @@ export type WheelPhase =
   | 'spinning_task'
   | 'task_revealed'
   | 'decision'
+  | 'performing'
   | 'completed'
 
 export type WheelPoolItemStatus = 'available' | 'selected' | 'used' | 'pending'

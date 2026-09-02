@@ -9,8 +9,9 @@ export const wheelPhaseTransitions: Readonly<Record<WheelPhase, readonly WheelPh
   name_revealed: ['spinning_task', 'ready'],
   spinning_task: ['task_revealed', 'decision', 'ready'],
   task_revealed: ['spinning_name', 'decision', 'ready'],
-  decision: ['ready', 'completed'],
-  completed: [],
+  decision: ['performing', 'ready', 'completed'],
+  performing: ['ready', 'completed'],
+  completed: ['performing'],
 }
 
 export const canTransitionWheelPhase = (current: WheelPhase, next: WheelPhase) => wheelPhaseTransitions[current].includes(next)

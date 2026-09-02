@@ -11,7 +11,9 @@ import {
   completePendingWheelTaskTransition,
   decideWheelRoundTransition,
   getAvailableWheelCount,
+  openPendingWheelTaskTransition,
   revealWheelSelectionTransition,
+  startWheelRoundTransition,
   startWheelSpinTransition,
 } from './engine'
 
@@ -187,8 +189,8 @@ export async function markWheelReady(roomId: string) {
 const publicWheelState = (state: WheelRoomState): NonNullable<PublicRoom['wheel']> => {
   const phase = state.phase
   const current = state.currentRound
-  const nameVisible = Boolean(current?.selectedNameText) && ['name_revealed', 'spinning_task', 'task_revealed', 'decision'].includes(phase)
-  const taskVisible = Boolean(current?.selectedTaskText) && ['task_revealed', 'spinning_name', 'name_revealed', 'decision'].includes(phase)
+  const nameVisible = Boolean(current?.selectedNameText) && ['name_revealed', 'spinning_task', 'task_revealed', 'decision', 'performing'].includes(phase)
+  const taskVisible = Boolean(current?.selectedTaskText) && ['task_revealed', 'spinning_name', 'name_revealed', 'decision', 'performing'].includes(phase)
   const visibleRound = nameVisible || taskVisible ? {
     ...(nameVisible ? { selectedNameText: current?.selectedNameText } : {}),
     ...(taskVisible ? { selectedTaskText: current?.selectedTaskText } : {}),
@@ -290,10 +292,18 @@ export async function markWheelRoundCompleted(roomId: string) {
   return runWheelHostTransaction(roomId, 'markCompleted', state => decideWheelRoundTransition(state, 'completed', now()))
 }
 
+export async function startWheelRound(roomId: string) {
+  return runWheelHostTransaction(roomId, 'startRound', startWheelRoundTransition)
+}
+
 export async function markWheelRoundPending(roomId: string) {
   return runWheelHostTransaction(roomId, 'markPending', state => decideWheelRoundTransition(state, 'pending', now()))
 }
 
 export async function completeWheelPendingTask(roomId: string, pendingId: string) {
   return runWheelHostTransaction(roomId, 'completePendingTask', state => completePendingWheelTaskTransition(state, pendingId, now()))
+}
+
+export async function openWheelPendingTask(roomId: string, pendingId: string) {
+  return runWheelHostTransaction(roomId, 'openPendingTask', state => openPendingWheelTaskTransition(state, pendingId))
 }

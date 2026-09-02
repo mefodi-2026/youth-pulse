@@ -6,7 +6,9 @@ import {
   decideWheelRoundTransition,
   getAvailableWheelCount,
   getWheelNextSpinTarget,
+  openPendingWheelTaskTransition,
   revealWheelSelectionTransition,
+  startWheelRoundTransition,
   startWheelSpinTransition,
 } from './engine'
 import type { WheelDrawOrder, WheelRoomState } from './types'
@@ -29,7 +31,7 @@ assert(Object.keys(initialState.rounds).length === 0, 'new room must not contain
 
 assert(canTransitionWheelPhase('setup', 'collecting'), 'setup must allow data collection')
 assert(canTransitionWheelPhase('ready', 'spinning_task'), 'task-first flow must be representable')
-assert(canTransitionWheelPhase('decision', 'completed'), 'decision must allow completion')
+assert(canTransitionWheelPhase('decision', 'performing'), 'selected pair must be opened before completion')
 assert(!canTransitionWheelPhase('setup', 'completed'), 'state machine must reject phase skipping')
 
 const participant = validateWheelParticipantEntry({ displayName: '  Анна  ', taskText: '  Назвать любимый стих  ' })
@@ -114,6 +116,8 @@ nameFirst = startWheelSpinTransition(nameFirst, { roundId: 'round-b', createdAt:
 nameFirst = revealWheelSelectionTransition(nameFirst)
 const completedNameId = nameFirst.currentRound?.selectedNameId || ''
 const completedTaskId = nameFirst.currentRound?.selectedTaskId || ''
+nameFirst = startWheelRoundTransition(nameFirst)
+assert(nameFirst.phase === 'performing', 'a selected pair must open as a separate round')
 nameFirst = decideWheelRoundTransition(nameFirst, 'completed', 21)
 assert(nameFirst.rounds['round-b']?.status === 'completed', 'completed decision must be saved in history')
 assert(nameFirst.pools.names[completedNameId]?.status === 'used', 'completed name must leave the active pool')
@@ -134,6 +138,8 @@ assert(taskFirst.rounds['round-c']?.status === 'pending', 'pending decision must
 assert(taskFirst.pendingTasks['round-c']?.participantName === 'Участник 1', 'pending library must keep the participant name')
 assert(taskFirst.pendingTasks['round-c']?.taskText === 'Задание 1', 'pending library must keep the task text')
 assert(taskFirst.pools.tasks['task-0']?.status === 'pending', 'a pending task must leave the active pool')
+taskFirst = openPendingWheelTaskTransition(taskFirst, 'round-c')
+assert(taskFirst.phase === 'performing', 'a library pair must open without a new spin')
 taskFirst = completePendingWheelTaskTransition(taskFirst, 'round-c', 32)
 assert(taskFirst.pendingTasks['round-c']?.status === 'completed', 'pending task must be completable later')
 expectFailure(
@@ -146,6 +152,7 @@ exhausted = startWheelSpinTransition(exhausted, { roundId: 'round-last', created
 exhausted = revealWheelSelectionTransition(exhausted)
 exhausted = startWheelSpinTransition(exhausted, { roundId: 'round-last', createdAt: 40, random: 0 })
 exhausted = revealWheelSelectionTransition(exhausted)
+exhausted = startWheelRoundTransition(exhausted)
 exhausted = decideWheelRoundTransition(exhausted, 'completed', 41)
 assert(exhausted.phase === 'completed', 'the room must finish when no complete pair remains')
 assert(getWheelNextSpinTarget(exhausted) === null, 'an exhausted room must block further spins')

@@ -102,7 +102,8 @@ export const decideWheelRoundTransition = (
   decidedAt: number,
 ): WheelRoomState => {
   const current = state.currentRound
-  if (state.phase !== 'decision' || !current?.selectedNameId || !current.selectedTaskId || !current.selectedNameText || !current.selectedTaskText) {
+  const allowedPhase = status === 'pending' ? state.phase === 'decision' : state.phase === 'performing'
+  if (!allowedPhase || !current?.selectedNameId || !current.selectedTaskId || !current.selectedNameText || !current.selectedTaskText) {
     throw new Error('Сначала откройте имя и задание.')
   }
   const names = cloneItems(state.pools?.names)
@@ -143,16 +144,52 @@ export const decideWheelRoundTransition = (
   }
 }
 
-export const completePendingWheelTaskTransition = (state: WheelRoomState, pendingId: string, completedAt: number): WheelRoomState => {
+/** Opens the selected pair as the current task. Completion remains an explicit host action. */
+export const startWheelRoundTransition = (state: WheelRoomState): WheelRoomState => {
+  if (state.phase !== 'decision' || !state.currentRound?.selectedNameId || !state.currentRound.selectedTaskId) {
+    throw new Error('Сначала выберите имя и задание.')
+  }
+  return { ...state, phase: 'performing', version: (state.version || 0) + 1, activeSpin: null }
+}
+
+export const openPendingWheelTaskTransition = (state: WheelRoomState, pendingId: string): WheelRoomState => {
   const pending = state.pendingTasks?.[pendingId]
-  if (!pending || pending.status !== 'pending') throw new Error('Отложенное задание уже выполнено или не найдено.')
-  const tasks = cloneItems(state.pools?.tasks)
   const round = state.rounds?.[pendingId]
-  if (round?.taskId && tasks[round.taskId]) tasks[round.taskId] = { ...tasks[round.taskId], status: 'used' }
+  if (!pending || pending.status !== 'pending' || !round) throw new Error('Отложенное задание не найдено.')
+  if (state.phase !== 'ready' && state.phase !== 'completed') throw new Error('Сначала завершите текущий раунд.')
   return {
     ...state,
+    phase: 'performing',
+    version: (state.version || 0) + 1,
+    currentRound: {
+      roundId: round.roundId,
+      selectedNameId: round.nameId,
+      selectedTaskId: round.taskId,
+      selectedNameText: round.nameText,
+      selectedTaskText: round.taskText,
+      createdAt: round.createdAt,
+    },
+    activeSpin: null,
+  }
+}
+
+export const completePendingWheelTaskTransition = (state: WheelRoomState, pendingId: string, completedAt: number): WheelRoomState => {
+  const pending = state.pendingTasks?.[pendingId]
+  const round = state.rounds?.[pendingId]
+  if (!pending || pending.status !== 'pending' || !round) throw new Error('Отложенное задание уже выполнено или не найдено.')
+  if (state.phase !== 'performing' || state.currentRound?.roundId !== pendingId) throw new Error('Сначала откройте это задание из библиотеки.')
+  const tasks = cloneItems(state.pools?.tasks)
+  if (round?.taskId && tasks[round.taskId]) tasks[round.taskId] = { ...tasks[round.taskId], status: 'used' }
+  const rounds: Record<string, WheelRound> = { ...(state.rounds || {}), [pendingId]: { ...round, status: 'completed', decidedAt: completedAt } }
+  const hasNextPair = availableItems(state.pools?.names).length > 0 && availableItems(tasks).length > 0
+  return {
+    ...state,
+    phase: hasNextPair ? 'ready' : 'completed',
     version: (state.version || 0) + 1,
     pools: { names: cloneItems(state.pools?.names), tasks },
+    currentRound: null,
+    activeSpin: null,
+    rounds,
     pendingTasks: {
       ...(state.pendingTasks || {}),
       [pendingId]: { ...pending, status: 'completed', completedAt },

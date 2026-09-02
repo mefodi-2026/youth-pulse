@@ -1,17 +1,15 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { PublicRoom } from '../../types'
 import type { ModeHostScreenProps, ModeLandingScreenProps, ModeMainScreenProps, ModeParticipantFlowProps, ModeSetupScreenProps } from '../contracts'
 import type { ParticipantQuestionScreenProps } from '../participantTypes'
 import {
   addWheelHostItem, cancelWheelSelection, clearWheelHostPool, completeWheelPendingTask,
   createWheelRoom, deleteWheelHostItem, markWheelReady, markWheelRoundCompleted,
-  markWheelRoundPending, prepareWheelParticipantAuth, revealWheelSelection,
-  saveWheelParticipantEntry, startWheelSpin, subscribeOwnWheelEntry, subscribeWheelPublicRoom,
+  markWheelRoundPending, openWheelPendingTask, prepareWheelParticipantAuth,
+  revealWheelSelection, saveWheelParticipantEntry, startWheelRound, startWheelSpin,
+  subscribeOwnWheelEntry, subscribeWheelPublicRoom,
 } from './repository'
-import type {
-  WheelDrawOrder, WheelInputMode, WheelParticipantEntry, WheelPoolItem,
-  WheelPublicHistoryItem, WheelPublicRound, WheelRoomState, WheelSpinAnimation, WheelSpinItem,
-} from './types'
+import type { WheelDrawOrder, WheelInputMode, WheelParticipantEntry, WheelPoolItem, WheelPublicHistoryItem, WheelPublicRound, WheelRoomState, WheelSpinAnimation, WheelSpinItem } from './types'
 import { canStartWheel } from './validation'
 import { getAvailableWheelCount, getWheelNextSpinTarget } from './engine'
 
@@ -21,63 +19,64 @@ const labels = {
 } as const
 
 const phaseLabels = {
-  setup: 'Настройка', collecting: 'Собираем данные', ready: 'Можно начинать',
-  spinning_name: 'Выбираем имя', name_revealed: 'Имя выбрано',
-  spinning_task: 'Выбираем задание', task_revealed: 'Задание выбрано',
-  decision: 'Пара открыта', completed: 'Игра завершена',
+  setup: 'Настройка', collecting: 'Собираем данные', ready: 'Выбираем участника',
+  spinning_name: 'Выбираем участника', name_revealed: 'Выпало имя',
+  spinning_task: 'Выбираем задание', task_revealed: 'Выпало задание',
+  decision: 'Пара выбрана', performing: 'Текущий раунд', completed: 'Игра завершена',
 } as const
 
 const phaseInstructions = {
   setup: 'Завершите настройку комнаты.', collecting: 'Дождитесь участников или заполните оба списка.',
-  ready: 'Колесо готово. Запустите следующий выбор.',
-  spinning_name: 'Колесо имён вращается. Результат откроется автоматически.',
-  name_revealed: 'Имя зафиксировано. Теперь выберите задание.',
-  spinning_task: 'Колесо заданий вращается. Результат откроется автоматически.',
-  task_revealed: 'Задание зафиксировано. Теперь выберите имя.',
-  decision: 'Подтвердите выполнение или перенесите задание на потом.',
+  ready: 'Крутите следующее колесо, когда будете готовы.',
+  spinning_name: 'Выбираем участника. Результат синхронизирован на всех экранах.',
+  name_revealed: 'Подтвердите имя, чтобы открыть колесо заданий.',
+  spinning_task: 'Выбираем задание. Результат синхронизирован на всех экранах.',
+  task_revealed: 'Подтвердите задание, чтобы открыть колесо имён.',
+  decision: 'Выберите: выполнить задание сейчас или сохранить его в библиотеке.',
+  performing: 'Пара открыта. Отметьте задание выполненным после выполнения.',
   completed: 'Все доступные пары использованы.',
 } as const
 
-const colors = ['#ffe000', '#ff9f2d', '#19cf82', '#5e55ee', '#edf0f7', '#e947cf', '#0aa9e5', '#9b6bd8', '#f52355', '#06b5e7', '#ff9f28', '#e850cb']
+const colors = ['#1eb6dc', '#ff9f2d', '#ffe000', '#e947cf', '#f52355', '#9b6bd8', '#5e55ee', '#0aa9e5', '#19cf82', '#ff9f28', '#e850cb', '#06b5e7']
 const point = (radius: number, degrees: number) => { const radians = degrees * Math.PI / 180; return { x: 200 + radius * Math.cos(radians), y: 200 + radius * Math.sin(radians) } }
 const sectorPath = (index: number, total: number) => {
-  const start = -90 + index * 360 / total
-  const end = -90 + (index + 1) * 360 / total
-  const first = point(168, start)
-  const second = point(168, end)
+  const start = -90 + index * 360 / total; const end = -90 + (index + 1) * 360 / total
+  const first = point(168, start); const second = point(168, end)
   return `M 200 200 L ${first.x} ${first.y} A 168 168 0 ${360 / total > 180 ? 1 : 0} 1 ${second.x} ${second.y} Z`
 }
-const shortLabel = (text: string, total: number) => { const limit = total <= 8 ? 15 : total <= 14 ? 9 : 4; return text.length > limit ? `${text.slice(0, Math.max(1, limit - 1))}…` : text }
+const shortLabel = (text: string, total: number) => {
+  const limit = total <= 6 ? 19 : total <= 10 ? 12 : total <= 16 ? 8 : 5
+  return text.length > limit ? `${text.slice(0, Math.max(1, limit - 1))}…` : text
+}
 
-function FortuneWheel({ spin, spinning }: { spin?: WheelSpinAnimation; spinning: boolean }) {
-  const items: WheelSpinItem[] = spin?.items?.length ? spin.items : Array.from({ length: 10 }, (_, index) => ({ itemId: `placeholder-${index}`, text: `${index + 1}` }))
+function FortuneWheel({ spin, items = [], spinning }: { spin?: WheelSpinAnimation; items?: WheelSpinItem[]; spinning: boolean }) {
+  const sectors = spin?.items?.length ? spin.items : items
   const elapsed = spin ? Math.min(Math.max(Date.now() - spin.startedAt, 0), spin.durationMs) : 0
   const style = {
     '--wheel-target': `${spin?.targetRotation || 0}deg`, '--wheel-duration': `${spin?.durationMs || 4200}ms`, '--wheel-delay': `${-elapsed}ms`,
     ...(!spinning && spin ? { transform: `rotate(${spin.targetRotation}deg)` } : {}),
   } as CSSProperties
+  if (!sectors.length) return <div className="fortune-wheel-empty"><span>◉</span><p>Добавьте элементы, чтобы собрать колесо</p></div>
   return <div className="fortune-wheel-wrap" aria-label={spin?.target === 'task' ? 'Колесо заданий' : 'Колесо имён'}>
-    <div className="fortune-wheel-pointer" aria-hidden="true" />
-    <div key={spin?.animationNonce || 'idle'} className={`fortune-wheel-disc ${spinning ? 'is-spinning' : ''}`} style={style}>
-      <svg viewBox="0 0 400 400" role="img"><circle cx="200" cy="200" r="190" className="fortune-wheel-rim" /><g>{items.map((item, index) => {
-        const angle = -90 + (index + 0.5) * 360 / items.length
-        const labelPoint = point(items.length > 16 ? 132 : 123, angle)
-        return <g key={item.itemId}><path d={sectorPath(index, items.length)} fill={colors[index % colors.length]} /><text x={labelPoint.x} y={labelPoint.y} transform={`rotate(${angle + 90} ${labelPoint.x} ${labelPoint.y})`} className={items.length > 16 ? 'is-compact' : ''}>{shortLabel(item.text, items.length)}</text></g>
+    <div className={`fortune-wheel-pointer ${spin?.target === 'task' ? 'is-task' : ''}`} aria-hidden="true" />
+    <div key={spin?.animationNonce || `idle-${sectors.length}`} className={`fortune-wheel-disc ${spinning ? 'is-spinning' : ''}`} style={style}>
+      <svg viewBox="0 0 400 400" role="img"><circle cx="200" cy="200" r="190" className="fortune-wheel-rim" /><g>{sectors.map((item, index) => {
+        const angle = -90 + (index + 0.5) * 360 / sectors.length; const labelPoint = point(sectors.length > 16 ? 132 : 123, angle)
+        return <g key={item.itemId}><path d={sectorPath(index, sectors.length)} fill={colors[index % colors.length]} /><text x={labelPoint.x} y={labelPoint.y} transform={`rotate(${angle + 90} ${labelPoint.x} ${labelPoint.y})`} className={sectors.length > 16 ? 'is-compact' : ''}>{shortLabel(item.text, sectors.length)}</text></g>
       })}</g><circle cx="200" cy="200" r="49" className="fortune-wheel-hub-outer" /><circle cx="200" cy="200" r="37" className="fortune-wheel-hub" /></svg>
     </div>
   </div>
 }
 
 export function WheelLandingScreen({ onSetup }: ModeLandingScreenProps) {
-  return <section className="glass mode-intro"><p className="eyebrow">ИНТЕРАКТИВНЫЙ РЕЖИМ</p><h2>Колесо фортуны</h2><p>Соберите имена и задания от участников или подготовьте оба списка самостоятельно. Данные синхронизируются с комнатой в реальном времени.</p><button type="button" className="button" onClick={onSetup}>Создать комнату</button></section>
+  return <section className="glass mode-intro"><p className="eyebrow">ИНТЕРАКТИВНЫЙ РЕЖИМ</p><h2>Колесо фортуны</h2><p>Соберите имена и задания от участников или подготовьте оба списка самостоятельно. Каждый выбор синхронизируется с комнатой в реальном времени.</p><button type="button" className="button" onClick={onSetup}>Создать комнату</button></section>
 }
 
 export function WheelSetupScreen({ onBack, leaderUid, workspaceId, defaultTitle, onCreated }: ModeSetupScreenProps) {
   const [inputMode, setInputMode] = useState<WheelInputMode>('participants')
   const [drawOrder, setDrawOrder] = useState<WheelDrawOrder>('name_then_task')
   const [title, setTitle] = useState(defaultTitle || 'Колесо фортуны')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('')
   const create = async () => {
     if (!leaderUid || !workspaceId || !onCreated || busy) return setError('Не удалось определить аккаунт и workspace ведущего.')
     setBusy(true); setError('')
@@ -91,37 +90,29 @@ export function WheelSetupScreen({ onBack, leaderUid, workspaceId, defaultTitle,
 const fullVisibleRound = (wheel?: WheelRoomState): WheelPublicRound | undefined => {
   const current = wheel?.currentRound
   if (!wheel || !current) return undefined
-  const nameVisible = ['name_revealed', 'spinning_task', 'task_revealed', 'decision'].includes(wheel.phase)
-  const taskVisible = ['task_revealed', 'spinning_name', 'name_revealed', 'decision'].includes(wheel.phase)
+  const nameVisible = ['name_revealed', 'spinning_task', 'task_revealed', 'decision', 'performing'].includes(wheel.phase)
+  const taskVisible = ['task_revealed', 'spinning_name', 'name_revealed', 'decision', 'performing'].includes(wheel.phase)
   if (!nameVisible && !taskVisible) return undefined
   return { ...(nameVisible ? { selectedNameText: current.selectedNameText } : {}), ...(taskVisible ? { selectedTaskText: current.selectedTaskText } : {}) }
 }
 
-type AudienceProps = {
-  phase: keyof typeof phaseLabels; round?: WheelPublicRound; activeSpin?: WheelSpinAnimation; history?: WheelPublicHistoryItem[]
-  nameCount: number; taskCount: number; roundCount: number; pendingCount: number
-}
+type AudienceProps = { phase: keyof typeof phaseLabels; round?: WheelPublicRound; activeSpin?: WheelSpinAnimation; history?: WheelPublicHistoryItem[]; nameCount: number; taskCount: number; roundCount: number; pendingCount: number; idleItems?: WheelSpinItem[] }
 
-function WheelAudiencePanel({ phase, round, activeSpin, history = [], nameCount, taskCount, roundCount, pendingCount }: AudienceProps) {
+function WheelAudiencePanel({ phase, round, activeSpin, history = [], nameCount, taskCount, roundCount, pendingCount, idleItems = [] }: AudienceProps) {
   const spinning = phase === 'spinning_name' || phase === 'spinning_task'
-  const activeItems = activeSpin?.items || []
+  const items = activeSpin?.items || idleItems
+  const selectedTitle = phase === 'name_revealed' ? 'ВЫПАЛО ИМЯ' : phase === 'task_revealed' ? 'ВЫПАЛО ЗАДАНИЕ' : null
   return <section className="wheel-audience">
-    <header className="wheel-game-heading"><div><p className="eyebrow">КОЛЕСО ФОРТУНЫ</p><h1>{phaseLabels[phase]}</h1></div><div className="wheel-live-stats"><span>Имена <b>{nameCount}</b></span><span>Задания <b>{taskCount}</b></span><span>Раунды <b>{roundCount}</b></span><span>Отложено <b>{pendingCount}</b></span></div></header>
-    <div className="wheel-play-layout"><aside className="wheel-active-list"><small>{activeSpin?.target === 'task' ? 'ЗАДАНИЯ В КОЛЕСЕ' : 'ИМЕНА В КОЛЕСЕ'}</small>{activeItems.length ? <ol>{activeItems.map(item => <li key={item.itemId}>{item.text}</li>)}</ol> : <p>Запустите колесо, чтобы увидеть текущий список.</p>}</aside><div className="wheel-visual"><FortuneWheel spin={activeSpin} spinning={spinning} />{spinning && <p className="wheel-spinning-copy">Выбор синхронизирован · результат откроется автоматически</p>}</div><aside className="wheel-round-card"><small>ТЕКУЩИЙ РАУНД</small><div><span>ИМЯ</span><strong>{round?.selectedNameText || '—'}</strong></div><div><span>ЗАДАНИЕ</span><strong>{round?.selectedTaskText || '—'}</strong></div><p>{phaseInstructions[phase]}</p></aside></div>
-    {history.length > 0 && <section className="wheel-history"><div><p className="eyebrow">ИСТОРИЯ</p><h2>Сыгранные пары</h2></div><ol>{history.map((item, index) => <li key={item.roundId}><b>{index + 1}</b><span><strong>{item.nameText}</strong>{item.taskText}</span><em>{item.status === 'pending' ? 'На потом' : 'Выполнено'}</em></li>)}</ol></section>}
-    {phase === 'completed' && <p className="wheel-complete-note">Доступные пары закончились. Ведущий может завершить комнату.</p>}
+    <header className="wheel-game-heading"><div><p className="eyebrow">◉ КОЛЕСО ФОРТУНЫ</p><h1>{phaseLabels[phase]}</h1><p className="wheel-subtitle">{phaseInstructions[phase]}</p></div><div className="wheel-live-stats"><span>Имена <b>{nameCount}</b></span><span>Задания <b>{taskCount}</b></span><span>Раунд <b>{roundCount + (round ? 1 : 0)}</b></span></div></header>
+    <div className="wheel-play-layout"><aside className="wheel-active-list"><small>{activeSpin?.target === 'task' || phase === 'spinning_task' || phase === 'task_revealed' ? 'ЗАДАНИЯ В ОЧЕРЕДИ' : 'ОЧЕРЕДЬ УЧАСТНИКОВ'}</small>{items.length ? <ol>{items.map((item, index) => <li key={item.itemId}><b>{index + 1}</b><span>{item.text}</span></li>)}</ol> : <p>Список появится после начала игры.</p>}<footer>{items.length} {activeSpin?.target === 'task' ? 'заданий' : 'элементов в колесе'}</footer></aside><div className="wheel-visual">{phase === 'performing' ? <article className="wheel-performing-card"><small>РАУНД {roundCount + 1}</small><p>Задание выполняет <b>{round?.selectedNameText || 'участник'}</b></p><strong>{round?.selectedTaskText || '—'}</strong><span>● Раунд начат</span></article> : <><FortuneWheel spin={activeSpin} items={items} spinning={spinning} />{spinning && <p className="wheel-spinning-copy">Колесо вращается · повторный запуск заблокирован</p>}{selectedTitle && <article className="wheel-reveal-card"><small>{selectedTitle}</small><strong>{phase === 'name_revealed' ? round?.selectedNameText : round?.selectedTaskText}</strong><span>Подтвердите выбор, чтобы продолжить.</span></article>}</>}</div><aside className="wheel-round-card"><small>ТЕКУЩИЙ РАУНД</small><div><span>ИМЯ</span><strong>{round?.selectedNameText || '—'}</strong></div><div><span>ЗАДАНИЕ</span><strong>{round?.selectedTaskText || '—'}</strong></div><p>{phase === 'performing' ? 'Задание выполняется сейчас.' : pendingCount ? `В библиотеке: ${pendingCount}` : 'Ожидаем следующий выбор.'}</p></aside></div>
+    {history.length > 0 && <section className="wheel-history"><div><p className="eyebrow">ИСТОРИЯ РАУНДОВ</p><h2>Сыгранные пары</h2></div><ol>{history.map((item, index) => <li key={item.roundId}><b>{index + 1}</b><span><strong>{item.nameText}</strong>{item.taskText}</span><em>{item.status === 'pending' ? 'В библиотеке' : 'Выполнено'}</em></li>)}</ol></section>}
+    {phase === 'completed' && <p className="wheel-complete-note">Доступные пары закончились. Отложенные задания остаются в библиотеке.</p>}
   </section>
 }
 
 export function WheelParticipantFlow({ room }: ModeParticipantFlowProps) {
-  const [participantId, setParticipantId] = useState('')
-  const [publicRoom, setPublicRoom] = useState<PublicRoom | null>(null)
-  const [entry, setEntry] = useState<WheelParticipantEntry | null>(null)
-  const [displayName, setDisplayName] = useState('')
-  const [taskText, setTaskText] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [participantId, setParticipantId] = useState(''); const [publicRoom, setPublicRoom] = useState<PublicRoom | null>(null); const [entry, setEntry] = useState<WheelParticipantEntry | null>(null)
+  const [displayName, setDisplayName] = useState(''); const [taskText, setTaskText] = useState(''); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState('')
   useEffect(() => {
     let active = true; let stopEntry: () => void = () => undefined
     const stopRoom = subscribeWheelPublicRoom(room, value => { if (active) { setPublicRoom(value); setLoading(false) } }, reason => { if (active) { setError(reason.message); setLoading(false) } })
@@ -142,38 +133,49 @@ export function WheelParticipantFlow({ room }: ModeParticipantFlowProps) {
 
 function WheelList({ title, items, onDelete, onClear }: { title: string; items: Record<string, WheelPoolItem>; onDelete?: (id: string) => void; onClear?: () => void }) {
   const available = Object.values(items).filter(item => item.status === 'available')
-  return <section className="wheel-pool"><div><h3>{title}</h3><div>{onClear && available.length > 0 && <button type="button" onClick={onClear}>Очистить</button>}<b>{available.length}</b></div></div>{available.length ? <ul>{available.map(item => <li key={item.itemId}><span>{item.text}</span>{onDelete && <button type="button" onClick={() => onDelete(item.itemId)}>Удалить</button>}</li>)}</ul> : <p>Список пока пуст.</p>}</section>
+  return <section className="wheel-pool"><div><div><p className="eyebrow">{title === 'Имена участников' ? '◉ УЧАСТНИКИ' : '◈ ЗАДАНИЯ'}</p><h3>{title}</h3></div><b>{available.length}</b></div>{available.length ? <ul>{available.map(item => <li key={item.itemId}><i aria-hidden="true">⠿</i><span>{item.text}</span>{onDelete && <button type="button" aria-label={`Удалить: ${item.text}`} onClick={() => onDelete(item.itemId)}>⌫</button>}</li>)}</ul> : <p>Список пока пуст.</p>}{onClear && available.length > 0 && <footer><span>В списке: <b>{available.length}</b></span><button type="button" onClick={onClear}>Очистить список</button></footer>}</section>
 }
 
 export function WheelHostScreen({ session, joinUrl, onClose }: ModeHostScreenProps) {
   const wheel = session.wheel
-  const [name, setName] = useState('')
-  const [task, setTask] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [name, setName] = useState(''); const [task, setTask] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('')
   const names = wheel?.pools?.names || {}; const tasks = wheel?.pools?.tasks || {}; const entries = wheel?.participants || {}
   const collecting = wheel?.phase === 'collecting'; const valid = canStartWheel(wheel); const nextTarget = getWheelNextSpinTarget(wheel)
-  const spinning = wheel?.phase === 'spinning_name' || wheel?.phase === 'spinning_task'; const decision = wheel?.phase === 'decision'
-  const pending = Object.values(wheel?.pendingTasks || {})
+  const spinning = wheel?.phase === 'spinning_name' || wheel?.phase === 'spinning_task'; const decision = wheel?.phase === 'decision'; const performing = wheel?.phase === 'performing'
+  const pending = Object.values(wheel?.pendingTasks || {}).filter(item => item.status === 'pending')
   const history: WheelPublicHistoryItem[] = Object.values(wheel?.rounds || {}).map(round => ({ roundId: round.roundId, nameText: round.nameText, taskText: round.taskText, status: round.status }))
+  const availableItems = useMemo(() => Object.values(nextTarget === 'task' ? tasks : names).filter(item => item.status === 'available').map(item => ({ itemId: item.itemId, text: item.text })), [names, nextTarget, tasks])
   const run = async (job: () => Promise<unknown>) => { setBusy(true); setError(''); try { await job() } catch (reason) { setError(reason instanceof Error ? reason.message : 'Операция не выполнена.') } finally { setBusy(false) } }
   useEffect(() => {
     if (!spinning || !wheel?.activeSpin) return
     let active = true
-    const timer = window.setTimeout(() => { void revealWheelSelection(session.roomId).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'Не удалось открыть результат вращения.') }) }, Math.max(0, wheel.activeSpin!.endsAt - Date.now()) + 120)
+    const timer = window.setTimeout(() => { void revealWheelSelection(session.roomId).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'Не удалось открыть результат вращения.') }) }, Math.max(0, wheel.activeSpin.endsAt - Date.now()) + 120)
     return () => { active = false; window.clearTimeout(timer) }
   }, [session.roomId, spinning, wheel?.activeSpin?.animationNonce, wheel?.activeSpin?.endsAt])
   const add = (pool: 'names' | 'tasks') => void run(async () => { const value = pool === 'names' ? name : task; await addWheelHostItem(session.roomId, pool, value); pool === 'names' ? setName('') : setTask('') })
   const removeItem = (pool: 'names' | 'tasks', id: string) => void run(() => deleteWheelHostItem(session.roomId, pool, id))
   const clearItems = (pool: 'names' | 'tasks') => void run(() => clearWheelHostPool(session.roomId, pool))
-  const spinLabel = nextTarget === 'name' ? 'Крутить колесо имён' : nextTarget === 'task' ? 'Крутить колесо заданий' : ''
-  const nameTotal = Object.keys(names).length; const taskTotal = Object.keys(tasks).length
-  return <div className="wheel-host"><header className="host-header"><div><p className="eyebrow">КОЛЕСО ФОРТУНЫ · {wheel ? phaseLabels[wheel.phase] : 'ЗАГРУЗКА'}</p><h1>{session.roomTitle || session.roomId}</h1><p className="room-header-title">{wheel ? `${labels[wheel.config.inputMode]} · ${labels[wheel.config.drawOrder]}` : 'Загружаем настройки режима…'}</p></div></header><div className="wheel-counters"><article><strong>{Object.keys(entries).length}</strong><span>отправили данные</span></article><article><strong>{getAvailableWheelCount(wheel, 'name')}</strong><span>имён доступно</span></article><article><strong>{getAvailableWheelCount(wheel, 'task')}</strong><span>заданий доступно</span></article></div>
-    {wheel?.config.inputMode === 'participants' && collecting && <section className="glass wheel-join"><h2>Ссылка для участников</h2><code>{joinUrl}</code><button type="button" className="button secondary" onClick={() => void navigator.clipboard.writeText(joinUrl)}>Скопировать ссылку</button><div className="wheel-entry-summary">{Object.values(entries).map(item => <span key={item.participantId}>{item.displayName}</span>)}</div></section>}
-    {wheel?.config.inputMode === 'host' && collecting && <section className="glass wheel-host-input"><div><label>Новое имя<input value={name} onChange={event => setName(event.target.value)} maxLength={60} /></label><button type="button" className="button secondary" disabled={busy || !name.trim() || nameTotal >= 50} onClick={() => add('names')}>Добавить имя</button></div><div><label>Новое задание<textarea value={task} onChange={event => setTask(event.target.value)} maxLength={240} /></label><button type="button" className="button secondary" disabled={busy || !task.trim() || taskTotal >= 50} onClick={() => add('tasks')}>Добавить задание</button></div></section>}
-    {collecting ? <div className="wheel-pools"><WheelList title="Имена" items={names} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('names', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('names') : undefined} /><WheelList title="Задания" items={tasks} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('tasks', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('tasks') : undefined} /></div> : wheel && <section className="glass wheel-game-panel"><WheelAudiencePanel phase={wheel.phase} round={fullVisibleRound(wheel)} activeSpin={wheel.activeSpin || undefined} history={history} nameCount={getAvailableWheelCount(wheel, 'name')} taskCount={getAvailableWheelCount(wheel, 'task')} roundCount={history.length} pendingCount={pending.filter(item => item.status === 'pending').length} /><div className="wheel-game-actions">{nextTarget && <button type="button" className="button" disabled={busy} onClick={() => void run(() => startWheelSpin(session.roomId))}>{spinLabel}</button>}{spinning && <button type="button" className="button" disabled>Колесо вращается…</button>}{decision && <><button type="button" className="button" disabled={busy} onClick={() => void run(() => markWheelRoundCompleted(session.roomId))}>Задание выполнено</button><button type="button" className="button secondary" disabled={busy} onClick={() => void run(() => markWheelRoundPending(session.roomId))}>Выполнить позже</button></>}{wheel.currentRound && !spinning && <button type="button" className="button secondary" disabled={busy} onClick={() => void run(() => cancelWheelSelection(session.roomId))}>Отменить выбор</button>}</div></section>}
-    {pending.length > 0 && <section className="glass wheel-pending"><div><p className="eyebrow">ОТЛОЖЕННЫЕ ЗАДАНИЯ</p><h2>Библиотека</h2></div><ul>{pending.map(item => <li key={item.pendingId}><div><b>{item.participantName}</b><span>{item.taskText}</span></div><button type="button" className="button secondary" disabled={busy || item.status === 'completed'} onClick={() => void run(() => completeWheelPendingTask(session.roomId, item.pendingId))}>{item.status === 'completed' ? 'Выполнено' : 'Отметить выполненным'}</button></li>)}</ul></section>}
-    {error && <p className="connection-warning">{error}</p>}<div className="control-actions">{collecting && <button type="button" className="button" disabled={busy || !valid} onClick={() => void run(() => markWheelReady(session.roomId))}>Начать игру</button>}<button type="button" className="button secondary" disabled={busy} onClick={onClose}>Завершить комнату</button></div>{collecting && !valid && <p className="wheel-hint">Для начала нужны одинаковые списки: от 2 до 50 имён и столько же заданий. Сейчас: {nameTotal} / {taskTotal}.</p>}</div>
+  const confirmation = wheel?.phase === 'name_revealed' || wheel?.phase === 'task_revealed'
+  const confirmationLabel = wheel?.phase === 'name_revealed' ? 'Подтвердить имя' : 'Подтвердить задание'
+  const activeRoundPending = performing && wheel?.currentRound ? pending.some(item => item.pendingId === wheel.currentRound?.roundId) : false
+  const activeRoundItems = wheel?.activeSpin?.items || availableItems
+  return <div className="wheel-host">
+    <header className="wheel-host-brand"><p>◉ КОЛЕСО ФОРТУНЫ</p><span>{wheel ? phaseLabels[wheel.phase] : 'Загрузка'}</span></header>
+    {collecting && <><section className="wheel-prep-heading"><div><h1>Подготовка комнаты</h1><p>Добавьте имена и задания перед стартом</p></div><div className="wheel-counters"><article><span>◉ Имен</span><strong>{getAvailableWheelCount(wheel, 'name')}</strong></article><article><span>▣ Заданий</span><strong>{getAvailableWheelCount(wheel, 'task')}</strong></article><article><span>♙ Участников</span><strong>{Object.keys(entries).length}</strong></article></div></section>
+      {wheel?.config.inputMode === 'participants' && <section className="glass wheel-join"><h2>Подключение участников</h2><code>{joinUrl}</code><button type="button" className="button secondary" onClick={() => void navigator.clipboard.writeText(joinUrl)}>Скопировать ссылку</button><div className="wheel-entry-summary">{Object.values(entries).map(item => <span key={item.participantId}>{item.displayName}</span>)}</div></section>}
+      {wheel?.config.inputMode === 'host' && <section className="wheel-host-input"><div><label>Введите имя участника<input value={name} onChange={event => setName(event.target.value)} maxLength={60} /></label><button type="button" className="button secondary" disabled={busy || !name.trim() || Object.keys(names).length >= 50} onClick={() => add('names')}>＋ Добавить имя</button></div><div><label>Введите задание<textarea value={task} onChange={event => setTask(event.target.value)} maxLength={240} /></label><button type="button" className="button secondary" disabled={busy || !task.trim() || Object.keys(tasks).length >= 50} onClick={() => add('tasks')}>＋ Добавить задание</button></div></section>}
+      <div className="wheel-pools"><WheelList title="Имена участников" items={names} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('names', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('names') : undefined} /><WheelList title="Задания" items={tasks} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('tasks', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('tasks') : undefined} /></div>
+      <div className="wheel-prep-actions"><button type="button" className="button" disabled={busy || !valid} onClick={() => void run(() => markWheelReady(session.roomId))}>▶ Начать игру</button><button type="button" className="button secondary" disabled={busy} onClick={onClose}>Завершить комнату</button></div>{!valid && <p className="wheel-hint">Для начала нужны одинаковые списки: от 2 до 50 имён и столько же заданий. Сейчас: {Object.keys(names).length} / {Object.keys(tasks).length}.</p>}</>}
+    {!collecting && wheel && <section className="glass wheel-game-panel"><WheelAudiencePanel phase={wheel.phase} round={fullVisibleRound(wheel)} activeSpin={wheel.activeSpin || undefined} history={history} nameCount={getAvailableWheelCount(wheel, 'name')} taskCount={getAvailableWheelCount(wheel, 'task')} roundCount={history.length} pendingCount={pending.length} idleItems={activeRoundItems} /><div className="wheel-game-actions">
+      {nextTarget && !confirmation && <button type="button" className="button" disabled={busy} onClick={() => void run(() => startWheelSpin(session.roomId))}>{nextTarget === 'name' ? '▶ Крутить колесо имён' : '▶ Крутить колесо заданий'}</button>}
+      {confirmation && <><button type="button" className="button" disabled={busy} onClick={() => void run(() => startWheelSpin(session.roomId))}>{confirmationLabel}</button><button type="button" className="button secondary" disabled={busy} onClick={() => void run(() => cancelWheelSelection(session.roomId))}>Отменить выбор</button></>}
+      {spinning && <button type="button" className="button" disabled>Колесо вращается…</button>}
+      {decision && <><button type="button" className="button" disabled={busy} onClick={() => void run(() => startWheelRound(session.roomId))}>Выполнить сейчас</button><button type="button" className="button secondary" disabled={busy} onClick={() => void run(() => markWheelRoundPending(session.roomId))}>Добавить в библиотеку</button><button type="button" className="button secondary" disabled={busy} onClick={() => void run(() => cancelWheelSelection(session.roomId))}>Отменить выбор</button></>}
+      {performing && wheel.currentRound && <button type="button" className="button" disabled={busy} onClick={() => void run(() => activeRoundPending ? completeWheelPendingTask(session.roomId, wheel.currentRound!.roundId) : markWheelRoundCompleted(session.roomId))}>▣ Задание выполнено</button>}
+    </div></section>}
+    {pending.length > 0 && <section className="glass wheel-pending"><div><p className="eyebrow">▤ БИБЛИОТЕКА</p><h2>Отложенные задания</h2><p>Откройте сохранённую пару без нового вращения.</p></div><ul>{pending.map(item => <li key={item.pendingId}><div><b>{item.participantName}</b><span>{item.taskText}</span></div><button type="button" className="button secondary" disabled={busy || performing} onClick={() => void run(() => openWheelPendingTask(session.roomId, item.pendingId))}>Открыть задание</button></li>)}</ul></section>}
+    {error && <p className="connection-warning">{error}</p>}
+  </div>
 }
 
 export function WheelMainScreen({ session }: ModeMainScreenProps) {
