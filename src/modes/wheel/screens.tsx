@@ -10,7 +10,7 @@ import {
   revealWheelSelection, saveWheelParticipantEntry, startWheelRound, startWheelSpin,
   subscribeOwnWheelEntry, subscribeWheelPublicRoom,
 } from './repository'
-import type { WheelDrawOrder, WheelInputMode, WheelParticipantEntry, WheelPoolItem, WheelPublicHistoryItem, WheelPublicRound, WheelRoomState, WheelSpinAnimation, WheelSpinItem } from './types'
+import type { WheelDrawOrder, WheelInputMode, WheelParticipantEntry, WheelPendingTask, WheelPoolItem, WheelPublicHistoryItem, WheelPublicRound, WheelRoomState, WheelSpinAnimation, WheelSpinItem } from './types'
 import { canStartWheel } from './validation'
 import { getAvailableWheelCount, getWheelDisplayTarget, getWheelNextSpinTarget } from './engine'
 import { isSessionExpired } from '../../core/sessionLifecycle'
@@ -112,12 +112,51 @@ function WheelAudiencePanel({ phase, drawOrder, round, activeSpin, history = [],
     ? target === 'task' ? 'Сначала определим, что предстоит выполнить.' : 'Сначала определим, кто выполняет задание.'
     : phase === 'name_revealed' || phase === 'task_revealed' ? 'Подтвердите выбор. Следующее колесо не запустится автоматически.' : phaseInstructions[phase]
   const queueLabel = target === 'task' ? 'ЗАДАНИЯ В ОЧЕРЕДИ' : 'ОЧЕРЕДЬ УЧАСТНИКОВ'
-  return <section className="wheel-audience">
+  return <section className={`wheel-audience ${phase === 'performing' ? 'wheel-audience-performing' : ''}`}>
     <header className="wheel-game-heading"><div><p className="eyebrow">◉ КОЛЕСО ФОРТУНЫ</p><h1>{heading}</h1><p className="wheel-subtitle">{subtitle}</p></div><div className="wheel-live-stats"><span>Имена <b>{nameCount}</b></span><span>Задания <b>{taskCount}</b></span><span>Раунд <b>{roundCount + (round ? 1 : 0)}</b></span></div></header>
     <div className="wheel-play-layout"><aside className="wheel-active-list"><small>{queueLabel}</small>{items.length ? <ol>{items.map((item, index) => <li key={item.itemId}><b>{index + 1}</b><span>{item.text}</span></li>)}</ol> : <p>Список появится после начала игры.</p>}<footer>{items.length} {target === 'task' ? 'заданий' : target === 'name' ? 'имён в колесе' : 'элементов в колесе'}</footer></aside><div className="wheel-visual">{phase === 'performing' ? <article className="wheel-performing-card"><small>РАУНД {roundCount + 1}</small><p>Задание выполняет <b>{round?.selectedNameText || 'участник'}</b></p><strong>{round?.selectedTaskText || '—'}</strong><span>● Раунд начат</span></article> : <><FortuneWheel spin={activeSpin} items={items} spinning={spinning} target={target} />{spinning && <p className="wheel-spinning-copy">Колесо вращается · повторный запуск заблокирован</p>}{showReveal && selectedTitle && <article className="wheel-reveal-card"><small>{selectedTitle}</small><strong>{phase === 'name_revealed' ? round?.selectedNameText : round?.selectedTaskText}</strong><span>Подтвердите выбор, чтобы продолжить.</span></article>}</>}</div><aside className="wheel-round-card"><small>ТЕКУЩИЙ РАУНД</small><div><span>ИМЯ</span><strong>{round?.selectedNameText || '—'}</strong></div><div><span>ЗАДАНИЕ</span><strong>{round?.selectedTaskText || '—'}</strong></div><p>{phase === 'performing' ? 'Задание выполняется сейчас.' : pendingCount ? `В библиотеке: ${pendingCount}` : 'Ожидаем следующий выбор.'}</p></aside></div>
     {history.length > 0 && <section className="wheel-history"><div><p className="eyebrow">ИСТОРИЯ РАУНДОВ</p><h2>Сыгранные пары</h2></div><ol>{history.map((item, index) => <li key={item.roundId}><b>{index + 1}</b><span><strong>{item.nameText}</strong>{item.taskText}</span><em>{item.status === 'pending' ? 'В библиотеке' : 'Выполнено'}</em></li>)}</ol></section>}
     {phase === 'completed' && <p className="wheel-complete-note">Доступные пары закончились. Отложенные задания остаются в библиотеке.</p>}
   </section>
+}
+
+function WheelPerformingStage({ round, roundNumber, nameCount, taskCount, pendingCount, pendingRound, disabled, onComplete, onPostpone, onOpenLibrary }: {
+  round: WheelPublicRound
+  roundNumber: number
+  nameCount: number
+  taskCount: number
+  pendingCount: number
+  pendingRound: boolean
+  disabled: boolean
+  onComplete: () => void
+  onPostpone: () => void
+  onOpenLibrary: () => void
+}) {
+  return <section className="wheel-performing-stage" aria-labelledby="wheel-performing-title">
+    <div className="wheel-performing-toolbar" aria-label="Статус текущей игры">
+      <span>◎ Раунд <b>{roundNumber}</b></span><span>♙ Участники <b>{nameCount}</b></span><span>▣ Задания <b>{taskCount}</b></span>
+      <button type="button" className="wheel-library-button" disabled={disabled} onClick={onOpenLibrary}>▤ Библиотека{pendingCount ? ` ${pendingCount}` : ''}</button>
+    </div>
+    <article className="wheel-performing-focus">
+      <div className="wheel-performing-particles" aria-hidden="true"><i /><i /><i /><i /><i /></div>
+      <p className="eyebrow">РАУНД {roundNumber}</p>
+      <p className="wheel-performing-for">ЗАДАНИЕ ДЛЯ</p>
+      <strong className="wheel-performing-name">{round.selectedNameText || 'Участник'}</strong>
+      <h1 id="wheel-performing-title">{round.selectedTaskText || '—'}</h1>
+      <p className="wheel-performing-status"><i />Раунд начат</p>
+      <p className="wheel-performing-hint">Выполните задание и подтвердите завершение</p>
+      <div className="wheel-performing-actions">
+        <button type="button" className="button" disabled={disabled} onClick={onComplete}>✓ Задание выполнено</button>
+        {!pendingRound && <button type="button" className="wheel-postpone-button" disabled={disabled} onClick={onPostpone}>Отложить задание</button>}
+        {pendingRound && <span className="wheel-pending-open-note">Открыто из библиотеки</span>}
+      </div>
+    </article>
+  </section>
+}
+
+function WheelPendingLibrary({ pending, disabled, onOpen }: { pending: WheelPendingTask[]; disabled: boolean; onOpen: (pendingId: string) => void }) {
+  if (!pending.length) return <p className="wheel-library-empty">В библиотеке пока нет отложенных заданий.</p>
+  return <ul className="wheel-library-list">{pending.map(item => <li key={item.pendingId}><div><b>{item.participantName}</b><span>{item.taskText}</span></div><button type="button" className="button secondary" disabled={disabled} onClick={() => onOpen(item.pendingId)}>Открыть задание</button></li>)}</ul>
 }
 
 export function WheelParticipantFlow({ room }: ModeParticipantFlowProps) {
@@ -175,6 +214,7 @@ export function WheelHostScreen({ session, joinUrl, onClose, onPlayAgain, onExit
   const wheel = session.wheel
   const [name, setName] = useState(''); const [task, setTask] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('')
   const [finishIntent, setFinishIntent] = useState<FinishIntent | null>(null); const [ending, setEnding] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   const names = wheel?.pools?.names || {}; const tasks = wheel?.pools?.tasks || {}; const entries = wheel?.participants || {}
   const collecting = wheel?.phase === 'collecting'; const valid = canStartWheel(wheel); const nextTarget = getWheelNextSpinTarget(wheel)
   const spinning = wheel?.phase === 'spinning_name' || wheel?.phase === 'spinning_task'; const decision = wheel?.phase === 'decision'; const performing = wheel?.phase === 'performing'
@@ -194,6 +234,9 @@ export function WheelHostScreen({ session, joinUrl, onClose, onPlayAgain, onExit
   const confirmation = wheel?.phase === 'name_revealed' || wheel?.phase === 'task_revealed'
   const confirmationLabel = 'Подтвердить выбор'
   const activeRoundPending = performing && wheel?.currentRound ? pending.some(item => item.pendingId === wheel.currentRound?.roundId) : false
+  const currentRoundNumber = wheel?.currentRound
+    ? (() => { const ordered = Object.values(wheel.rounds || {}).sort((left, right) => left.createdAt - right.createdAt); const index = ordered.findIndex(round => round.roundId === wheel.currentRound?.roundId); return index >= 0 ? index + 1 : ordered.length + 1 })()
+    : history.length + 1
   const activeRoundItems = wheel?.activeSpin?.items || availableItems
   const confirmFinish = async () => {
     if (!finishIntent || ending) return
@@ -217,20 +260,27 @@ export function WheelHostScreen({ session, joinUrl, onClose, onPlayAgain, onExit
       {wheel?.config.inputMode === 'host' && <section className="wheel-host-input"><div><label>Введите имя участника<input value={name} onChange={event => setName(event.target.value)} maxLength={60} /></label><button type="button" className="button secondary" disabled={busy || !name.trim() || Object.keys(names).length >= 50} onClick={() => add('names')}>＋ Добавить имя</button></div><div><label>Введите задание<textarea value={task} onChange={event => setTask(event.target.value)} maxLength={240} /></label><button type="button" className="button secondary" disabled={busy || !task.trim() || Object.keys(tasks).length >= 50} onClick={() => add('tasks')}>＋ Добавить задание</button></div></section>}
       <div className="wheel-pools"><WheelList title="Имена участников" items={names} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('names', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('names') : undefined} /><WheelList title="Задания" items={tasks} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('tasks', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('tasks') : undefined} /></div>
       <div className="wheel-prep-actions"><button type="button" className="button" disabled={disabled || !valid} onClick={() => void run(() => markWheelReady(session.roomId))}>▶ Начать игру</button></div>{!valid && <p className="wheel-hint">Для начала нужны одинаковые списки: от 2 до 50 имён и столько же заданий. Сейчас: {Object.keys(names).length} / {Object.keys(tasks).length}.</p>}</>}
-    {!collecting && wheel && <section className="glass wheel-game-panel"><WheelAudiencePanel phase={wheel.phase} drawOrder={wheel.config.drawOrder} round={fullVisibleRound(wheel)} activeSpin={ending ? undefined : wheel.activeSpin || undefined} history={history} nameCount={getAvailableWheelCount(wheel, 'name')} taskCount={getAvailableWheelCount(wheel, 'task')} roundCount={history.length} pendingCount={pending.length} idleItems={activeRoundItems} stopAnimation={ending} showReveal={false} /><div className="wheel-game-actions">
-      {nextTarget && !confirmation && <button type="button" className="button" disabled={disabled} onClick={() => void run(() => startWheelSpin(session.roomId))}>{nextTarget === 'name' ? '▶ Крутить колесо имён' : '▶ Крутить колесо заданий'}</button>}
-      {confirmation && <p className="wheel-hint">Выбор ожидает подтверждения в окне поверх игры.</p>}
-      {spinning && <button type="button" className="button" disabled>Колесо вращается…</button>}
-      {decision && <><button type="button" className="button" disabled={disabled} onClick={() => void run(() => startWheelRound(session.roomId))}>Выполнить сейчас</button><button type="button" className="button secondary" disabled={disabled} onClick={() => void run(() => markWheelRoundPending(session.roomId))}>Добавить в библиотеку</button><button type="button" className="button secondary" disabled={disabled} onClick={() => void run(() => cancelWheelSelection(session.roomId))}>Отменить выбор</button></>}
-      {performing && wheel.currentRound && <button type="button" className="button" disabled={disabled} onClick={() => void run(() => activeRoundPending ? completeWheelPendingTask(session.roomId, wheel.currentRound!.roundId) : markWheelRoundCompleted(session.roomId))}>▣ Задание выполнено</button>}
-    </div></section>}
-    {pending.length > 0 && <section className="glass wheel-pending"><div><p className="eyebrow">▤ БИБЛИОТЕКА</p><h2>Отложенные задания</h2><p>Откройте сохранённую пару без нового вращения.</p></div><ul>{pending.map(item => <li key={item.pendingId}><div><b>{item.participantName}</b><span>{item.taskText}</span></div><button type="button" className="button secondary" disabled={disabled || performing} onClick={() => void run(() => openWheelPendingTask(session.roomId, item.pendingId))}>Открыть задание</button></li>)}</ul></section>}
+    {!collecting && wheel && <section className={`glass wheel-game-panel ${performing ? 'wheel-game-panel-performing' : ''}`}>
+      {performing && wheel.currentRound
+        ? <WheelPerformingStage round={fullVisibleRound(wheel) || wheel.currentRound} roundNumber={currentRoundNumber} nameCount={getAvailableWheelCount(wheel, 'name')} taskCount={getAvailableWheelCount(wheel, 'task')} pendingCount={pending.length} pendingRound={activeRoundPending} disabled={disabled} onComplete={() => void run(() => activeRoundPending ? completeWheelPendingTask(session.roomId, wheel.currentRound!.roundId) : markWheelRoundCompleted(session.roomId))} onPostpone={() => void run(() => markWheelRoundPending(session.roomId))} onOpenLibrary={() => setLibraryOpen(true)} />
+        : <><WheelAudiencePanel phase={wheel.phase} drawOrder={wheel.config.drawOrder} round={fullVisibleRound(wheel)} activeSpin={ending ? undefined : wheel.activeSpin || undefined} history={history} nameCount={getAvailableWheelCount(wheel, 'name')} taskCount={getAvailableWheelCount(wheel, 'task')} roundCount={history.length} pendingCount={pending.length} idleItems={activeRoundItems} stopAnimation={ending} showReveal={false} /><div className="wheel-game-actions">
+          {nextTarget && !confirmation && <button type="button" className="button" disabled={disabled} onClick={() => void run(() => startWheelSpin(session.roomId))}>{nextTarget === 'name' ? '▶ Крутить колесо имён' : '▶ Крутить колесо заданий'}</button>}
+          {confirmation && <p className="wheel-hint">Выбор ожидает подтверждения в окне поверх игры.</p>}
+          {spinning && <button type="button" className="button" disabled>Колесо вращается…</button>}
+          {decision && <><button type="button" className="button" disabled={disabled} onClick={() => void run(() => startWheelRound(session.roomId))}>Выполнить сейчас</button><button type="button" className="button secondary" disabled={disabled} onClick={() => void run(() => markWheelRoundPending(session.roomId))}>Добавить в библиотеку</button><button type="button" className="button secondary" disabled={disabled} onClick={() => void run(() => cancelWheelSelection(session.roomId))}>Отменить выбор</button></>}
+        </div></>}
+    </section>}
+    {pending.length > 0 && !performing && <section className="glass wheel-pending"><div><p className="eyebrow">▤ БИБЛИОТЕКА</p><h2>Отложенные задания</h2><p>Откройте сохранённую пару без нового вращения.</p></div><WheelPendingLibrary pending={pending} disabled={disabled} onOpen={pendingId => void run(() => openWheelPendingTask(session.roomId, pendingId))} /></section>}
     {wheel?.phase === 'completed' && <section className="glass wheel-finish-screen"><p className="eyebrow">ИГРА ЗАВЕРШЕНА</p><h2>Все доступные пары разыграны</h2><p>История этой игры сохранится в архиве. Для нового состава участников создайте отдельную игровую сессию.</p><div><button type="button" className="button" disabled={disabled} onClick={playAgain}>Сыграть ещё раз</button><button type="button" className="button secondary" disabled={disabled} onClick={() => setFinishIntent('exit')}>Выйти в главное меню</button></div></section>}
     <Modal open={Boolean(confirmation && wheel)} title={wheel?.phase === 'name_revealed' ? 'Подтвердите участника' : 'Подтвердите задание'} onClose={disabled ? undefined : () => void run(() => cancelWheelSelection(session.roomId))}>
       <p className="eyebrow">{wheel?.phase === 'name_revealed' ? 'ВЫПАЛО ИМЯ' : 'ВЫПАЛО ЗАДАНИЕ'}</p>
       <strong className="app-modal-selection">{wheel?.phase === 'name_revealed' ? wheel?.currentRound?.selectedNameText : wheel?.currentRound?.selectedTaskText}</strong>
       <p>Следующее колесо не запустится автоматически.</p>
       <div className="app-modal-actions"><button type="button" className="button" disabled={disabled} onClick={() => void run(() => startWheelSpin(session.roomId))}>{confirmationLabel}</button><button type="button" className="button secondary" disabled={disabled} onClick={() => void run(() => cancelWheelSelection(session.roomId))}>Отменить выбор</button></div>
+    </Modal>
+    <Modal open={libraryOpen} title="Библиотека заданий" onClose={() => setLibraryOpen(false)}>
+      <p>Отложенные пары сохранены отдельно от текущего раунда. Откройте пару, когда будете готовы завершить её.</p>
+      <WheelPendingLibrary pending={pending} disabled={disabled} onOpen={pendingId => { setLibraryOpen(false); void run(() => openWheelPendingTask(session.roomId, pendingId)) }} />
     </Modal>
     <Modal open={Boolean(finishIntent)} title={finishIntent === 'exit' ? 'Выйти из игры?' : 'Завершить игру?'} onClose={ending ? undefined : () => setFinishIntent(null)}>
       <p>Участники больше не смогут отправлять данные. История раундов и результаты останутся в архиве.</p>
