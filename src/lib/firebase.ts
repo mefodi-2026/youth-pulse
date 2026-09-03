@@ -61,11 +61,21 @@ export interface RoomPilotDetails {
 const copyQuestions = (questionSet: Question[]) => questionSet.map(question => ({ ...question, options: { ...question.options } }))
 const copySettings = (settings: Record<string, boolean | number | string | null>) => ({ ...settings })
 /** All browser-facing packs contain only playable material. Quiz keys remain server-only. */
-const toParticipantQuestions = (questionSet: Question[]): ParticipantQuestion[] => questionSet.map(question => ({ ...question, options: { ...question.options } }))
+const toParticipantQuestions = (questionSet: Question[]): ParticipantQuestion[] => questionSet.map(question => ({
+  id: question.id,
+  ...('category' in question && typeof question.category === 'string' ? { category: question.category } : {}),
+  ...('categoryOrder' in question && question.categoryOrder !== undefined ? { categoryOrder: question.categoryOrder } : {}),
+  title: question.title,
+  options: { ...question.options },
+}) as ParticipantQuestion)
 const buildPublishedPack = (pack: ContentPack): ContentPack => {
   const questions = toParticipantQuestions(pack.content.questions) as Question[]
+  // Never spread private pack material into the leader-facing catalogue. In
+  // particular, a server-imported quiz can carry `privateContent` with answer
+  // keys even though the TypeScript ContentPack contract deliberately does not.
+  const { privateContent: _privateContent, ...safePack } = pack as ContentPack & { privateContent?: unknown }
   return {
-    ...pack,
+    ...safePack,
     questions,
     content: { questions: copyQuestions(questions) },
     publicContent: { questions: toParticipantQuestions(pack.content.questions) },
@@ -729,10 +739,25 @@ export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
   return pack
 }
 
-/** Starter quiz content is intentionally provisioned through the secure owner
- * workflow; answer keys must never be embedded in the web application. */
-export const seedBibleQuizStarterPacks = async () => {
-  throw new Error('Стартовые наборы викторины создаются владельцем через защищённый серверный импорт.')
+/** Publishes safe leader-facing projections after protected quiz-pack import.
+ * It never creates starter content in the browser and never exposes answer keys. */
+export const publishSafePackCatalogueAsOwner = async () => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!services.auth.currentUser || services.auth.currentUser.isAnonymous || !await isPlatformOwner()) {
+    throw new Error('Недостаточно прав владельца платформы.')
+  }
+  if (!functions) throw new Error('Сервис безопасной публикации каталога недоступен.')
+  try {
+    const result = await httpsCallable<unknown, { synchronized?: number }>(functions, 'syncPublishedPacks')()
+    return Math.max(0, Number(result.data?.synchronized) || 0)
+  } catch (reason) {
+    const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code) : ''
+    console.error('safe pack catalogue publication rejected', { uid: services.auth.currentUser.uid, code, reason })
+    throw new Error(code.includes('permission')
+      ? 'Firebase отклонил публикацию каталога: требуется Custom Claim platformAdmin: true.'
+      : 'Не удалось опубликовать безопасные версии наборов. Повторите попытку.')
+  }
 }
 
 /**

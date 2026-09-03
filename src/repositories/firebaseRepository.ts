@@ -31,7 +31,7 @@ export {
   saveProductAsOwner,
   saveWorkspacePack,
   saveWorkspaceProductAsOwner,
-  seedBibleQuizStarterPacks,
+  publishSafePackCatalogueAsOwner,
   seedDefaultGlobalPack,
   setLeaderStatusAsOwner,
   subscribeAuthUser,
