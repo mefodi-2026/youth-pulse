@@ -22,6 +22,12 @@ export const defaultDiagnosticTemplateSelection: TemplateSelection = { selectedP
 export const pilotPlanId = 'pilot-free'
 export const pilotAccessSource = 'pilot' as const
 
+// The diagnostic product was originally persisted under this short key.  New
+// workspaces use the module's canonical `youth-atmosphere` product ID, while
+// this alias lets already provisioned pilot workspaces retain their explicitly
+// granted access without writing a second entitlement from the browser.
+const legacyDiagnosticProductId = 'diagnostic'
+
 /**
  * A stable catalogue used by the owner UI. Values in `products/{productId}`
  * override these defaults after the owner explicitly publishes a setting.
@@ -858,10 +864,14 @@ export const seedDefaultGlobalPack = async () => {
 const assertRoomCreationAccess = async (hostUid: string, workspaceId: string, productId = diagnosticProductId) => {
   const services = requireFirebase()
   const platformOwner = await isPlatformOwner()
-  const [profileSnapshot, workspaceSnapshot, workspaceProductSnapshot, productSnapshot] = await Promise.all([
+  const needsLegacyDiagnosticAccess = productId === diagnosticProductId
+  const [profileSnapshot, workspaceSnapshot, workspaceProductSnapshot, legacyWorkspaceProductSnapshot, productSnapshot] = await Promise.all([
     get(ref(services.db, `users/${hostUid}`)),
     get(ref(services.db, `workspaces/${workspaceId}`)),
     get(ref(services.db, `workspaceProducts/${workspaceId}/${productId}`)),
+    needsLegacyDiagnosticAccess
+      ? get(ref(services.db, `workspaceProducts/${workspaceId}/${legacyDiagnosticProductId}`))
+      : Promise.resolve(null),
     get(ref(services.db, `products/${productId}`)),
   ])
   const profile = profileSnapshot.val() as LeaderProfile | null
@@ -872,7 +882,7 @@ const assertRoomCreationAccess = async (hostUid: string, workspaceId: string, pr
   const decision = canUseFeature(productId, 'create_room', {
     profile,
     workspace,
-    workspaceProduct: workspaceProductSnapshot.val() as WorkspaceProduct | null,
+    workspaceProduct: (workspaceProductSnapshot.val() || legacyWorkspaceProductSnapshot?.val()) as WorkspaceProduct | null,
     product: productSnapshot.val() as ProductConfig | null,
     isPlatformOwner: platformOwner,
   })
