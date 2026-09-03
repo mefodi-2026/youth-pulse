@@ -36,6 +36,9 @@ export const testOnlyManifest: ModeManifest = {
   surfaces: { setup: 'test/setup', participant: 'test/participant', host: 'test/host', results: 'test/results' },
   dataContract: { packSchema: 'test-v1', participantQuestionSchema: 'test-public-v1', resultSchema: 'test-result-v1', legacySessionFallback: false },
   capabilities: [],
+  statusText: () => 'Test status',
+  statusDescription: () => 'Test status description',
+  resultsLabel: 'Test results',
 }
 
 const contractRegistry = createModeRegistry([testOnlyManifest])

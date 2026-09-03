@@ -34,7 +34,7 @@
       "$workspaceId": {
         ".read": "auth != null && (root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid || auth.token.platformAdmin === true)",
         "$productId": {
-          ".write": "auth != null && (auth.token.platformAdmin === true || (!data.exists() && root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid))"
+          ".write": "auth != null && (auth.token.platformAdmin === true || (!data.exists() && newData.parent().parent().parent().child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid))"
         }
       }
     },

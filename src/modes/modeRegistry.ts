@@ -1,4 +1,4 @@
-import type { RoomMode } from '../types'
+import type { RoomMode, Session } from '../types'
 import type { GameModule, ModeDataContract, ModeHostScreenProps, ModeLandingScreenProps, ModeMainScreenProps, ModeParticipantFlowProps, ModeSetupPolicy, ModeSetupScreenProps, ModeSurfaceLinks } from './contracts'
 import type { ComponentType } from 'react'
 import type { ParticipantQuestionScreenProps } from './participantTypes'
@@ -27,6 +27,10 @@ export interface ModeManifest {
   surfaces: ModeSurfaceLinks
   dataContract: ModeDataContract
   capabilities: readonly string[]
+  /** Mode-owned wording prevents a room from inheriting another mode's copy. */
+  statusText: (session: Pick<Session, 'phase' | 'wheel'>) => string
+  statusDescription: (session: Pick<Session, 'phase' | 'wheel'>) => string
+  resultsLabel: string
 }
 
 export const createModeRegistry = <T extends ModeManifest>(manifests: readonly T[]) => {
@@ -50,3 +54,15 @@ export const getModeManifest = (mode?: string) => {
 
 /** Compatibility name used by the current host shell. */
 export const getModeDefinition = getModeManifest
+
+export const getRoomModeTitle = (room?: Pick<Session, 'mode' | 'gameTypeId'> | null) =>
+  getModeManifest(room?.mode || room?.gameTypeId).title
+
+export const getRoomStatusText = (room?: Pick<Session, 'mode' | 'gameTypeId' | 'phase' | 'wheel'> | null) =>
+  room ? getModeManifest(room.mode || room.gameTypeId).statusText(room) : 'Комната не выбрана'
+
+export const getRoomStatusDescription = (room?: Pick<Session, 'mode' | 'gameTypeId' | 'phase' | 'wheel'> | null) =>
+  room ? getModeManifest(room.mode || room.gameTypeId).statusDescription(room) : ''
+
+export const getRoomResultsLabel = (room?: Pick<Session, 'mode' | 'gameTypeId'> | null) =>
+  getModeManifest(room?.mode || room?.gameTypeId).resultsLabel

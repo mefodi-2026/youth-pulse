@@ -2,6 +2,7 @@ import type { ModeManifest } from '../modeRegistry'
 import { wheelDataContract, wheelGameTypeId } from './contract'
 import { wheelGameModule } from './gameModule'
 import { WheelHostScreen, WheelLandingScreen, WheelMainScreen, WheelParticipantFlow, WheelParticipantPlaceholder, WheelSetupScreen } from './screens'
+import { wheelStatusDescription, wheelStatusText } from './presentation'
 
 export const wheelManifest: ModeManifest = {
   id: wheelGameTypeId,
@@ -33,4 +34,7 @@ export const wheelManifest: ModeManifest = {
   },
   dataContract: wheelDataContract,
   capabilities: ['participant-input', 'host-input', 'name-task-order', 'pending-tasks'],
+  statusText: wheelStatusText,
+  statusDescription: wheelStatusDescription,
+  resultsLabel: 'История игры',
 }

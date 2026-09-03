@@ -388,9 +388,14 @@ export const registerLeader = async (input: RegisterLeaderInput) => {
     }
     const diagnosticAccess = createPilotWorkspaceAccess(diagnosticProductId, user.uid, now)
     const quizAccess = createPilotWorkspaceAccess(quizProductId, user.uid, now)
+    // The workspace must exist before product access is created. Keeping the
+    // two atomic writes separate lets RTDB Rules verify real ownership without
+    // granting a broad bootstrap exception to arbitrary workspaceProducts.
     await update(ref(services.db), {
       [`users/${user.uid}`]: profile,
       [`workspaces/${workspaceId}`]: workspace,
+    })
+    await update(ref(services.db), {
       [`workspaceProducts/${workspaceId}/${diagnosticProductId}`]: diagnosticAccess,
       [`workspaceProducts/${workspaceId}/${quizProductId}`]: quizAccess,
     })

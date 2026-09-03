@@ -23,6 +23,13 @@ assert(wheel.dataContract.roomStateSchema === 'wheel-room-state-v1', 'wheel stat
 assert(wheel.runtime.getQuestions({}, []).length === 0, 'wheel must not inherit question-pack fallback logic')
 assert(Boolean(wheel.setupScreen && wheel.participantFlow && wheel.hostScreen && wheel.mainScreen), 'wheel Prompt 2 screens must be registered through the manifest')
 
+const diagnosticLiveStatus = diagnostic.statusText({ phase: 'live', wheel: undefined })
+const quizLiveStatus = quiz.statusText({ phase: 'live', wheel: undefined })
+const wheelLiveStatus = wheel.statusText({ phase: 'live', wheel: { phase: 'ready' } } as never)
+assert(diagnosticLiveStatus.includes('Диагностика') && !diagnosticLiveStatus.includes('Викторина') && !diagnosticLiveStatus.includes('Колесо'), 'diagnostic copy must stay diagnostic-only')
+assert(quizLiveStatus.includes('Викторина') && !quizLiveStatus.includes('Диагностика') && !quizLiveStatus.includes('Колесо'), 'quiz copy must stay quiz-only')
+assert(wheelLiveStatus.includes('вращению') && !wheelLiveStatus.includes('Диагностика') && !wheelLiveStatus.includes('Викторина'), 'wheel copy must stay wheel-only')
+
 const legacySession = { questions: diagnosticQuestions.slice(0, 3), gameTypeId: 'diagnostic' as const }
 assert(diagnostic.runtime.getQuestions(legacySession, diagnosticQuestions).length === 3, 'legacy room questions must not fall back to 70')
 

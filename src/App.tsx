@@ -13,7 +13,7 @@ import { nextCategoryQuestionOrder, orderQuestionsByCategory } from './lib/quest
 import { OwnerAdmin } from './OwnerAdmin'
 import { diagnosticMode, isDiagnosticPack } from './modes/diagnostic/contract'
 import { isQuizPack, quizMode, workspaceQuizSelection } from './modes/quiz/contract'
-import { getModeDefinition, modeRegistry, productionModes } from './modes/modeRegistry'
+import { getModeDefinition, getRoomModeTitle, getRoomResultsLabel, getRoomStatusDescription, getRoomStatusText, modeRegistry, productionModes } from './modes/modeRegistry'
 import { createWheelRoom, stopWheelActivity } from './modes/wheel/repository'
 import { changeRoomPhase, closeRoomAndArchive, createRoom } from './core/useCases/roomLifecycle'
 import { copyQuizWorkspacePack, saveDiagnosticWorkspacePack } from './core/useCases/packOperations'
@@ -23,6 +23,7 @@ import { currentPath, go, queryRoom, replace, useRoute } from './core/navigation
 import { useRoom } from './core/hooks/useRoom'
 import { useSessionLifecycle } from './core/hooks/useSessionLifecycle'
 import { isSessionExpired } from './core/sessionLifecycle'
+import { Modal } from './components/Modal'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
 
@@ -42,7 +43,8 @@ const createFeedbackUrl = (formUrl: string, session: Session | null) => {
 
 const Glass = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => <section className={`glass ${className}`}>{children}</section>
 const Button = ({ children, secondary = false, disabled, onClick, className = '' }: { children: React.ReactNode; secondary?: boolean; disabled?: boolean; onClick?: () => void; className?: string }) => <button className={`${secondary ? 'button secondary' : 'button'} ${className}`} disabled={disabled} onClick={onClick}>{children}</button>
-const phaseText = (phase: SessionPhase) => ({ lobby: 'Сбор участников', live: 'Диагностика идёт', personal: 'Личные результаты', resultsIntro: 'Готовим общий результат', resultsReal: 'Общий результат открыт', closed: 'Сессия завершена' })[phase]
+/** Compatibility copy for routes retained from pre-registry releases. */
+const phaseText = (phase: SessionPhase) => ({ lobby: 'Сбор участников', live: 'Встреча идёт', personal: 'Личные результаты', resultsIntro: 'Готовим результаты', resultsReal: 'Результаты открыты', closed: 'Сессия завершена' })[phase]
 
 function App() {
   const path = useRoute()
@@ -214,7 +216,7 @@ function AccountPage({ profile }: { profile: LeaderProfile }) {
 function HomePanel({ name, questionCount, onChooseMode, activeSession, onResume, onCloseActive, notice }: { name: string; questionCount: number; onChooseMode: (mode: RoomMode) => void; activeSession: Session | null; onResume: () => void; onCloseActive: () => void; notice?: string }) {
   const modes = productionModes.map(mode => ({ ...mode, mode: mode.mode as RoomMode }))
   const expired = isSessionExpired(activeSession)
-  return <div className="home-panel">{notice && <p className="connection-warning">{notice}</p>}{activeSession && <Glass className="home-active-room"><p className="eyebrow">НЕЗАВЕРШЁННАЯ КОМНАТА</p><h3>{activeSession.roomTitle || activeSession.roomId}</h3><p>Последняя активность: {new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(activeSession.lastActivityAt || activeSession.createdAt))} · {expired ? 'срок активности истёк' : phaseText(activeSession.phase)}</p><div className="control-actions">{!expired && <Button onClick={onResume}>Вернуться в комнату</Button>}<Button secondary onClick={onCloseActive}>Завершить старую комнату</Button></div>{expired && <small>Просроченную комнату нельзя продолжить. Её можно завершить, а затем открыть результаты и экспорт в истории.</small>}</Glass>}<div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><p className="home-feedback">Диагностика и викторина доступны для тестирования. «Колесо фортуны» подключено как отдельный режим и пока показывает безопасный экран подготовки к следующему этапу.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ДОСТУПНЫЕ РЕЖИМЫ</p><div className="landing-feature-list">{modes.map((mode, index) => <article key={mode.mode}><span>{String(index + 1).padStart(2, '0')}</span><div><b>{mode.title}</b><small>{mode.mode === diagnosticMode ? `${questionCount || '—'} вопросов · ${Object.keys(categories).length} тем · личные и общие результаты` : mode.description}</small><Button onClick={() => onChooseMode(mode.mode)}>{mode.setupScreen ? 'Открыть режим' : 'Создать комнату'}</Button></div></article>)}</div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Выберите режим и настройте встречу.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Подключите участников и начните игру или диагностику.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте результаты и экспорт внутри комнаты или её истории.</p></article></div></section></div>
+  return <div className="home-panel">{notice && <p className="connection-warning">{notice}</p>}{activeSession && <Glass className="home-active-room"><p className="eyebrow">НЕЗАВЕРШЁННАЯ КОМНАТА · {getRoomModeTitle(activeSession).toUpperCase()}</p><h3>{activeSession.roomTitle || activeSession.roomId}</h3><p>Последняя активность: {new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(activeSession.lastActivityAt || activeSession.createdAt))} · {expired ? 'срок активности истёк' : getRoomStatusText(activeSession)}</p><div className="control-actions">{!expired && <Button onClick={onResume}>Вернуться в комнату</Button>}<Button secondary onClick={onCloseActive}>Завершить старую комнату</Button></div>{expired && <small>Просроченную комнату нельзя продолжить. Её можно завершить, а затем открыть результаты и экспорт в истории.</small>}</Glass>}<div className="home-grid"><section className="home-copy"><p className="eyebrow">ГЛАВНОЕ · АТМОСФЕРА</p><h2>Рады видеть вас,<br />{name}</h2><p className="home-lead">«Атмосфера» помогает проводить диагностики, викторины и интерактивные игры для молодёжных групп — бережно, понятно и без лишней подготовки.</p><p className="home-feedback">Диагностика, викторина и колесо фортуны доступны как самостоятельные режимы. Протестируйте их и оставьте обратную связь.</p></section><Glass className="home-visual"><div className="landing-visual-glow" /><p className="eyebrow">ДОСТУПНЫЕ РЕЖИМЫ</p><div className="landing-feature-list">{modes.map((mode, index) => <article key={mode.mode}><span>{String(index + 1).padStart(2, '0')}</span><div><b>{mode.title}</b><small>{mode.mode === diagnosticMode ? `${questionCount || '—'} вопросов · ${Object.keys(categories).length} тем · личные и общие результаты` : mode.description}</small><Button onClick={() => onChooseMode(mode.mode)}>{mode.setupScreen ? 'Открыть режим' : 'Создать комнату'}</Button></div></article>)}</div><div className="landing-orbit"><i /><i /><strong>✦</strong></div></Glass></div><section className="home-steps"><p className="eyebrow">КАК НАЧАТЬ</p><div><article><b>1</b><h3>Создайте комнату</h3><p>Выберите режим и настройте встречу.</p></article><article><b>2</b><h3>Запустите формат</h3><p>Подключите участников и начните игру или диагностику.</p></article><article><b>3</b><h3>Подключите участников</h3><p>Покажите QR-код или отправьте одну ссылку участникам.</p></article><article><b>4</b><h3>Посмотрите итоги</h3><p>Откройте результаты и экспорт внутри комнаты или её истории.</p></article></div></section></div>
 }
 
 function RulesPanel({ onStart }: { onStart: () => void }) {
@@ -278,7 +280,9 @@ function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, s
 function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; initialTab?: HostTab; initialRoom?: string }) {
   const roomKey = `atmosphere-host-room-${leader.uid}`
   const lastRoomKey = `atmosphere-host-last-room-${leader.uid}`
-  const [room, setRoom] = useState(() => initialRoom || localStorage.getItem(roomKey) || '')
+  // A persisted room is only a resume candidate. Reloading must begin at the
+  // main menu instead of silently reopening a live room from an old URL.
+  const [room, setRoom] = useState(() => localStorage.getItem(roomKey) || '')
   const [session, setSession] = useRoom(room)
   const [qr, setQr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -286,14 +290,16 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [createError, setCreateError] = useState('')
   const [lastClosedRoom, setLastClosedRoom] = useState('')
   const [roomConflictMode, setRoomConflictMode] = useState<RoomMode | null>(null)
+  const [closeRequest, setCloseRequest] = useState<{ createMode?: RoomMode } | null>(null)
   const tabKey = `atmosphere-host-tab-${leader.uid}`
   const initialRoute = normalizeHostTab(initialTab)
+  const initialRouteHandled = useRef(false)
   // Keep the legacy values in the state type while normalizeHostTab() keeps
   // URLs canonical. It lets old bookmarked tabs remain safely redirectable.
-  const [tab, setTab] = useState<HostTab>(() => initialRoute.tab)
-  const [roomView, setRoomView] = useState<RoomViewTab>(() => readRoomView() || initialRoute.roomView || 'overview')
+  const [tab, setTab] = useState<HostTab>('main')
+  const [roomView, setRoomView] = useState<RoomViewTab>('overview')
   const [menuOpen, setMenuOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1080)
-  const [resultRoom, setResultRoom] = useState(() => initialRoute.roomView === 'results' ? initialRoom || '' : '')
+  const [resultRoom, setResultRoom] = useState('')
   const [archives, setArchives] = useState<Record<string, SessionArchive>>({})
   const [questionBank, setQuestionBank] = useState<DiagnosticQuestion[]>(() => firebaseReady ? [] : questions)
   const templateKey = `atmosphere-template-selection-${leader.workspaceId}`
@@ -315,6 +321,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [questionSaving, setQuestionSaving] = useState(false)
   const [questionError, setQuestionError] = useState('')
   const [questionEditorOpen, setQuestionEditorOpen] = useState(false)
+  const [questionDeleteTarget, setQuestionDeleteTarget] = useState<DiagnosticQuestion | null>(null)
   const [roomTitleDraft, setRoomTitleDraft] = useState('')
   const [roomTitleSaving, setRoomTitleSaving] = useState(false)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
@@ -359,6 +366,14 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   // localStorage value (for example, "profile") from becoming the default
   // after a fresh login or a browser reload.
   useEffect(() => {
+    if (!initialRouteHandled.current) {
+      initialRouteHandled.current = true
+      setTab('main')
+      setRoomView('overview')
+      setResultRoom('')
+      if (currentPath().endsWith('/results') || initialTab !== 'main' || window.location.search) replace('/host?tab=main')
+      return
+    }
     const normalized = normalizeHostTab(initialTab)
     const requestedView = readRoomView() || normalized.roomView || (normalized.tab === 'currentRoom' ? 'overview' : undefined)
     const requestedMode = normalized.tab === 'roomSetup' ? readRoomSetupMode() : undefined
@@ -613,9 +628,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     navigate('results', room)
     window.setTimeout(() => { void changePhase('resultsReal') }, 20000)
   }
-  const closeRoom = async (skipConfirmation = false, options: { returnToMain?: boolean; inactivity?: boolean } = {}) => {
+  const closeRoom = async (options: { returnToMain?: boolean; inactivity?: boolean } = {}) => {
     if (!session || session.phase === 'closed') return false
-    if (!skipConfirmation && !window.confirm('После завершения участники больше не смогут отвечать в этой комнате. Участники, ответы и результаты будут сохранены в архиве.')) return false
     return changePhase('closed', options)
   }
   const closeWheelRoom = async (options: { returnToMain?: boolean; inactivity?: boolean } = {}) => {
@@ -652,11 +666,33 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     if (!await closeWheelRoom()) return false
     return true
   }
+  const requestCloseCurrentRoom = (createMode?: RoomMode) => {
+    if (!session || session.phase === 'closed') return
+    setCloseRequest({ createMode })
+  }
+  const confirmCloseCurrentRoom = async () => {
+    const request = closeRequest
+    if (!request || !session) return
+    const closed = session.mode === 'wheel'
+      ? await closeWheelRoom({ returnToMain: request.createMode ? false : true })
+      : await closeRoom({ returnToMain: request.createMode ? false : true })
+    if (!closed) return
+    setCloseRequest(null)
+    setRoomConflictMode(null)
+    if (request.createMode) openRoomSetup(request.createMode, true)
+  }
+  const resumeCurrentRoom = () => {
+    if (!session || isSessionExpired(session)) {
+      setActionError('Эта комната уже истекла. Завершите её и откройте историю, чтобы сохранить результаты.')
+      return
+    }
+    navigate('currentRoom', room)
+  }
   const expireCurrentRoom = async () => {
     if (!session || session.phase === 'closed') return true
     const closed = session.mode === 'wheel'
       ? closeWheelRoom({ returnToMain: true, inactivity: true })
-      : closeRoom(true, { returnToMain: true, inactivity: true })
+      : closeRoom({ returnToMain: true, inactivity: true })
     const completed = await closed
     if (completed) setActionError('Сессия завершена автоматически после 10 минут бездействия.')
     return completed
@@ -677,7 +713,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     navigate('results', archived.roomId)
   }
   const resultSession = resolveResultSession(resultRoom, room, session, archives)
-  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} questionCount={systemDiagnosticPack?.questions.length || questionBank.length} onChooseMode={openRoomSetup} activeSession={session?.phase === 'closed' ? null : session} onResume={() => navigate('currentRoom', room)} onCloseActive={() => void (session?.mode === 'wheel' ? closeWheelRoom() : closeRoom())} notice={expiringSoon ? 'Сессия скоро завершится из-за отсутствия активности. Выполните действие в комнате, чтобы продолжить.' : actionError} />{roomConflictMode && session && <div className="wheel-finish-dialog" role="dialog" aria-modal="true"><section><p className="eyebrow">НЕЗАВЕРШЁННАЯ КОМНАТА</p><h2>Сначала выберите, что сделать с текущей комнатой</h2><p>Её данные не будут смешаны с новой игрой. Перед созданием новой старая комната будет корректно завершена и сохранена в архиве.</p><div><Button onClick={() => { setRoomConflictMode(null); navigate('currentRoom', room) }}>Вернуться в комнату</Button><Button secondary onClick={() => void (session.mode === 'wheel' ? closeWheelRoom() : closeRoom())}>Завершить старую комнату</Button><Button secondary onClick={() => void (async () => { const mode = roomConflictMode; if (!mode) return; const closed = session.mode === 'wheel' ? await closeWheelRoom({ returnToMain: false }) : await closeRoom(true, { returnToMain: false }); if (closed) { setRoomConflictMode(null); openRoomSetup(mode, true) } })()}>Завершить и создать новую</Button><Button secondary onClick={() => setRoomConflictMode(null)}>Отмена</Button></div></section></div>}</HostLayout>
+  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p><h1>Главное</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><HomePanel name={leader.fullName} questionCount={systemDiagnosticPack?.questions.length || questionBank.length} onChooseMode={openRoomSetup} activeSession={session?.phase === 'closed' ? null : session} onResume={resumeCurrentRoom} onCloseActive={() => requestCloseCurrentRoom()} notice={expiringSoon ? 'Сессия скоро завершится из-за отсутствия активности. Выполните действие в комнате, чтобы продолжить.' : actionError} />{roomConflictMode && session && <Modal open title="Незавершённая комната" onClose={() => setRoomConflictMode(null)}><p>Её данные не будут смешаны с новой игрой. Перед созданием новой старая комната будет корректно завершена и сохранена в архиве.</p><div className="app-modal-actions"><Button onClick={() => { setRoomConflictMode(null); resumeCurrentRoom() }}>Вернуться в комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить старую комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom(roomConflictMode)}>Завершить и создать новую</Button></div></Modal>}{closeRequest && <Modal open title="Завершить комнату?" onClose={() => setCloseRequest(null)}><p>Участники больше не смогут отправлять данные. История, результаты и архив останутся сохранены.</p><div className="app-modal-actions"><Button onClick={() => void confirmCloseCurrentRoom()}>Подтвердить завершение</Button><Button secondary onClick={() => setCloseRequest(null)}>Отмена</Button></div></Modal>}{expiringSoon && <Modal open title="Сессия скоро завершится"><p>Через несколько минут она завершится из-за отсутствия реальных действий. Вернитесь в комнату и выполните действие, либо завершите её сейчас.</p><div className="app-modal-actions"><Button onClick={resumeCurrentRoom}>Вернуться в комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить сейчас</Button></div></Modal>}</HostLayout>
   if (tab === 'rules') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ПОДСКАЗКИ ДЛЯ ВЕДУЩЕГО</p><h1>Правила</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><RulesPanel onStart={() => navigate('currentRoom')} /></HostLayout>
   if (tab === 'profile') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ВАШ АККАУНТ</p><h1>Профиль</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><ProfilePanel profile={leader} /></HostLayout>
   if (tab === 'results' && resultRoom && resultSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={resultSession} participants={Object.keys(resultSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode><header className="host-header host-results-header"><div><p className="eyebrow">РЕЗУЛЬТАТЫ · {resultRoom}</p><h1>Общая картина</h1></div><span className="status">СОХРАНЕНО</span></header><Results room={resultRoom} sessionOverride={resultSession} embedded /></HostLayout>
@@ -742,14 +778,13 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     } finally { setQuestionSaving(false) }
   }
   const deleteQuestion = async (question: DiagnosticQuestion) => {
-    if (!window.confirm(`Удалить вопрос «${question.title}»?`)) return
     setQuestionSaving(true)
     try {
       await persistQuestionBank(questionBank.filter(item => item.id !== question.id))
       if (editingQuestionId === question.id) closeQuestionEditor()
     } catch (error) {
       setQuestionError(error instanceof Error ? error.message : 'Не удалось удалить вопрос')
-    } finally { setQuestionSaving(false) }
+    } finally { setQuestionSaving(false); setQuestionDeleteTarget(null) }
   }
   const warning = !firebaseReady ? 'Для работы с несколькими устройствами подключите Firebase: демо-режим синхронизируется только в этом браузере.' : /localhost|127\.0\.0\.1/.test(publicOrigin) ? 'Этот QR ведёт на адрес компьютера. После публикации сайта здесь будет общий интернет-адрес.' : ''
   const activeDiagnosticPack = isDiagnosticPack(systemDiagnosticPack) ? systemDiagnosticPack : isDiagnosticPack(systemPacks[diagnosticPackId]) ? systemPacks[diagnosticPackId] : null
@@ -854,15 +889,14 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   </HostLayout>
   const feedbackUrl = createFeedbackUrl(feedbackFormUrl, session)
   const selectedQuizPreview = selectedQuizWorkspacePack || quizSystemPacks[0] || null
-  const currentRoomMode = session?.mode || diagnosticMode
-  const currentRoomTabs = session ? <RoomTabs active={roomView} mode={currentRoomMode} onChange={view => navigate('currentRoom', room, view)} /> : null
+  const currentRoomTabs = session ? <RoomTabs active={roomView} session={session} onChange={view => navigate('currentRoom', room, view)} /> : null
 
   // Phase 1–3: all leader-facing room work lives behind the one canonical
   // "currentRoom" destination. Legacy tabs are normalised before this point.
   if (tab === 'currentRoom' && roomView === 'results') {
     const viewedSession = resultRoom === room ? session : archives[resultRoom] || session
     if (viewedSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={viewedSession.roomId} session={viewedSession} participants={Object.keys(viewedSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode>
-      <header className="host-header host-results-header"><div><p className="eyebrow">{(viewedSession.mode || diagnosticMode) === quizMode ? 'БИБЛЕЙСКАЯ ВИКТОРИНА' : 'ДИАГНОСТИКА'} · РЕЗУЛЬТАТЫ</p><h1>{viewedSession.roomTitle || viewedSession.displayCode || viewedSession.roomId}</h1></div></header>
+      <header className="host-header host-results-header"><div><p className="eyebrow">{getRoomModeTitle(viewedSession).toUpperCase()} · {getRoomResultsLabel(viewedSession).toUpperCase()}</p><h1>{viewedSession.roomTitle || viewedSession.displayCode || viewedSession.roomId}</h1></div></header>
       {currentRoomTabs}
       <Results room={viewedSession.roomId} sessionOverride={viewedSession} embedded />
     </HostLayout>
@@ -882,7 +916,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     const exportRoom = session || (lastClosedRoom ? archives[lastClosedRoom] : null)
     return <HostLayout menu={menu} tab={tab} onTab={navigate} room={exportRoom?.roomId || lastClosedRoom} session={exportRoom || null} participants={Object.keys(exportRoom?.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
       <header className="host-header"><div><p className="eyebrow">ВЫГРУЗКА ДАННЫХ</p><h1>Экспорт комнаты</h1></div></header>{currentRoomTabs}
-      {exportRoom ? <Glass className="export-panel"><p className="eyebrow">{(exportRoom.mode || diagnosticMode) === quizMode ? 'ВИКТОРИНА' : 'ДИАГНОСТИКА'}</p><h2>{exportRoom.roomTitle || exportRoom.displayCode || exportRoom.roomId}</h2><p>CSV содержит данные лидера, параметры комнаты, статус участников и ответы. Личные ответы не выводятся на общем экране.</p><Button onClick={() => exportCsv(exportRoom, leader)}>Скачать CSV</Button></Glass> : <Glass className="empty-state"><h3>Выберите комнату для экспорта</h3><p>Завершённые комнаты доступны в истории.</p><Button onClick={() => navigate('rooms')}>Открыть историю комнат</Button></Glass>}
+      {exportRoom ? <Glass className="export-panel"><p className="eyebrow">{getRoomModeTitle(exportRoom).toUpperCase()}</p><h2>{exportRoom.roomTitle || exportRoom.displayCode || exportRoom.roomId}</h2><p>CSV содержит данные лидера, параметры комнаты, статус участников и ответы. Личные ответы не выводятся на общем экране.</p><Button onClick={() => exportCsv(exportRoom, leader)}>Скачать CSV</Button></Glass> : <Glass className="empty-state"><h3>Выберите комнату для экспорта</h3><p>Завершённые комнаты доступны в истории.</p><Button onClick={() => navigate('rooms')}>Открыть историю комнат</Button></Glass>}
     </HostLayout>
   }
 
@@ -896,17 +930,19 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       <ModeHostScreen session={session} joinUrl={joinUrl} onClose={session.mode === 'wheel' ? closeWheelRoom : closeRoom} onPlayAgain={session.mode === 'wheel' ? startWheelAgain : undefined} onExitToMain={session.mode === 'wheel' ? exitWheelToMain : undefined} />
     </HostLayout>
     return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
-      <header className="host-header"><div><p className="eyebrow">ТЕКУЩАЯ КОМНАТА · {(session.mode || diagnosticMode) === quizMode ? 'ВИКТОРИНА' : 'ДИАГНОСТИКА'}</p><h1>{session.roomTitle || session.displayCode || room}</h1><p className="room-header-title">{phaseText(session.phase)}</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО'}</span></header>
+      <header className="host-header"><div><p className="eyebrow">ТЕКУЩАЯ КОМНАТА · {getRoomModeTitle(session).toUpperCase()}</p><h1>{session.roomTitle || session.displayCode || room}</h1><p className="room-header-title">{getRoomStatusText(session)}</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО'}</span></header>
       {currentRoomTabs}
       <div className="metrics"><Metric label="Подключились" value={participants.length} note={`из ${session.maxParticipants} участников`} /><Metric label="Сейчас отвечают" value={answering} note="в своём темпе" /><Metric label="Завершили" value={finished} note={allFinished ? 'все готовы' : 'ждём завершения'} /></div>
-      <Glass className="control-panel"><p className="eyebrow">ТЕКУЩАЯ ФАЗА</p><h2>{phaseText(session.phase)}</h2><p>{session.phase === 'lobby' ? 'Покажите QR-код участникам, затем запустите встречу.' : session.phase === 'live' ? 'Прогресс участников синхронизируется в реальном времени.' : 'Можно открыть общий результат или завершить комнату после встречи.'}</p><div className="control-actions">{session.phase === 'lobby' && <Button onClick={() => void start()}>Запустить {session.mode === quizMode ? 'викторину' : 'диагностику'}</Button>}<Button secondary onClick={() => navigate('currentRoom', room, 'participants')}>Участники и QR</Button><Button disabled={!allFinished && session.phase === 'live'} onClick={() => void showResults()}>{session.mode === quizMode ? 'Показать топ-3' : 'Показать результаты'}</Button><Button secondary onClick={closeRoom}>Завершить сессию</Button></div>{actionError && <p className="connection-warning">{actionError}</p>}</Glass>
+      <Glass className="control-panel"><p className="eyebrow">ТЕКУЩАЯ ФАЗА</p><h2>{getRoomStatusText(session)}</h2><p>{getRoomStatusDescription(session)}</p><div className="control-actions">{session.phase === 'lobby' && <Button onClick={() => void start()}>Запустить {getRoomModeTitle(session).toLocaleLowerCase('ru-RU')}</Button>}<Button secondary onClick={() => navigate('currentRoom', room, 'participants')}>Участники и QR</Button><Button disabled={!allFinished && session.phase === 'live'} onClick={() => void showResults()}>{getRoomResultsLabel(session)}</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить сессию</Button></div></Glass>
+      {closeRequest && <Modal open title="Завершить комнату?" onClose={() => setCloseRequest(null)}><p>Участники больше не смогут отправлять данные. История, результаты и архив останутся сохранены.</p><div className="app-modal-actions"><Button onClick={() => void confirmCloseCurrentRoom()}>Подтвердить завершение</Button><Button secondary onClick={() => setCloseRequest(null)}>Отмена</Button></div></Modal>}
+      {actionError && <Modal open title="Не удалось выполнить действие" onClose={() => setActionError('')}><p>{actionError}</p></Modal>}
     </HostLayout>
   }
 
   if (tab === 'rooms') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">БИБЛИОТЕКА ВСТРЕЧ</p><h1>История комнат</h1><p className="room-header-title">Завершённые комнаты доступны для просмотра результатов и выгрузки.</p></div></header>
-    <Glass className="history-filters"><p className="eyebrow">ФИЛЬТРЫ ИСТОРИИ</p><div><label>Поиск<input value={historyFilters.query} placeholder="Название, код или молодёжка" onChange={event => setHistoryFilters(previous => ({ ...previous, query: event.target.value }))} /></label><label>Формат<select value={historyFilters.mode} onChange={event => setHistoryFilters(previous => ({ ...previous, mode: event.target.value as typeof previous.mode }))}><option value="all">Все форматы</option><option value="diagnostic">Диагностика</option><option value="quiz">Викторина</option></select></label><label>От<input type="date" value={historyFilters.from} onChange={event => setHistoryFilters(previous => ({ ...previous, from: event.target.value }))} /></label><label>До<input type="date" value={historyFilters.to} onChange={event => setHistoryFilters(previous => ({ ...previous, to: event.target.value }))} /></label></div></Glass>
-    <div className="stack">{filteredArchiveEntries.length ? filteredArchiveEntries.map(archived => <Glass className="room-row archive-card" key={archived.roomId}><div><p className="eyebrow">{(archived.mode || diagnosticMode) === quizMode ? 'БИБЛЕЙСКАЯ ВИКТОРИНА' : 'ДИАГНОСТИКА'}</p><h2>{archived.roomTitle || archived.displayCode || archived.roomId}</h2><p>{new Date(archived.createdAt).toLocaleDateString('ru-RU')} · {Object.keys(archived.participants || {}).length} участников</p></div><div className="archive-actions"><Button secondary onClick={() => openArchivedResult(archived)}>Результаты</Button><Button secondary onClick={() => { setRoom(archived.roomId); setResultRoom(archived.roomId); navigate('currentRoom', archived.roomId, 'export') }}>Экспорт</Button></div></Glass>) : <Glass className="empty-state"><h3>Завершённых комнат пока нет</h3><p>После завершения комнаты её результаты и экспорт появятся здесь.</p><Button onClick={() => openRoomSetup(diagnosticMode)}>Создать комнату</Button></Glass>}</div>
+    <Glass className="history-filters"><p className="eyebrow">ФИЛЬТРЫ ИСТОРИИ</p><div><label>Поиск<input value={historyFilters.query} placeholder="Название, код или молодёжка" onChange={event => setHistoryFilters(previous => ({ ...previous, query: event.target.value }))} /></label><label>Формат<select value={historyFilters.mode} onChange={event => setHistoryFilters(previous => ({ ...previous, mode: event.target.value as typeof previous.mode }))}><option value="all">Все форматы</option><option value="diagnostic">Диагностика</option><option value="quiz">Викторина</option><option value="wheel">Колесо фортуны</option></select></label><label>От<input type="date" value={historyFilters.from} onChange={event => setHistoryFilters(previous => ({ ...previous, from: event.target.value }))} /></label><label>До<input type="date" value={historyFilters.to} onChange={event => setHistoryFilters(previous => ({ ...previous, to: event.target.value }))} /></label></div></Glass>
+    <div className="stack">{filteredArchiveEntries.length ? filteredArchiveEntries.map(archived => <Glass className="room-row archive-card" key={archived.roomId}><div><p className="eyebrow">{getRoomModeTitle(archived).toUpperCase()}</p><h2>{archived.roomTitle || archived.displayCode || archived.roomId}</h2><p>{new Date(archived.createdAt).toLocaleDateString('ru-RU')} · {Object.keys(archived.participants || {}).length} участников</p></div><div className="archive-actions"><Button secondary onClick={() => openArchivedResult(archived)}>{getRoomResultsLabel(archived)}</Button><Button secondary onClick={() => { setRoom(archived.roomId); setResultRoom(archived.roomId); navigate('currentRoom', archived.roomId, 'export') }}>Экспорт</Button></div></Glass>) : <Glass className="empty-state"><h3>Завершённых комнат пока нет</h3><p>После завершения комнаты её результаты и экспорт появятся здесь.</p><Button onClick={() => openRoomSetup(diagnosticMode)}>Создать комнату</Button></Glass>}</div>
   </HostLayout>
 
   const activeModeManifest = modeRegistry[tab as RoomMode]
@@ -920,7 +956,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     <header className="host-header"><div><p className="eyebrow">РЕЖИМ · ДИАГНОСТИКА</p><h1>{getModeDefinition(diagnosticMode).title}</h1><p className="room-header-title">{getModeDefinition(diagnosticMode).description}</p></div></header>
     <Glass className="mode-intro"><p className="eyebrow">ОПУБЛИКОВАННЫЙ НАБОР</p><h2>{displayPackTitle(activeDiagnosticPack?.title)}</h2><p>{diagnosticQuestions.length} вопросов · категории, проценты, пропуск и личные пожелания сохраняются только в диагностике.</p><div className="control-actions"><Button onClick={() => openRoomSetup(diagnosticMode)}>Создать комнату</Button><Button secondary onClick={() => resetQuestionDraft('communication')}>Добавить вопрос в личную копию</Button></div><small>Глобальный набор доступен только для просмотра. Изменения создают и редактируют только личную workspace-копию.</small></Glass>
     {questionEditorOpen && <Glass className="question-editor"><p className="eyebrow">{editingQuestionId ? 'РЕДАКТИРОВАНИЕ ЛИЧНОЙ КОПИИ' : 'НОВЫЙ ВОПРОС'}</p><label>Категория<select value={questionDraft.category} onChange={event => setQuestionDraft(previous => ({ ...previous, category: event.target.value as DiagnosticQuestion['category'] }))}>{Object.entries(categories).map(([id, title]) => <option value={id} key={id}>{title}</option>)}</select></label><label>Текст вопроса<textarea value={questionDraft.title} onChange={event => setQuestionDraft(previous => ({ ...previous, title: event.target.value }))} /></label>{questionDraft.options.map((option, index) => <label key={index}>Вариант {String.fromCharCode(65 + index)}<input value={option} onChange={event => setQuestionDraft(previous => ({ ...previous, options: previous.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} /></label>)}{questionError && <p className="connection-warning">{questionError}</p>}<div className="control-actions"><Button disabled={questionSaving} onClick={() => void saveQuestion()}>{questionSaving ? 'Сохраняем…' : 'Сохранить вопрос'}</Button><Button secondary onClick={closeQuestionEditor}>Отмена</Button></div></Glass>}
-    <div className="question-groups">{Object.entries(categories).map(([categoryId, title]) => { const group = orderQuestionsByCategory(diagnosticQuestions.filter(question => question.category === categoryId)); return <Glass className="question-group" key={categoryId}><p className="eyebrow">{group.length} ВОПРОСОВ</p><h2>{title}</h2><p className="question-scoring">Стандартный scoring: 3 · 2 · 1 · 0</p>{group.map(question => <article className="question-row" key={question.id}><div><b>{question.categoryOrder || group.indexOf(question) + 1}. {question.title}</b><small>{Object.entries(question.options).map(([key, value]) => `${key}: ${value}`).join(' · ')}</small></div><div><Button secondary onClick={() => editQuestion(question)}>Редактировать</Button><Button secondary onClick={() => void deleteQuestion(question)}>Удалить</Button></div></article>)}</Glass> })}</div>
+    <div className="question-groups">{Object.entries(categories).map(([categoryId, title]) => { const group = orderQuestionsByCategory(diagnosticQuestions.filter(question => question.category === categoryId)); return <Glass className="question-group" key={categoryId}><p className="eyebrow">{group.length} ВОПРОСОВ</p><h2>{title}</h2><p className="question-scoring">Стандартный scoring: 3 · 2 · 1 · 0</p>{group.map(question => <article className="question-row" key={question.id}><div><b>{question.categoryOrder || group.indexOf(question) + 1}. {question.title}</b><small>{Object.entries(question.options).map(([key, value]) => `${key}: ${value}`).join(' · ')}</small></div><div><Button secondary onClick={() => editQuestion(question)}>Редактировать</Button><Button secondary onClick={() => setQuestionDeleteTarget(question)}>Удалить</Button></div></article>)}</Glass> })}</div>
+    <Modal open={Boolean(questionDeleteTarget)} title="Удалить вопрос?" onClose={() => setQuestionDeleteTarget(null)}><p>Вопрос будет удалён только из вашей личной копии диагностического набора.</p><div className="app-modal-actions"><Button disabled={questionSaving} onClick={() => questionDeleteTarget && void deleteQuestion(questionDeleteTarget)}>{questionSaving ? 'Удаляем…' : 'Удалить'}</Button><Button secondary disabled={questionSaving} onClick={() => setQuestionDeleteTarget(null)}>Отмена</Button></div></Modal>
   </HostLayout>
 
   if (tab === 'quiz') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
@@ -929,7 +966,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     <div className="quiz-pack-list">{quizSystemPacks.map(pack => { const copied = workspaceQuizPacks[pack.packId]; return <Glass className="quiz-pack-row" key={pack.packId}><div><p className="eyebrow">{pack.difficulty === 'easy' ? 'ЛЁГКИЙ УРОВЕНЬ' : pack.difficulty === 'medium' ? 'СРЕДНИЙ УРОВЕНЬ' : 'СЛОЖНЫЙ УРОВЕНЬ'}</p><h3>{displayPackTitle(pack.title)}</h3><small>{pack.questions.length} вопросов · версия {pack.packVersion}</small></div>{copied ? <Button secondary onClick={() => setTemplateSelection(workspaceQuizSelection(pack.packId))}>Добавлено в workspace</Button> : <Button secondary onClick={() => void addQuizPack(pack)}>Добавить в мой workspace</Button>}</Glass> })}</div>
     {quizActionError && <p className="connection-warning">{quizActionError}</p>}{selectedQuizPreview && <Glass className="question-group"><p className="eyebrow">ПРОСМОТР НАБОРА</p><h2>{displayPackTitle(selectedQuizPreview.title)}</h2>{selectedQuizPreview.questions.map((question, index) => <article className="question-row" key={question.id}><div><b>{index + 1}. {question.title}</b><small>{Object.entries(question.options).map(([key, value]) => `${key}: ${value}`).join(' · ')}</small></div></article>)}<small>Набор доступен для просмотра и запуска. Ключи ответов и проверка результатов хранятся только в защищённом серверном слое.</small></Glass>}
   </HostLayout>
-  const historyFiltersControl = <Glass className="history-filters"><p className="eyebrow">ФИЛЬТРЫ ИСТОРИИ</p><div><input value={historyFilters.query} onChange={event => setHistoryFilters(previous => ({ ...previous, query: event.target.value }))} placeholder="Комната, молодёжка, город или код" /><select value={historyFilters.mode} onChange={event => setHistoryFilters(previous => ({ ...previous, mode: event.target.value as 'all' | RoomMode }))}><option value="all">Все форматы</option><option value="diagnostic">Диагностика</option><option value="quiz">Викторина</option></select><label>С<input type="date" value={historyFilters.from} onChange={event => setHistoryFilters(previous => ({ ...previous, from: event.target.value }))} /></label><label>По<input type="date" value={historyFilters.to} onChange={event => setHistoryFilters(previous => ({ ...previous, to: event.target.value }))} /></label></div></Glass>
+  const historyFiltersControl = <Glass className="history-filters"><p className="eyebrow">ФИЛЬТРЫ ИСТОРИИ</p><div><input value={historyFilters.query} onChange={event => setHistoryFilters(previous => ({ ...previous, query: event.target.value }))} placeholder="Комната, молодёжка, город или код" /><select value={historyFilters.mode} onChange={event => setHistoryFilters(previous => ({ ...previous, mode: event.target.value as 'all' | RoomMode }))}><option value="all">Все форматы</option><option value="diagnostic">Диагностика</option><option value="quiz">Викторина</option><option value="wheel">Колесо фортуны</option></select><label>С<input type="date" value={historyFilters.from} onChange={event => setHistoryFilters(previous => ({ ...previous, from: event.target.value }))} /></label><label>По<input type="date" value={historyFilters.to} onChange={event => setHistoryFilters(previous => ({ ...previous, to: event.target.value }))} /></label></div></Glass>
   if (!session && tab === 'rooms') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={lastClosedRoom} session={null} participants={0} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">БИБЛИОТЕКА ВСТРЕЧ</p><h1>Комнаты</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
     <div className="stack"><Glass className="empty-state"><h3>Нет активной комнаты</h3><p>Перед созданием настройте параметры новой встречи. Завершённые встречи остаются в результатах и истории.</p><Button onClick={openRoomSetup}>Создать комнату</Button><Button secondary onClick={() => navigate('results')}>Открыть результаты</Button></Glass></div>
@@ -972,7 +1009,7 @@ function exportCsv(session: Session, leader: LeaderProfile) {
   const participantRecords = session.participants || {}
   const participantCount = session.participantCount ?? Object.keys(participantRecords).length
   const completedCount = session.completedCount ?? Object.values(participantRecords).filter(participant => participant.status === 'finished').length
-  const common = [leader.fullName, leader.email, session.workspaceId || leader.workspaceId, session.hostUid, session.groupName || '', session.city || '', session.mode === 'quiz' ? 'Викторина' : 'Диагностика', session.packId || '', session.packVersion || '', new Date(session.createdAt).toISOString(), session.startedAt ? new Date(session.startedAt).toISOString() : '', session.closedAt ? new Date(session.closedAt).toISOString() : '', session.estimatedParticipants ?? '', participantCount, completedCount]
+  const common = [leader.fullName, leader.email, session.workspaceId || leader.workspaceId, session.hostUid, session.groupName || '', session.city || '', getRoomModeTitle(session), session.packId || '', session.packVersion || '', new Date(session.createdAt).toISOString(), session.startedAt ? new Date(session.startedAt).toISOString() : '', session.closedAt ? new Date(session.closedAt).toISOString() : '', session.estimatedParticipants ?? '', participantCount, completedCount]
   const rows = Object.values(participantRecords).map(participant => {
     const answers = participant.answers || {}
     const scores = getGameModule(session?.gameTypeId).score(answers, questionSet, session)
@@ -981,7 +1018,7 @@ function exportCsv(session: Session, leader: LeaderProfile) {
   const headers = ['leaderName', 'leaderEmail', 'workspaceId', 'hostUid', 'groupName', 'city', 'mode', 'packId', 'packVersion', 'createdAt', 'startedAt', 'closedAt', 'estimatedParticipants', 'participantCount', 'completedCount', 'participantId', 'nickname', 'status', ...questionSet.flatMap((_, index) => [`Вопрос ${index + 1}`, `Ответ ${index + 1}`]), 'total', ...Object.values(categories)]
   const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(';')).join('\n')
   const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }))
-  const anchor = document.createElement('a'); anchor.href = url; anchor.download = `diagnostika-${session.roomId}.csv`; anchor.click(); URL.revokeObjectURL(url)
+  const anchor = document.createElement('a'); anchor.href = url; anchor.download = `atmosfera-${session.roomId}.csv`; anchor.click(); URL.revokeObjectURL(url)
 }
 
 function Metric({ label, value, note }: { label: string; value: number; note: string }) { return <Glass className="metric"><p>{label}</p><strong>{value}</strong><small>{note}</small></Glass> }
@@ -1069,6 +1106,10 @@ function Results({ room, sessionOverride, embedded = false }: { room: string; se
   const showReal = session?.phase === 'resultsReal' || elapsed >= 20000
   const people = Object.values(session?.participants || {})
   if (session?.mode === 'quiz' || session?.gameTypeId === quizGameTypeId) return <QuizResults session={session} embedded={embedded} />
+  if (session?.mode === 'wheel' || session?.gameTypeId === 'wheel') {
+    const WheelResults = getModeDefinition('wheel').mainScreen
+    return WheelResults ? <div className={embedded ? 'results wheel-results' : 'wheel-results'}><WheelResults session={session} /></div> : <main className="results"><p>История игры недоступна.</p></main>
+  }
   const real = useMemo(() => { if (!people.length) return { communication: 84, forgiveness: 71, service: 79, care: 68, honesty: 76 }; const game = getGameModule(session?.gameTypeId); const values = people.map(person => game.score(person.answers || {}, game.getQuestions(session, questions), session).categories); return Object.fromEntries(Object.keys(categories).map(key => [key, Math.round(values.reduce((sum, item) => sum + item[key as keyof typeof item], 0) / values.length)])) as Record<keyof typeof categories, number> }, [people, session?.gameTypeId, session?.questions, session?.templateSnapshot, session?.scoringTemplateId, session?.scoringTemplateVersion])
   const shown = showReal ? real : { communication: 96, forgiveness: 94, service: 97, care: 93, honesty: 95 }
   const overall = Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)
@@ -1078,8 +1119,8 @@ function Results({ room, sessionOverride, embedded = false }: { room: string; se
   return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><div className="big-score"><b>{Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)}%</b><span>общий ориентир</span></div><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b>{value}%</b><i><em style={{ width: `${value}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p><small className="privacy">Показаны только агрегированные результаты — без имён и личных ответов.</small></main>
 }
 
-function RoomTabs({ active, mode, onChange }: { active: RoomViewTab; mode?: RoomMode; onChange: (tab: RoomViewTab) => void }) {
-  const items: Array<[RoomViewTab, string]> = [['overview', 'Обзор'], ['participants', 'Участники и QR'], ['results', mode === quizMode ? 'Топ-3' : 'Результаты'], ['export', 'Экспорт']]
+function RoomTabs({ active, session, onChange }: { active: RoomViewTab; session: Pick<Session, 'mode' | 'gameTypeId'>; onChange: (tab: RoomViewTab) => void }) {
+  const items: Array<[RoomViewTab, string]> = [['overview', 'Обзор'], ['participants', 'Участники и QR'], ['results', getRoomResultsLabel(session)], ['export', 'Экспорт']]
   return <nav className="room-tabs" aria-label="Разделы текущей комнаты">{items.map(([id, label]) => <button type="button" className={active === id ? 'selected' : ''} onClick={() => onChange(id)} key={id}>{label}</button>)}</nav>
 }
 

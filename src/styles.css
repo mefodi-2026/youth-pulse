@@ -725,12 +725,18 @@
 .wheel-finish-screen { display:grid; justify-items:center; gap:12px; padding:clamp(24px,4vw,44px); border-color:rgba(237,196,82,.52); background:radial-gradient(circle at 50% 0,rgba(237,196,82,.14),transparent 48%),rgba(3,35,25,.76); text-align:center; }
 .wheel-finish-screen p,.wheel-finish-screen h2 { margin:0; }
 .wheel-finish-screen>p:not(.eyebrow) { max-width:620px; color:var(--muted); line-height:1.55; }
-.wheel-finish-screen>div,.wheel-finish-dialog section>div { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+.wheel-finish-screen>div,.app-modal-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
 .wheel-finish-screen .button { min-width:220px; }
-.wheel-finish-dialog { position:fixed; z-index:30; inset:0; display:grid; place-items:center; padding:24px; background:rgba(0,13,9,.78); backdrop-filter:blur(7px); }
-.wheel-finish-dialog>section { display:grid; gap:16px; width:min(100%,460px); border:1px solid rgba(237,196,82,.66); border-radius:24px; padding:30px; background:linear-gradient(145deg,#0b4432,#041d15); box-shadow:0 24px 70px rgba(0,0,0,.55); }
-.wheel-finish-dialog p,.wheel-finish-dialog h2 { margin:0; }
-.wheel-finish-dialog>section>p:not(.eyebrow) { color:var(--muted); line-height:1.55; }
+.app-modal-open { overflow:hidden; scrollbar-gutter:stable; }
+.app-modal { position:fixed; z-index:1000; inset:0; display:grid; place-items:center; overflow:auto; padding:clamp(16px,4vw,32px); background:rgba(0,13,9,.78); backdrop-filter:blur(7px); }
+.app-modal-dialog { display:grid; gap:18px; width:min(100%,520px); max-height:calc(100dvh - 32px); overflow:auto; border:1px solid rgba(237,196,82,.66); border-radius:24px; padding:clamp(22px,4vw,30px); background:linear-gradient(145deg,#0b4432,#041d15); box-shadow:0 24px 70px rgba(0,0,0,.55); }
+.app-modal-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.app-modal-header h2,.app-modal-content p { margin:0; }
+.app-modal-content { display:grid; gap:16px; }
+.app-modal-content>p { color:var(--muted); line-height:1.55; }
+.app-modal-selection { display:block; color:var(--gold); font-size:clamp(1.8rem,5vw,3rem); line-height:1.04; overflow-wrap:anywhere; text-align:center; }
+.app-modal-close { display:grid; flex:0 0 auto; place-items:center; width:36px; height:36px; border:1px solid rgba(127,188,160,.38); border-radius:50%; color:var(--text); background:rgba(3,31,23,.84); font-size:28px; line-height:1; cursor:pointer; }
+.app-modal-close:hover { border-color:var(--mint); color:var(--mint); }
 @keyframes wheel-reveal { from { transform:translateY(12px) scale(.96); opacity:0; } to { transform:translateY(0) scale(1); opacity:1; } }
 @media (max-width:980px) {
   .wheel-prep-heading,.wheel-pending { grid-template-columns:1fr; }

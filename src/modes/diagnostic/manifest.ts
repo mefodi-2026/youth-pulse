@@ -2,6 +2,7 @@ import type { ModeManifest } from '../modeRegistry'
 import { diagnosticGameModule } from './gameModule'
 import { DiagnosticParticipantQuestionScreen } from './participant'
 import { diagnosticSelection } from './contract'
+import { diagnosticStatusDescription, diagnosticStatusText } from './presentation'
 
 export const diagnosticManifest: ModeManifest = {
   id: 'diagnostic',
@@ -40,4 +41,7 @@ export const diagnosticManifest: ModeManifest = {
     legacySessionFallback: true,
   },
   capabilities: ['categories', 'personal-report', 'skip', 'scoring-presets'],
+  statusText: diagnosticStatusText,
+  statusDescription: diagnosticStatusDescription,
+  resultsLabel: 'Результаты',
 }

@@ -2,6 +2,7 @@ import type { ModeManifest } from '../modeRegistry'
 import { bibleQuizGameModule } from './gameModule'
 import { QuizParticipantQuestionScreen } from './participant'
 import { initialQuizSelection } from './contract'
+import { quizStatusDescription, quizStatusText } from './presentation'
 
 export const quizManifest: ModeManifest = {
   id: 'quiz',
@@ -39,4 +40,7 @@ export const quizManifest: ModeManifest = {
     legacySessionFallback: false,
   },
   capabilities: ['difficulty', 'trusted-grading', 'top-3', 'workspace-copy'],
+  statusText: quizStatusText,
+  statusDescription: quizStatusDescription,
+  resultsLabel: 'Топ-3',
 }
