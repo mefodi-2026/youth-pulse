@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import './styles.css'
+import './design-system.css'
 
 // GitHub Pages serves unknown routes through 404.html. Restore the original
 // participant/host URL after that lightweight fallback brings us back to the app.

@@ -4,6 +4,7 @@ import { diagnosticGameTypeId, diagnosticPackId, diagnosticProductId, isPlatform
 import { nextCategoryQuestionOrder, orderQuestionsByCategory } from './lib/questionOrder'
 import type { ContentPack, DiagnosticQuestion, FeedbackItem, LeaderProfile, ProductConfig, Question, Session, SessionArchive, UserStatus, Workspace, WorkspaceProduct } from './types'
 import { OwnerProducts } from './OwnerProducts'
+import { Button, Surface } from './components/DesignSystem'
 
 type OwnerTab = 'overview' | 'leaders' | 'products' | 'packs' | 'sessions' | 'feedback'
 
@@ -20,8 +21,8 @@ const statusLabel: Record<UserStatus, string> = { pending: 'Ожидает', act
 const copyQuestions = (items: Question[]) => items.map(item => ({ ...item, options: { ...item.options } }))
 const packIdFromTitle = (value: string) => `pack-${value.toLowerCase().replace(/[^a-zа-я0-9]+/gi, '-').replace(/(^-|-$)/g, '').slice(0, 36) || 'diagnostic'}-${Date.now().toString(36)}`
 
-const OwnerButton = ({ children, secondary, danger, disabled, onClick }: { children: React.ReactNode; secondary?: boolean; danger?: boolean; disabled?: boolean; onClick?: () => void }) => <button type="button" className={`button owner-button ${secondary ? 'secondary' : ''} ${danger ? 'danger' : ''}`} disabled={disabled} onClick={onClick}>{children}</button>
-const OwnerCard = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => <section className={`glass owner-card ${className}`}>{children}</section>
+const OwnerButton = ({ children, secondary, danger, disabled, onClick }: { children: React.ReactNode; secondary?: boolean; danger?: boolean; disabled?: boolean; onClick?: () => void }) => <Button type="button" className="owner-button" secondary={secondary} danger={danger} disabled={disabled} onClick={onClick}>{children}</Button>
+const OwnerCard = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => <Surface className={`owner-card ${className}`}>{children}</Surface>
 
 export function OwnerAdmin() {
   const [authState, setAuthState] = useState<'checking' | 'owner' | 'denied' | 'error'>('checking')
