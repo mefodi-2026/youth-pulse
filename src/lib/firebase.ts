@@ -540,8 +540,35 @@ export const subscribeWorkspaceQuizPacks = (workspaceId: string, callback: (valu
   }, error => onError?.(error))
 }
 
+export type QuizPackCopyResult = {
+  pack: ContentPack
+  /** `existing` is a successful, idempotent result — never an error. */
+  outcome: 'copied' | 'existing'
+}
+
+const quizCopyError = (error: unknown) => {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+  if (code.includes('unauthenticated')) return new Error('Сеанс ведущего истёк. Войдите снова и повторите добавление набора.')
+  if (code.includes('permission')) return new Error('Firebase отклонил добавление: этот workspace не принадлежит текущему активному ведущему.')
+  if (code.includes('failed-precondition')) return new Error('Опубликованный набор викторины недоступен или неполный.')
+  return error instanceof Error && error.message
+    ? new Error(`Не удалось добавить набор в workspace: ${error.message}`)
+    : new Error('Не удалось добавить набор в workspace. Повторите попытку.')
+}
+
+const quizRoomError = (error: unknown) => {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+  if (code.includes('unauthenticated')) return new Error('Сеанс ведущего истёк. Войдите снова и повторите создание викторины.')
+  if (code.includes('permission')) return new Error('Firebase отклонил создание викторины: workspace не принадлежит текущему активному ведущему.')
+  if (code.includes('already-exists')) return new Error('Комната с этим кодом уже создана. Обновите страницу, чтобы открыть её.')
+  if (code.includes('failed-precondition')) return new Error('Выбранный набор викторины недоступен, не опубликован или не содержит серверных ключей ответов.')
+  return error instanceof Error && error.message
+    ? new Error(`Не удалось безопасно создать комнату викторины: ${error.message}`)
+    : new Error('Не удалось безопасно создать комнату викторины. Повторите попытку.')
+}
+
 /** Creates an immutable workspace copy of a published quiz pack once per leader. */
-export const copyQuizPackToWorkspace = async (workspaceId: string, sourcePackId: string) => {
+export const copyQuizPackToWorkspace = async (workspaceId: string, sourcePackId: string): Promise<QuizPackCopyResult> => {
   const services = requireFirebase()
   await authPersistence
   const user = services.auth.currentUser
@@ -558,17 +585,26 @@ export const copyQuizPackToWorkspace = async (workspaceId: string, sourcePackId:
     ? normalizeContentPack(existingSnapshot.val(), [], { packId: sourcePackId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
     : null
   // A personal copy is never silently overwritten by an upstream global update.
-  if (existing) return existing
+  if (existing) return { pack: existing, outcome: 'existing' }
   if (!functions) throw new Error('Сервис безопасного копирования викторины недоступен.')
   try {
-    await httpsCallable(functions, 'copyQuizPackToWorkspace')({ workspaceId, sourcePackId })
+    const result = await httpsCallable(functions, 'copyQuizPackToWorkspace')({ workspaceId, sourcePackId })
     const copiedSnapshot = await get(ref(services.db, `workspaces/${workspaceId}/workspacePackPublics/${sourcePackId}`))
     const copied = normalizeContentPack(copiedSnapshot.val(), [], { packId: sourcePackId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
     if (!copied) throw new Error('Копия набора не появилась в рабочем пространстве.')
-    return copied
+    const outcome = result.data && typeof result.data === 'object' && 'copied' in result.data && result.data.copied === false
+      ? 'existing'
+      : 'copied'
+    return { pack: copied, outcome }
   } catch (error) {
+    // A response can be lost after the callable has atomically created the
+    // copy. Re-read the safe projection before reporting failure, so retrying
+    // never creates a misleading error or a duplicate workspace pack.
+    const reconciledSnapshot = await get(ref(services.db, `workspaces/${workspaceId}/workspacePackPublics/${sourcePackId}`)).catch(() => null)
+    const reconciled = reconciledSnapshot && normalizeContentPack(reconciledSnapshot.val(), [], { packId: sourcePackId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
+    if (reconciled) return { pack: reconciled, outcome: 'existing' }
     console.error('quiz pack copy rejected', { workspaceId, sourcePackId, uid: user.uid, error })
-    throw new Error('Не удалось добавить набор в workspace. Проверьте доступ ведущего и повторите попытку.')
+    throw quizCopyError(error)
   }
 }
 
@@ -948,9 +984,7 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
     } catch (reason) {
       const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code) : ''
       console.error('secure quiz room creation rejected', { roomId, workspaceId, packId: effectiveSelection.selectedPackId, code, reason })
-      throw new Error(code.includes('permission')
-        ? 'Firebase отклонил создание викторины. Проверьте Rules и доступ ведущего.'
-        : 'Не удалось безопасно создать комнату викторины. Повторите попытку.')
+      throw quizRoomError(reason)
     }
   }
   const template = await resolveRoomTemplate(workspaceId, effectiveSelection, mode)

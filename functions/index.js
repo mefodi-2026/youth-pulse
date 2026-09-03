@@ -86,8 +86,13 @@ exports.copyQuizPackToWorkspace = onCall(async request => {
     publicContent: { questions: publicQuestions(sourceQuestions) },
     privateContent: { questions: privateQuestions(sourceQuestions) },
   }
-  await db.ref(`workspaces/${workspaceId}/workspacePacks/${sourcePackId}`).set(copy)
-  await db.ref(`workspaces/${workspaceId}/workspacePackPublics/${sourcePackId}`).set(publicPack(copy))
+  // The private server copy and the leader-facing projection form one
+  // operation. A single multi-location write prevents a transient half-copy
+  // from being interpreted as a successful workspace addition.
+  await db.ref().update({
+    [`workspaces/${workspaceId}/workspacePacks/${sourcePackId}`]: copy,
+    [`workspaces/${workspaceId}/workspacePackPublics/${sourcePackId}`]: publicPack(copy),
+  })
   return { copied: true, packId: sourcePackId }
 })
 

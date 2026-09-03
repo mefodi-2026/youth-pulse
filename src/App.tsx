@@ -315,7 +315,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [systemPacksError, setSystemPacksError] = useState('')
   const [workspacePack, setWorkspacePack] = useState<ContentPack | null>(null)
   const [workspaceQuizPacks, setWorkspaceQuizPacks] = useState<Record<string, ContentPack>>({})
-  const [quizActionError, setQuizActionError] = useState('')
+  const [quizPackActions, setQuizPackActions] = useState<Record<string, { state: 'adding' | 'copied' | 'existing' | 'error'; message?: string }>>({})
+  const copyingQuizPacksRef = useRef(new Set<string>())
   const [questionDraft, setQuestionDraft] = useState({ category: 'communication' as DiagnosticQuestion['category'], title: '', options: ['', '', '', ''] })
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [questionSaving, setQuestionSaving] = useState(false)
@@ -806,17 +807,27 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   let activeSetupValid = true
   try { activeSetupPolicy.validateSelection(activeSetupContext) } catch { activeSetupValid = false }
   const addQuizPack = async (pack: ContentPack) => {
-    setQuizActionError('')
+    if (workspaceQuizPacks[pack.packId]) {
+      setQuizPackActions(previous => ({ ...previous, [pack.packId]: { state: 'existing', message: 'Набор уже добавлен в ваш workspace.' } }))
+      return
+    }
+    if (copyingQuizPacksRef.current.has(pack.packId)) return
+    copyingQuizPacksRef.current.add(pack.packId)
+    setQuizPackActions(previous => ({ ...previous, [pack.packId]: { state: 'adding' } }))
     try {
       const copied = await copyQuizWorkspacePack(leader.workspaceId, pack)
       // The realtime listener will confirm the same value. Updating this
       // local view only after the server write resolves gives instant, honest
       // feedback without pretending a rejected copy succeeded.
-      setWorkspaceQuizPacks(previous => ({ ...previous, [copied.packId]: copied }))
-      setTemplateSelection(workspaceQuizSelection(copied.packId))
+      setWorkspaceQuizPacks(previous => ({ ...previous, [copied.pack.packId]: copied.pack }))
+      setQuizPackActions(previous => ({ ...previous, [pack.packId]: {
+        state: copied.outcome,
+        message: copied.outcome === 'copied' ? 'Набор добавлен в workspace.' : 'Набор уже добавлен в ваш workspace.',
+      } }))
+      setTemplateSelection(workspaceQuizSelection(copied.pack.packId))
     } catch (error) {
-      setQuizActionError(error instanceof Error ? error.message : 'Не удалось добавить набор викторины в workspace.')
-    }
+      setQuizPackActions(previous => ({ ...previous, [pack.packId]: { state: 'error', message: error instanceof Error ? error.message : 'Не удалось добавить набор викторины в workspace.' } }))
+    } finally { copyingQuizPacksRef.current.delete(pack.packId) }
   }
   const displayPackTitle = (value?: string) => {
     const title = value?.trim() || ''
@@ -827,7 +838,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     <h3>Настройте новую комнату</h3>
     <p>Название, формат и ожидаемое число участников сохраняются только в истории и экспорте ведущего.</p>
     <div className="room-pilot-fields">
-      <label>Формат<select value={roomDetails.mode} onChange={event => { const mode = event.target.value as RoomMode; const policy = getModeDefinition(mode).setupPolicy; setRoomDetails(previous => ({ ...previous, mode })); setQuizActionError(''); setScoringTemplateId(policy.defaultScoringTemplateId); const selection = policy.initialSelection(modePackContext(mode)); if (selection) setTemplateSelection(selection) }}><option value="diagnostic">Диагностика</option><option value="quiz">Библейская викторина</option></select></label>
+      <label>Формат<select value={roomDetails.mode} onChange={event => { const mode = event.target.value as RoomMode; const policy = getModeDefinition(mode).setupPolicy; setRoomDetails(previous => ({ ...previous, mode })); setScoringTemplateId(policy.defaultScoringTemplateId); const selection = policy.initialSelection(modePackContext(mode)); if (selection) setTemplateSelection(selection) }}><option value="diagnostic">Диагностика</option><option value="quiz">Библейская викторина</option></select></label>
       <label>Предполагаемое количество участников<select value={roomDetails.estimatedParticipants} onChange={event => setRoomDetails(previous => ({ ...previous, estimatedParticipants: Number(event.target.value) }))}>{[10, 15, 20, 25, 30].map(count => <option value={count} key={count}>{count} участников</option>)}</select></label>
       {roomDetails.mode === 'diagnostic' ? <label>Шаблон подсчёта<select value={scoringTemplateId} onChange={event => setScoringTemplateId(event.target.value as ScoringTemplateId)}><option value="standard-v1">Стандартный: A 3 · B 2 · C 1 · D 0 · пропуск −1</option><option value="strict-v1">Строгий: A 2 · B 1 · C 0 · D −1 · пропуск −2</option></select></label> : <label>Подсчёт ответов<input disabled value="Верный ответ — 1 балл · неверный — 0" /></label>}
     </div>
@@ -850,17 +861,18 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
             <div className="quiz-pack-list">
               {quizSystemPacks.map(pack => {
                 const copied = workspaceQuizPacks[pack.packId]
+                const action = quizPackActions[pack.packId]
                 return <div className={`quiz-pack-row ${selectedQuizWorkspacePack?.packId === pack.packId ? 'selected' : ''}`} key={pack.packId}>
                   <div><b>{displayPackTitle(pack.title)}</b><small>{pack.difficulty === 'easy' ? 'Лёгкий уровень' : pack.difficulty === 'medium' ? 'Средний уровень' : 'Сложный уровень'} · {pack.questions.length} вопросов · v{pack.packVersion}</small></div>
                   {copied
-                    ? <Button secondary onClick={() => setTemplateSelection(workspaceQuizSelection(copied.packId))}>{templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === copied.packId ? 'Добавлено в workspace' : 'Выбрать'}</Button>
-                    : <Button secondary onClick={() => void addQuizPack(pack)}>Добавить в мой workspace</Button>}
+                    ? <Button secondary onClick={() => setTemplateSelection(workspaceQuizSelection(copied.packId))}>{action?.state === 'copied' ? 'Добавлено в workspace' : templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === copied.packId ? 'Выбрано' : 'Уже добавлено'}</Button>
+                    : <Button secondary disabled={action?.state === 'adding'} onClick={() => void addQuizPack(pack)}>{action?.state === 'adding' ? 'Добавляем…' : 'Добавить в мой workspace'}</Button>}
+                  {action?.message && <small className={action.state === 'error' ? 'connection-warning' : 'room-template-hint'}>{action.message}</small>}
                 </div>
               })}
             </div>
             {!!quizWorkspacePacks.length && <div className="quiz-pack-current"><p className="eyebrow">МОИ ДОБАВЛЕННЫЕ НАБОРЫ</p>{quizWorkspacePacks.map(pack => <button type="button" key={pack.packId} className={templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === pack.packId ? 'selected' : ''} onClick={() => setTemplateSelection({ selectedPackId: pack.packId, templateSource: 'workspace' })}>{displayPackTitle(pack.title)} <small>{pack.questions.length} вопросов · v{pack.packVersion}</small></button>)}</div>}
             {selectedQuizWorkspacePack && <p className="room-template-hint">Выбрано: {displayPackTitle(selectedQuizWorkspacePack.title)} · {selectedQuizWorkspacePack.questions.length} вопросов. Комната сохранит независимый snapshot этой версии.</p>}
-            {quizActionError && <p className="connection-warning">{quizActionError}</p>}
           </>}
   </Glass>
   const setupModeManifest = getModeDefinition(roomDetails.mode)
@@ -963,8 +975,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   if (tab === 'quiz') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">РЕЖИМ · ВИКТОРИНА</p><h1>{getModeDefinition(quizMode).title}</h1><p className="room-header-title">{getModeDefinition(quizMode).description}</p></div></header>
     <Glass className="mode-intro"><p className="eyebrow">НОВАЯ ВИКТОРИНА</p><h2>Выберите уровень и начните игру</h2><p>Викторина использует отдельные вопросы, правильные ответы, подсчёт баллов и топ-3. Диагностика не меняется.</p><Button onClick={() => openRoomSetup(quizMode)}>Создать комнату викторины</Button></Glass>
-    <div className="quiz-pack-list">{quizSystemPacks.map(pack => { const copied = workspaceQuizPacks[pack.packId]; return <Glass className="quiz-pack-row" key={pack.packId}><div><p className="eyebrow">{pack.difficulty === 'easy' ? 'ЛЁГКИЙ УРОВЕНЬ' : pack.difficulty === 'medium' ? 'СРЕДНИЙ УРОВЕНЬ' : 'СЛОЖНЫЙ УРОВЕНЬ'}</p><h3>{displayPackTitle(pack.title)}</h3><small>{pack.questions.length} вопросов · версия {pack.packVersion}</small></div>{copied ? <Button secondary onClick={() => setTemplateSelection(workspaceQuizSelection(pack.packId))}>Добавлено в workspace</Button> : <Button secondary onClick={() => void addQuizPack(pack)}>Добавить в мой workspace</Button>}</Glass> })}</div>
-    {quizActionError && <p className="connection-warning">{quizActionError}</p>}{selectedQuizPreview && <Glass className="question-group"><p className="eyebrow">ПРОСМОТР НАБОРА</p><h2>{displayPackTitle(selectedQuizPreview.title)}</h2>{selectedQuizPreview.questions.map((question, index) => <article className="question-row" key={question.id}><div><b>{index + 1}. {question.title}</b><small>{Object.entries(question.options).map(([key, value]) => `${key}: ${value}`).join(' · ')}</small></div></article>)}<small>Набор доступен для просмотра и запуска. Ключи ответов и проверка результатов хранятся только в защищённом серверном слое.</small></Glass>}
+    <div className="quiz-pack-list">{quizSystemPacks.map(pack => { const copied = workspaceQuizPacks[pack.packId]; const action = quizPackActions[pack.packId]; return <Glass className="quiz-pack-row" key={pack.packId}><div><p className="eyebrow">{pack.difficulty === 'easy' ? 'ЛЁГКИЙ УРОВЕНЬ' : pack.difficulty === 'medium' ? 'СРЕДНИЙ УРОВЕНЬ' : 'СЛОЖНЫЙ УРОВЕНЬ'}</p><h3>{displayPackTitle(pack.title)}</h3><small>{pack.questions.length} вопросов · версия {pack.packVersion}</small>{action?.message && <small className={action.state === 'error' ? 'connection-warning' : 'room-template-hint'}>{action.message}</small>}</div>{copied ? <Button secondary onClick={() => setTemplateSelection(workspaceQuizSelection(pack.packId))}>{action?.state === 'copied' ? 'Добавлено в workspace' : 'Уже добавлено'}</Button> : <Button secondary disabled={action?.state === 'adding'} onClick={() => void addQuizPack(pack)}>{action?.state === 'adding' ? 'Добавляем…' : 'Добавить в мой workspace'}</Button>}</Glass> })}</div>
+    {selectedQuizPreview && <Glass className="question-group"><p className="eyebrow">ПРОСМОТР НАБОРА</p><h2>{displayPackTitle(selectedQuizPreview.title)}</h2>{selectedQuizPreview.questions.map((question, index) => <article className="question-row" key={question.id}><div><b>{index + 1}. {question.title}</b><small>{Object.entries(question.options).map(([key, value]) => `${key}: ${value}`).join(' · ')}</small></div></article>)}<small>Набор доступен для просмотра и запуска. Ключи ответов и проверка результатов хранятся только в защищённом серверном слое.</small></Glass>}
   </HostLayout>
   const historyFiltersControl = <Glass className="history-filters"><p className="eyebrow">ФИЛЬТРЫ ИСТОРИИ</p><div><input value={historyFilters.query} onChange={event => setHistoryFilters(previous => ({ ...previous, query: event.target.value }))} placeholder="Комната, молодёжка, город или код" /><select value={historyFilters.mode} onChange={event => setHistoryFilters(previous => ({ ...previous, mode: event.target.value as 'all' | RoomMode }))}><option value="all">Все форматы</option><option value="diagnostic">Диагностика</option><option value="quiz">Викторина</option><option value="wheel">Колесо фортуны</option></select><label>С<input type="date" value={historyFilters.from} onChange={event => setHistoryFilters(previous => ({ ...previous, from: event.target.value }))} /></label><label>По<input type="date" value={historyFilters.to} onChange={event => setHistoryFilters(previous => ({ ...previous, to: event.target.value }))} /></label></div></Glass>
   if (!session && tab === 'rooms') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={lastClosedRoom} session={null} participants={0} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
