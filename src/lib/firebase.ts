@@ -135,7 +135,11 @@ const toParticipantQuestion = (question: Question): ParticipantQuestion => ({
   options: { ...question.options },
 })
 
-const createParticipantQuestionSet = (session: Session): ParticipantQuestionSet => {
+type ParticipantQuestionSetRecord = Omit<ParticipantQuestionSet, 'questions'> & {
+  questions: Record<string, ParticipantQuestion>
+}
+
+const createParticipantQuestionSet = (session: Session): ParticipantQuestionSetRecord => {
   const questionSet = getSessionQuestions(session, builtInQuestions)
   return {
     roomId: session.roomId,
@@ -146,8 +150,20 @@ const createParticipantQuestionSet = (session: Session): ParticipantQuestionSet 
     ...(session.packId ? { packId: session.packId } : {}),
     ...(session.packSnapshot?.title ? { packTitle: session.packSnapshot.title } : {}),
     ...(session.scoringTemplateId ? { scoringTemplateId: session.scoringTemplateId } : {}),
-    questions: questionSet.map(toParticipantQuestion),
+    // RTDB Rules validate each storage key against its immutable `id`. Arrays
+    // become numeric keys (`0`, `1`) in RTDB and therefore cannot pass that
+    // check, even though the data itself is otherwise participant-safe.
+    questions: Object.fromEntries(questionSet.map(question => {
+      const participantQuestion = toParticipantQuestion(question)
+      return [participantQuestion.id, participantQuestion]
+    })),
   }
+}
+
+const normalizeParticipantQuestionSet = (value: unknown): ParticipantQuestionSet | null => {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Omit<ParticipantQuestionSet, 'questions'> & { questions?: ParticipantQuestion[] | Record<string, ParticipantQuestion> }
+  return { ...raw, questions: Array.isArray(raw.questions) ? raw.questions : Object.values(raw.questions || {}) }
 }
 
 const createPilotWorkspaceAccess = (productId: string, ownerUid: string, now: number): WorkspaceProduct => ({
@@ -470,7 +486,7 @@ export const subscribePublicRoom = (roomId: string, callback: (value: PublicRoom
 
 export const subscribeParticipantQuestionSet = (roomId: string, callback: (value: ParticipantQuestionSet | null) => void, onError?: (error: Error) => void) => {
   if (!db || !roomId) return () => undefined
-  return onValue(ref(db, participantQuestionsPath(roomId)), snapshot => callback((snapshot.val() || null) as ParticipantQuestionSet | null), error => onError?.(error))
+  return onValue(ref(db, participantQuestionsPath(roomId)), snapshot => callback(normalizeParticipantQuestionSet(snapshot.val())), error => onError?.(error))
 }
 
 export const subscribeParticipantRecord = (roomId: string, participantId: string, callback: (value: Participant | null) => void, onError?: (error: Error) => void) => {
