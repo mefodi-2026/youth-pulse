@@ -91,12 +91,12 @@ const buildPublishedPack = (pack: ContentPack): ContentPack => {
 const systemDiagnosticPackTitle = 'Проверь себя'
 const normalizePackTitle = (title: unknown) => {
   const value = typeof title === 'string' ? title.trim() : ''
-  return value && !/^\?+$/.test(value) && !/диагностик/i.test(value) ? value : systemDiagnosticPackTitle
+  return value && !/^\?+$/.test(value) && !/диагност/i.test(value) ? value : systemDiagnosticPackTitle
 }
 const defaultPackDescription = 'Интерактивный формат «Проверь себя» для молодёжных групп.'
 const normalizeDiagnosticPackDescription = (description: unknown) => {
   const value = typeof description === 'string' ? description.trim() : ''
-  return value && !/диагностик/i.test(value) ? value : defaultPackDescription
+  return value && !/диагност/i.test(value) ? value : defaultPackDescription
 }
 const normalizePackStatus = (status: unknown): ContentPack['status'] => status === 'draft' || status === 'archived' ? status : 'published'
 
