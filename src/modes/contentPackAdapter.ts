@@ -29,6 +29,6 @@ export const resolveCanonicalPackQuestions = (input: {
 export const normalizeQuestionsForMode = (mode: RoomMode, questions: Question[]): Question[] => {
   if (mode === 'quiz') return questions.map(question => ({ ...question, options: { ...question.options } }))
   const diagnostic = questions.filter(isDiagnosticQuestion)
-  if (diagnostic.length !== questions.length) throw new Error('Диагностический набор содержит вопрос без категории.')
+  if (diagnostic.length !== questions.length) throw new Error('Набор «Проверь себя» содержит вопрос без категории.')
   return orderQuestionsByCategory(diagnostic)
 }

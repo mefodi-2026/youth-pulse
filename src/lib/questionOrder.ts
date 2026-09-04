@@ -12,7 +12,7 @@ const isPositiveInteger = (value: unknown): value is number => typeof value === 
  */
 export const orderQuestionsByCategory = (questionSet: Question[]): DiagnosticQuestion[] => {
   const diagnostic = questionSet.filter((question): question is DiagnosticQuestion => typeof question.category === 'string')
-  if (diagnostic.length !== questionSet.length) throw new Error('Диагностический набор содержит вопрос без категории.')
+  if (diagnostic.length !== questionSet.length) throw new Error('Набор «Проверь себя» содержит вопрос без категории.')
   const indexed = diagnostic.map((question, index) => ({ question, index }))
   const known = diagnosticCategoryOrder.flatMap(category => {
     const group = indexed

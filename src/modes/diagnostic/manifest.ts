@@ -7,10 +7,10 @@ import { diagnosticStatusDescription, diagnosticStatusText } from './presentatio
 export const diagnosticManifest: ModeManifest = {
   id: 'diagnostic',
   mode: 'diagnostic',
-  title: 'Диагностика',
-  description: 'Проведите диагностику атмосферы молодёжи и получите статистику по категориям.',
+  title: 'Проверь себя',
+  description: 'Ответьте на вопросы и получите бережную личную и общую картину по категориям.',
   icon: '✦',
-  menuLabel: 'Диагностика',
+  menuLabel: 'Проверь себя',
   productionMenu: true,
   runtime: diagnosticGameModule,
   setupPolicy: {
@@ -23,7 +23,7 @@ export const diagnosticManifest: ModeManifest = {
       : systemPacks[selection.selectedPackId] || null,
     validateSelection: ({ selection, systemPacks, workspacePacks }) => {
       const pack = selection.templateSource === 'workspace' ? workspacePacks[selection.selectedPackId] : systemPacks[selection.selectedPackId]
-      if (!pack) throw new Error('Опубликованный диагностический набор пока недоступен. Обновите страницу и попробуйте снова.')
+      if (!pack) throw new Error('Опубликованный набор «Проверь себя» пока недоступен. Обновите страницу и попробуйте снова.')
     },
   },
   participantScreen: DiagnosticParticipantQuestionScreen,

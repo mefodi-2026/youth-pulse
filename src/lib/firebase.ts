@@ -36,8 +36,8 @@ const legacyDiagnosticProductId = 'diagnostic'
 export const platformProductDefaults: Record<string, ProductConfig> = {
   [diagnosticProductId]: {
     productId: diagnosticProductId,
-    name: 'Диагностика атмосферы',
-    description: 'Интерактивная диагностика для молодёжных групп.',
+    name: 'Проверь себя',
+    description: 'Интерактивный формат «Проверь себя» для молодёжных групп.',
     type: 'diagnostic',
     status: 'enabled',
     version: 1,
@@ -88,12 +88,12 @@ const buildPublishedPack = (pack: ContentPack): ContentPack => {
     publicContent: { questions: toParticipantQuestions(pack.content.questions) },
   }
 }
-const systemDiagnosticPackTitle = 'Диагностика атмосферы молодёжи'
+const systemDiagnosticPackTitle = 'Проверь себя'
 const normalizePackTitle = (title: unknown) => {
   const value = typeof title === 'string' ? title.trim() : ''
   return value && !/^\?+$/.test(value) ? value : systemDiagnosticPackTitle
 }
-const defaultPackDescription = 'Интерактивная диагностика для молодёжных групп.'
+const defaultPackDescription = 'Интерактивный формат «Проверь себя» для молодёжных групп.'
 const normalizePackStatus = (status: unknown): ContentPack['status'] => status === 'draft' || status === 'archived' ? status : 'published'
 
 /**
@@ -777,6 +777,11 @@ export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
   const now = Date.now()
   const existingSnapshot = await get(ref(services.db, `globalPacks/${draft.packId}`))
   const existing = normalizeContentPack(existingSnapshot.val(), builtInQuestions, { packId: draft.packId, templateOrigin: 'system' })
+  const editingUnavailable = 'Редактирование вопросов будет доступно после выпуска полноценного приложения.'
+  if (!existing) throw new Error(editingUnavailable)
+  const existingQuestions = existing.questions?.length ? existing.questions : existing.content.questions
+  const draftQuestions = draft.questions?.length ? draft.questions : draft.content.questions
+  if (JSON.stringify(existingQuestions) !== JSON.stringify(draftQuestions)) throw new Error(editingUnavailable)
   const nextVersion = Math.max(1, (existing?.version || existing?.packVersion || 0) + 1)
   const isQuiz = draft.mode === 'quiz' || draft.gameTypeId === quizGameTypeId || draft.productId === quizProductId
   const orderedQuestions = copyQuestions(isQuiz ? draft.content.questions : orderQuestionsByCategory(draft.content.questions))
@@ -1156,7 +1161,7 @@ export const updateSessionPilotCounts = async (roomId: string, expectedHostUid?:
 /** The title is editable only while the room is still waiting for participants. */
 export const updateRoomTitle = async (roomId: string, roomTitle: string, expectedHostUid?: string) => {
   const services = await assertCurrentUserIsRoomHost(roomId, expectedHostUid)
-  if (services.session.phase !== 'lobby') throw new Error('После запуска диагностики название комнаты изменить нельзя.')
+  if (services.session.phase !== 'lobby') throw new Error('После запуска режима название комнаты изменить нельзя.')
   const cleanTitle = roomTitle.trim().slice(0, 80)
   if (!cleanTitle) throw new Error('Введите название комнаты.')
   await ensureParticipantRoomData(roomId, services.session)
@@ -1185,41 +1190,8 @@ export const subscribeSessionArchives = (workspaceId: string, callback: (value: 
   return onValue(ref(db, `workspaceArchives/${workspaceId}`), snapshot => callback((snapshot.val() || {}) as Record<string, SessionArchive>), error => onError?.(error))
 }
 
-export const saveWorkspacePack = async (workspaceId: string, questionSet: Question[], title = 'Диагностика атмосферы молодёжи') => {
-  const services = requireFirebase()
-  await authPersistence
-  const user = services.auth.currentUser
-  if (!user || user.isAnonymous) throw new Error('Для сохранения вопросов войдите в аккаунт ведущего.')
-  if (!workspaceId) throw new Error('Не найдено рабочее пространство ведущего.')
-  // Canonical personal-pack path. The legacy root remains read-only fallback.
-  const packPath = `workspaces/${workspaceId}/workspacePacks/${diagnosticPackId}`
-  const currentSnapshot = await get(ref(services.db, packPath))
-  const current = normalizeContentPack(currentSnapshot.val(), builtInQuestions, { workspaceId, packId: diagnosticPackId, templateOrigin: 'workspace' })
-  const now = Date.now()
-  const pack: ContentPack = {
-    productId: diagnosticProductId,
-    gameTypeId: diagnosticGameTypeId,
-    mode: 'diagnostic',
-    packId: diagnosticPackId,
-    version: Math.max(diagnosticPackVersion, (current?.version || current?.packVersion || diagnosticPackVersion - 1) + 1),
-    packVersion: Math.max(diagnosticPackVersion, (current?.version || current?.packVersion || diagnosticPackVersion - 1) + 1),
-    status: 'published',
-    sourcePackId: current?.sourcePackId || diagnosticPackId,
-    templateOrigin: 'workspace',
-    workspaceId,
-    title: current?.title || title,
-    description: current?.description || defaultPackDescription,
-    questions: copyQuestions(orderQuestionsByCategory(questionSet)),
-    content: { questions: copyQuestions(orderQuestionsByCategory(questionSet)) },
-    settings: copySettings(current?.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
-    ruleConfig: diagnosticGameModule.normalizeRuleConfig(current?.ruleConfig),
-    contentSchemaVersion: current?.contentSchemaVersion || diagnosticGameModule.contentSchemaVersion,
-    createdAt: current?.createdAt || now,
-    updatedAt: now,
-    createdBy: current?.createdBy || user.uid,
-  }
-  await set(ref(services.db, packPath), pack)
-  return pack
+export const saveWorkspacePack = async (_workspaceId: string, _questionSet: Question[], _title = 'Проверь себя') => {
+  throw new Error('Редактирование вопросов будет доступно после выпуска полноценного приложения.')
 }
 
 export const saveSessionQuestions = async (roomId: string, questionSet: Question[]) => {
@@ -1243,7 +1215,7 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
   ])
   const publicRoom = publicSnapshot.val() as PublicRoom | null
   if (!publicRoom) throw new Error('Безопасные данные комнаты ещё не подготовлены. Попросите ведущего обновить комнату.')
-  if (publicRoom.phase !== 'live') throw new Error(publicRoom.phase === 'closed' ? 'Сессия завершена ведущим. Ответы больше не принимаются.' : 'Диагностика ещё не запущена.')
+  if (publicRoom.phase !== 'live') throw new Error(publicRoom.phase === 'closed' ? 'Сессия завершена ведущим. Ответы больше не принимаются.' : 'Режим ещё не запущен.')
   const storedParticipant = participantSnapshot.val() as Participant | null
   if (!storedParticipant) throw new Error('Участник не найден в комнате. Подключитесь заново.')
   if (storedParticipant.id !== currentUser.uid) throw new Error('Participant record does not belong to the current Firebase user.')

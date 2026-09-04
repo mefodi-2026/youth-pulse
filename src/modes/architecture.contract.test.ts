@@ -27,9 +27,9 @@ assert(Boolean(wheel.setupScreen && wheel.participantFlow && wheel.hostScreen &&
 const diagnosticLiveStatus = diagnostic.statusText({ phase: 'live', wheel: undefined })
 const quizLiveStatus = quiz.statusText({ phase: 'live', wheel: undefined })
 const wheelLiveStatus = wheel.statusText({ phase: 'live', wheel: { phase: 'ready' } } as never)
-assert(diagnosticLiveStatus.includes('Диагностика') && !diagnosticLiveStatus.includes('Викторина') && !diagnosticLiveStatus.includes('Колесо'), 'diagnostic copy must stay diagnostic-only')
-assert(quizLiveStatus.includes('Викторина') && !quizLiveStatus.includes('Диагностика') && !quizLiveStatus.includes('Колесо'), 'quiz copy must stay quiz-only')
-assert(wheelLiveStatus.includes('вращению') && !wheelLiveStatus.includes('Диагностика') && !wheelLiveStatus.includes('Викторина'), 'wheel copy must stay wheel-only')
+assert(diagnosticLiveStatus.includes('Проверь себя') && !diagnosticLiveStatus.includes('Викторина') && !diagnosticLiveStatus.includes('Колесо'), 'diagnostic copy must stay diagnostic-only')
+assert(quizLiveStatus.includes('Викторина') && !quizLiveStatus.includes('Проверь себя') && !quizLiveStatus.includes('Колесо'), 'quiz copy must stay quiz-only')
+assert(wheelLiveStatus.includes('вращению') && !wheelLiveStatus.includes('Проверь себя') && !wheelLiveStatus.includes('Викторина'), 'wheel copy must stay wheel-only')
 
 const legacySession = { questions: diagnosticQuestions.slice(0, 3), gameTypeId: 'diagnostic' as const }
 assert(diagnostic.runtime.getQuestions(legacySession, diagnosticQuestions).length === 3, 'legacy room questions must not fall back to 70')
