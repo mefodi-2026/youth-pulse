@@ -6,26 +6,46 @@
  */
 @media (min-width: 981px) {
   :root {
-    /* Brand primitives */
-    --ds-emerald-night: #092F2A;
-    --ds-emerald: #126657;
-    --ds-gold: #D6A84B;
-    --ds-milk: #F3E7CF;
+    /* GeoFlow brand primitives */
+    --ds-geoflow-background: #172126;
+    --ds-geoflow-primary: #029036;
+    --ds-geoflow-accent: #41F182;
+    --ds-geoflow-green: #33D66F;
+    --ds-geoflow-yellow: #FAD20C;
+    --ds-geoflow-white: #FFFFFF;
 
     /* Semantic roles */
-    --ds-page: var(--ds-emerald-night);
-    --ds-surface: rgba(18, 102, 87, .78);
-    --ds-surface-raised: rgba(18, 102, 87, .94);
-    --ds-surface-subtle: rgba(18, 102, 87, .48);
-    --ds-text: var(--ds-milk);
-    --ds-text-muted: rgba(243, 231, 207, .72);
-    --ds-text-faint: rgba(243, 231, 207, .52);
-    --ds-border: rgba(243, 231, 207, .18);
-    --ds-border-strong: rgba(243, 231, 207, .3);
-    --ds-focus: var(--ds-gold);
+    --ds-background: var(--ds-geoflow-background);
+    --ds-surface: rgba(255, 255, 255, .08);
+    --ds-surface-elevated: rgba(255, 255, 255, .12);
+    --ds-surface-subtle: rgba(255, 255, 255, .055);
+    --ds-primary: var(--ds-geoflow-primary);
+    --ds-primary-hover: var(--ds-geoflow-green);
+    --ds-accent: var(--ds-geoflow-accent);
+    --ds-success: var(--ds-geoflow-green);
+    --ds-warning: var(--ds-geoflow-yellow);
+    --ds-danger: var(--ds-geoflow-yellow);
+    --ds-text: var(--ds-geoflow-white);
+    --ds-text-muted: rgba(255, 255, 255, .7);
+    --ds-text-faint: rgba(255, 255, 255, .46);
+    --ds-border: rgba(255, 255, 255, .15);
+    --ds-border-strong: rgba(255, 255, 255, .26);
+    --ds-focus: var(--ds-warning);
     --ds-shadow-sm: 0 8px 24px rgba(0, 0, 0, .14);
     --ds-shadow-md: 0 18px 54px rgba(0, 0, 0, .2);
     --ds-shadow-lg: 0 28px 90px rgba(0, 0, 0, .24);
+    --ds-sidebar: rgba(23, 33, 38, .96);
+    --ds-nav-hover: rgba(2, 144, 54, .24);
+    --ds-room: rgba(2, 144, 54, .18);
+    --ds-border-inset: rgba(255, 255, 255, .08);
+    --ds-accent-border: rgba(250, 210, 12, .58);
+    --ds-hero: linear-gradient(145deg, rgba(2, 144, 54, .94), rgba(23, 33, 38, .96));
+    --ds-accent-glow: radial-gradient(circle, rgba(65, 241, 130, .2), transparent 68%);
+    --ds-feature: rgba(255, 255, 255, .06);
+    --ds-input: rgba(23, 33, 38, .82);
+    --ds-focus-ring: rgba(250, 210, 12, .16);
+    --ds-page-gradient: radial-gradient(800px 420px at 88% -8%, rgba(2, 144, 54, .3), transparent 65%), var(--ds-background);
+    --ds-progress-track: rgba(255, 255, 255, .12);
 
     /* Type scale */
     --ds-font-sans: Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -58,17 +78,18 @@
     --ds-radius-pill: 999px;
 
     /* Backward-compatible aliases used by the existing desktop styles */
-    --ink: var(--ds-page);
+    --ds-page: var(--ds-background);
+    --ink: var(--ds-background);
     --surface: var(--ds-surface);
-    --surface-strong: var(--ds-surface-raised);
+    --surface-strong: var(--ds-surface-elevated);
     --line: var(--ds-border);
     --text: var(--ds-text);
     --muted: var(--ds-text-muted);
-    --mint: var(--ds-gold);
-    --gold: var(--ds-gold);
+    --mint: var(--ds-accent);
+    --gold: var(--ds-warning);
     font-family: var(--ds-font-sans);
     color: var(--ds-text);
-    background: var(--ds-page);
+    background: var(--ds-background);
   }
 
   html,
@@ -117,7 +138,7 @@
   }
 
   .eyebrow {
-    color: var(--ds-gold);
+    color: var(--ds-warning);
     font-size: var(--ds-text-label);
     font-weight: 750;
     letter-spacing: .12em;
@@ -129,7 +150,7 @@
     border: 1px solid var(--ds-border);
     border-radius: var(--ds-radius-lg);
     background: var(--ds-surface);
-    box-shadow: inset 0 1px 0 rgba(243, 231, 207, .05), var(--ds-shadow-md);
+    box-shadow: inset 0 1px 0 var(--ds-border-inset), var(--ds-shadow-md);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
   }
@@ -139,8 +160,8 @@
     min-height: 48px;
     border-radius: var(--ds-radius-md);
     padding: 0 var(--ds-space-6);
-    background: var(--ds-gold);
-    color: var(--ds-emerald-night);
+    background: var(--ds-accent);
+    color: var(--ds-background);
     font-size: .875rem;
     font-weight: 750;
     letter-spacing: -.01em;
@@ -156,16 +177,21 @@
   .button.secondary,
   .ds-button.secondary {
     color: var(--ds-text);
-    background: var(--ds-emerald);
+    background: var(--ds-primary);
     border: 1px solid var(--ds-border);
     box-shadow: none;
   }
 
+  .button.secondary:hover:not(:disabled),
+  .ds-button.secondary:hover:not(:disabled) {
+    background: var(--ds-primary-hover);
+  }
+
   .button.danger,
   .ds-button.danger {
-    color: var(--ds-gold);
+    color: var(--ds-warning);
     background: transparent;
-    border: 1px solid rgba(214, 168, 75, .52);
+    border: 1px solid var(--ds-danger);
     box-shadow: none;
   }
 
@@ -185,8 +211,8 @@
     min-height: 32px;
     border-radius: var(--ds-radius-pill);
     padding: 0 var(--ds-space-4);
-    color: var(--ds-emerald-night);
-    background: var(--ds-gold);
+    color: var(--ds-background);
+    background: var(--ds-accent);
     font-size: var(--ds-text-label);
     font-weight: 800;
     letter-spacing: .08em;
@@ -196,12 +222,12 @@
   .stage-ready,
   .ds-status-muted {
     color: var(--ds-text);
-    background: var(--ds-emerald);
+    background: var(--ds-primary);
   }
 
   .ds-status-accent {
-    color: var(--ds-emerald-night);
-    background: var(--ds-gold);
+    color: var(--ds-background);
+    background: var(--ds-accent);
   }
 
   .ds-page-header {
@@ -234,7 +260,7 @@
     flex: 0 0 20px;
     width: 20px;
     height: 20px;
-    color: var(--ds-gold);
+    color: var(--ds-warning);
     font-size: 1rem;
     line-height: 1;
   }
@@ -242,13 +268,13 @@
   /* Host shell: keep the existing route tree, tighten the desktop frame. */
   .host-shell {
     grid-template-columns: 264px minmax(0, 1fr);
-    background: var(--ds-page);
+    background: var(--ds-background);
   }
 
   .host-menu {
     padding: var(--ds-space-8) var(--ds-space-4);
     border-right: 1px solid var(--ds-border);
-    background: rgba(9, 47, 42, .94);
+    background: var(--ds-sidebar);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
   }
@@ -259,7 +285,7 @@
 
   .brand span,
   .host-menu nav span {
-    color: var(--ds-gold);
+    color: var(--ds-warning);
   }
 
   .host-menu nav {
@@ -274,18 +300,18 @@
 
   .host-menu nav button:hover {
     color: var(--ds-text);
-    background: rgba(18, 102, 87, .62);
+    background: var(--ds-nav-hover);
   }
 
   .host-menu nav button.selected {
     color: var(--ds-text);
-    background: var(--ds-emerald);
-    box-shadow: inset 0 0 0 1px rgba(243, 231, 207, .12);
+    background: var(--ds-primary);
+    box-shadow: inset 0 0 0 1px var(--ds-border-inset);
   }
 
   .menu-room {
     border-radius: var(--ds-radius-md);
-    background: rgba(18, 102, 87, .48);
+    background: var(--ds-room);
   }
 
   .host-content {
@@ -319,23 +345,23 @@
   .home-visual {
     min-height: 620px;
     border-radius: var(--ds-radius-xl);
-    background: linear-gradient(145deg, rgba(18, 102, 87, .94), rgba(9, 47, 42, .94));
+    background: var(--ds-hero);
     box-shadow: var(--ds-shadow-lg);
   }
 
   .landing-visual-glow {
-    background: radial-gradient(circle, rgba(214, 168, 75, .18), transparent 68%);
+    background: var(--ds-accent-glow);
   }
 
   .landing-feature-list article {
     border-color: var(--ds-border);
-    background: rgba(9, 47, 42, .32);
+    background: var(--ds-feature);
     border-radius: var(--ds-radius-md);
     padding: var(--ds-space-4);
   }
 
   .landing-feature-list article > span {
-    color: var(--ds-gold);
+    color: var(--ds-warning);
   }
 
   .landing-feature-list article b {
@@ -351,7 +377,7 @@
   }
 
   .landing-orbit strong {
-    color: var(--ds-gold);
+    color: var(--ds-warning);
   }
 
   .home-steps {
@@ -372,8 +398,8 @@
   }
 
   .home-steps article > b {
-    color: var(--ds-emerald-night);
-    background: var(--ds-gold);
+    color: var(--ds-background);
+    background: var(--ds-accent);
   }
 
   .home-steps article h3 {
@@ -486,7 +512,7 @@
   .stage-hero-copy strong,
   .stage-ring b,
   .big-score b {
-    color: var(--ds-gold);
+    color: var(--ds-warning);
   }
 
   .overview-grid,
@@ -527,7 +553,7 @@
   .question-editor select {
     border-color: var(--ds-border);
     border-radius: var(--ds-radius-md);
-    background: rgba(9, 47, 42, .62);
+    background: var(--ds-input);
     color: var(--ds-text);
   }
 
@@ -536,8 +562,8 @@
   .room-title-input input:focus,
   .question-editor input:focus,
   .question-editor select:focus {
-    border-color: var(--ds-gold);
-    box-shadow: 0 0 0 4px rgba(214, 168, 75, .12);
+    border-color: var(--ds-warning);
+    box-shadow: 0 0 0 4px var(--ds-focus-ring);
   }
 
   .question-row,
@@ -550,7 +576,7 @@
   .question-row-actions button,
   .connection-warning,
   .notice {
-    color: var(--ds-gold) !important;
+    color: var(--ds-warning) !important;
   }
 
   .stage-dashboard,
@@ -558,7 +584,7 @@
   .results,
   .auth-page,
   .host-page {
-    background: radial-gradient(800px 420px at 88% -8%, rgba(18, 102, 87, .34), transparent 65%), var(--ds-page);
+    background: var(--ds-page-gradient);
   }
 
   .stage-hero-card,
@@ -574,20 +600,20 @@
   .progress,
   .result-bars i,
   .score-list i {
-    background: rgba(9, 47, 42, .72);
+    background: var(--ds-progress-track);
   }
 
   .stage-progress-track i,
   .progress i,
   .result-bars em,
   .score-list em {
-    background: var(--ds-gold);
+    background: var(--ds-accent);
     box-shadow: none;
   }
 
   .stage-spinner,
   .result-loader i {
-    border-top-color: var(--ds-gold);
+    border-top-color: var(--ds-accent);
   }
 
   .auth-card {
@@ -596,7 +622,7 @@
   }
 
   .owner-shell {
-    background: var(--ds-page);
+    background: var(--ds-background);
   }
 
   .owner-sidebar,
@@ -618,7 +644,293 @@
 
   .owner-nav button.active,
   .owner-nav button:hover {
-    background: var(--ds-emerald);
+    background: var(--ds-primary);
     color: var(--ds-text);
+  }
+
+  /* GeoFlow color bridge for legacy desktop selectors. No layout rules live here. */
+  .host-shell,
+  .owner-shell,
+  .stage-dashboard,
+  .stage,
+  .results,
+  .auth-page,
+  .host-page,
+  .landing,
+  .landing-product {
+    background: var(--ds-page-gradient);
+    color: var(--ds-text);
+  }
+
+  .host-menu,
+  .owner-sidebar {
+    background: var(--ds-sidebar);
+    border-color: var(--ds-border);
+  }
+
+  .host-menu-toggle {
+    border-color: var(--ds-border);
+    color: var(--ds-text);
+    background: var(--ds-surface-elevated);
+    box-shadow: var(--ds-shadow-sm);
+  }
+
+  .host-menu-toggle:hover {
+    background: var(--ds-nav-hover);
+  }
+
+  .landing-owner-login {
+    border-color: var(--ds-border);
+    color: var(--ds-text-muted);
+    background: var(--ds-surface);
+  }
+
+  .landing-owner-login:hover {
+    color: var(--ds-text);
+    border-color: var(--ds-border-strong);
+    background: var(--ds-nav-hover);
+  }
+
+  .stage-light,
+  .landing-visual-glow {
+    background: var(--ds-accent-glow);
+  }
+
+  .stage-hero-card,
+  .stage-result-control,
+  .stage-stat,
+  .stage-ring,
+  .result-board,
+  .owner-sidebar-foot,
+  .leader-detail,
+  .pack-editor,
+  .owner-note,
+  .owner-error,
+  .owner-table-card,
+  .owner-session-card,
+  .owner-feedback-card,
+  .product-editor,
+  .closed-room-panel {
+    border-color: var(--ds-border);
+    background: var(--ds-surface);
+    box-shadow: var(--ds-shadow-md);
+  }
+
+  .stage-hero-card,
+  .stage-result-control.is-ready {
+    background: var(--ds-hero);
+  }
+
+  .stage-live,
+  .status,
+  .ds-status-accent,
+  .completion-mark {
+    color: var(--ds-background);
+    background: var(--ds-accent);
+  }
+
+  .stage-ready,
+  .status.demo,
+  .ds-status-muted {
+    color: var(--ds-background);
+    background: var(--ds-warning);
+  }
+
+  .stage-progress-track,
+  .progress,
+  .result-bars i,
+  .score-list i {
+    background: var(--ds-progress-track);
+  }
+
+  .stage-progress-track i,
+  .progress i,
+  .result-bars em,
+  .score-list em {
+    background: var(--ds-accent);
+    box-shadow: none;
+  }
+
+  .stage-results-button {
+    border-color: var(--ds-border);
+    color: var(--ds-text-muted);
+    background: var(--ds-surface-elevated);
+  }
+
+  .stage-result-control.is-ready .stage-results-button {
+    color: var(--ds-background);
+    background: var(--ds-accent);
+    box-shadow: var(--ds-shadow-sm);
+  }
+
+  .owner-nav button.active,
+  .owner-nav button:hover,
+  .owner-sidebar nav button:hover,
+  .owner-sidebar nav button.selected {
+    border-color: var(--ds-border);
+    background: var(--ds-primary);
+    color: var(--ds-text);
+  }
+
+  .owner-metrics b,
+  .owner-status.active,
+  .owner-status.product-enabled {
+    color: var(--ds-background);
+    background: var(--ds-success);
+  }
+
+  .owner-status.pending,
+  .owner-status.product-maintenance {
+    color: var(--ds-background);
+    background: var(--ds-warning);
+  }
+
+  .owner-status.paused,
+  .owner-status.revoked,
+  .owner-status.product-testing,
+  .owner-status.product-disabled,
+  .owner-error,
+  .owner-button.danger {
+    color: var(--ds-text);
+    border-color: var(--ds-accent-border);
+    background: var(--ds-surface-elevated);
+  }
+
+  .owner-table th,
+  .owner-table td {
+    border-color: var(--ds-border);
+  }
+
+  .owner-table tbody tr:hover,
+  .owner-table tbody tr.selected {
+    background: var(--ds-nav-hover);
+  }
+
+  .settings-panel input,
+  .auth-form input,
+  .room-title-input input,
+  .room-pilot input,
+  .room-pilot select,
+  .question-editor input,
+  .question-editor select,
+  .pack-editor input,
+  .pack-editor select,
+  .owner-filters input,
+  .owner-filters select,
+  .owner-question-add input,
+  .owner-question-add select,
+  .product-fields input,
+  .product-fields select,
+  .product-fields textarea,
+  .wheel-setup input,
+  .wheel-host-input input,
+  .wheel-host-input textarea {
+    border-color: var(--ds-border);
+    background: var(--ds-input);
+    color: var(--ds-text);
+  }
+
+  .settings-panel input:focus,
+  .auth-form input:focus,
+  .room-title-input input:focus,
+  .question-editor input:focus,
+  .question-editor select:focus,
+  .pack-editor input:focus,
+  .pack-editor select:focus,
+  .owner-filters input:focus,
+  .owner-filters select:focus,
+  .owner-question-add input:focus,
+  .owner-question-add select:focus,
+  .product-fields input:focus,
+  .product-fields select:focus,
+  .product-fields textarea:focus,
+  .wheel-setup input:focus,
+  .wheel-host-input input:focus,
+  .wheel-host-input textarea:focus {
+    border-color: var(--ds-focus);
+    box-shadow: 0 0 0 4px var(--ds-focus-ring);
+  }
+
+  .wheel-setup,
+  .wheel-host-input > div,
+  .wheel-pool,
+  .wheel-active-list,
+  .wheel-round-card,
+  .wheel-game-panel,
+  .wheel-live-stats span,
+  .wheel-pending,
+  .wheel-pending li,
+  .wheel-history li,
+  .wheel-pair article,
+  .wheel-performing-card,
+  .wheel-reveal-card {
+    border-color: var(--ds-border);
+    background: var(--ds-surface);
+    color: var(--ds-text);
+  }
+
+  .wheel-setup fieldset button,
+  .wheel-pool li,
+  .wheel-pool footer,
+  .wheel-round-card > div {
+    border-color: var(--ds-border);
+    background: var(--ds-surface-subtle);
+  }
+
+  .wheel-setup fieldset button.selected,
+  .wheel-pool > div > b,
+  .wheel-history li > b {
+    border-color: var(--ds-primary);
+    color: var(--ds-background);
+    background: var(--ds-accent);
+  }
+
+  .wheel-end-button,
+  .wheel-reveal-card,
+  .wheel-performing-card {
+    border-color: var(--ds-warning);
+  }
+
+  .fortune-wheel-rim {
+    fill: var(--ds-surface-elevated);
+    stroke: var(--ds-border-strong);
+  }
+
+  .fortune-wheel-disc path {
+    stroke: var(--ds-geoflow-white);
+  }
+
+  .fortune-wheel-disc text {
+    fill: var(--ds-background);
+  }
+
+  .fortune-wheel-hub-outer {
+    fill: var(--ds-text);
+    stroke: var(--ds-warning);
+  }
+
+  .fortune-wheel-hub {
+    fill: var(--ds-primary);
+    stroke: var(--ds-accent);
+  }
+
+  .fortune-wheel-pointer,
+  .fortune-wheel-pointer.is-task {
+    border-top-color: var(--ds-warning);
+  }
+
+  .fortune-wheel-pointer::after,
+  .fortune-wheel-pointer.is-task::after {
+    background: linear-gradient(90deg, var(--ds-primary), var(--ds-accent));
+  }
+
+  .app-modal {
+    background: rgba(23, 33, 38, .82);
+  }
+
+  .app-modal-dialog {
+    border-color: var(--ds-warning);
+    background: var(--ds-hero);
+    box-shadow: var(--ds-shadow-lg);
   }
 }
