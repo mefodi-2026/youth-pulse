@@ -12,6 +12,9 @@
     --ds-geoflow-accent: #41F182;
     --ds-geoflow-green: #33D66F;
     --ds-geoflow-yellow: #FAD20C;
+    --ds-geoflow-deep-emerald: #123F38;
+    --ds-geoflow-calm-emerald: #1B5148;
+    --ds-geoflow-muted-gold: #A98D55;
     --ds-geoflow-white: #FFFFFF;
 
     /* Semantic roles */
@@ -20,11 +23,11 @@
     --ds-surface-elevated: rgba(255, 255, 255, .12);
     --ds-surface-subtle: rgba(255, 255, 255, .055);
     --ds-primary: var(--ds-geoflow-primary);
-    --ds-primary-hover: var(--ds-geoflow-green);
+    --ds-primary-hover: var(--ds-geoflow-calm-emerald);
     --ds-accent: var(--ds-geoflow-accent);
-    --ds-success: var(--ds-geoflow-green);
-    --ds-warning: var(--ds-geoflow-yellow);
-    --ds-danger: var(--ds-geoflow-yellow);
+    --ds-success: var(--ds-geoflow-calm-emerald);
+    --ds-warning: var(--ds-geoflow-muted-gold);
+    --ds-danger: var(--ds-geoflow-muted-gold);
     --ds-text: var(--ds-geoflow-white);
     --ds-text-muted: rgba(255, 255, 255, .7);
     --ds-text-faint: rgba(255, 255, 255, .46);
@@ -35,16 +38,16 @@
     --ds-shadow-md: 0 18px 54px rgba(0, 0, 0, .2);
     --ds-shadow-lg: 0 28px 90px rgba(0, 0, 0, .24);
     --ds-sidebar: rgba(23, 33, 38, .96);
-    --ds-nav-hover: rgba(2, 144, 54, .24);
-    --ds-room: rgba(2, 144, 54, .18);
+    --ds-nav-hover: rgba(27, 81, 72, .42);
+    --ds-room: rgba(27, 81, 72, .3);
     --ds-border-inset: rgba(255, 255, 255, .08);
-    --ds-accent-border: rgba(250, 210, 12, .58);
-    --ds-hero: linear-gradient(145deg, rgba(2, 144, 54, .94), rgba(23, 33, 38, .96));
-    --ds-accent-glow: radial-gradient(circle, rgba(65, 241, 130, .2), transparent 68%);
+    --ds-accent-border: rgba(169, 141, 85, .58);
+    --ds-hero: linear-gradient(145deg, #123F38, #1B5148);
+    --ds-accent-glow: radial-gradient(circle, rgba(27, 81, 72, .28), transparent 68%);
     --ds-feature: rgba(255, 255, 255, .06);
-    --ds-input: rgba(23, 33, 38, .82);
-    --ds-focus-ring: rgba(250, 210, 12, .16);
-    --ds-page-gradient: radial-gradient(800px 420px at 88% -8%, rgba(2, 144, 54, .3), transparent 65%), var(--ds-background);
+    --ds-input: rgba(18, 63, 56, .58);
+    --ds-focus-ring: rgba(169, 141, 85, .16);
+    --ds-page-gradient: radial-gradient(800px 420px at 88% -8%, rgba(27, 81, 72, .26), transparent 65%), var(--ds-background);
     --ds-progress-track: rgba(255, 255, 255, .12);
 
     /* Type scale */
@@ -160,8 +163,8 @@
     min-height: 48px;
     border-radius: var(--ds-radius-md);
     padding: 0 var(--ds-space-6);
-    background: var(--ds-accent);
-    color: var(--ds-background);
+    background: var(--ds-geoflow-deep-emerald);
+    color: var(--ds-text);
     font-size: .875rem;
     font-weight: 750;
     letter-spacing: -.01em;
@@ -170,6 +173,7 @@
 
   .button:hover:not(:disabled),
   .ds-button:hover:not(:disabled) {
+    background: var(--ds-primary-hover);
     filter: brightness(1.05);
     transform: translateY(-1px);
   }
@@ -177,7 +181,7 @@
   .button.secondary,
   .ds-button.secondary {
     color: var(--ds-text);
-    background: var(--ds-primary);
+    background: var(--ds-geoflow-deep-emerald);
     border: 1px solid var(--ds-border);
     box-shadow: none;
   }
@@ -222,7 +226,7 @@
   .stage-ready,
   .ds-status-muted {
     color: var(--ds-text);
-    background: var(--ds-primary);
+    background: var(--ds-geoflow-calm-emerald);
   }
 
   .ds-status-accent {
@@ -305,7 +309,7 @@
 
   .host-menu nav button.selected {
     color: var(--ds-text);
-    background: var(--ds-primary);
+    background: var(--ds-geoflow-calm-emerald);
     box-shadow: inset 0 0 0 1px var(--ds-border-inset);
   }
 
@@ -644,7 +648,7 @@
 
   .owner-nav button.active,
   .owner-nav button:hover {
-    background: var(--ds-primary);
+    background: var(--ds-geoflow-calm-emerald);
     color: var(--ds-text);
   }
 
@@ -758,8 +762,8 @@
   }
 
   .stage-result-control.is-ready .stage-results-button {
-    color: var(--ds-background);
-    background: var(--ds-accent);
+    color: var(--ds-text);
+    background: var(--ds-geoflow-calm-emerald);
     box-shadow: var(--ds-shadow-sm);
   }
 
@@ -768,7 +772,7 @@
   .owner-sidebar nav button:hover,
   .owner-sidebar nav button.selected {
     border-color: var(--ds-border);
-    background: var(--ds-primary);
+    background: var(--ds-geoflow-calm-emerald);
     color: var(--ds-text);
   }
 
