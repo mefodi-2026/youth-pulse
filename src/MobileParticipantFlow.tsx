@@ -1,30 +1,37 @@
 import { useEffect, useState } from 'react'
 import { categories, questions } from './data/questions'
 import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeParticipantQuestionSet, subscribeParticipantQuizResult, subscribeParticipantRecord, subscribePublicRoom, subscribeRoomLobby, waitForAuthPersistence } from './repositories/firebaseRepository'
-import { getGameModule } from './lib/gameRegistry'
-import { getModeManifest } from './modes/modeRegistry'
+import { type ModeManifest } from './modes/modeRegistry'
+import { resolveLegacyParticipantRoomMode, resolveParticipantRoomMode } from './modes/participantRouting'
 import { downloadWishPng, printWish } from './lib/export'
-import { type Answer, type Participant, type ParticipantQuestionSet, type ParticipantQuizResult, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type Scores, type Session } from './types'
+import { type Answer, type Participant, type ParticipantQuestionSet, type ParticipantQuizResult, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type RoomMode, type Scores, type Session } from './types'
 import { isSessionExpired } from './core/sessionLifecycle'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
 const setDemo = (session: Session) => { localStorage.setItem(demoKey(session.roomId), JSON.stringify(session)); window.dispatchEvent(new StorageEvent('storage', { key: demoKey(session.roomId) })) }
 
-function useParticipantSession(room: string, participantId?: string) {
+function useParticipantSession(room: string, participantId: string | undefined, mode: Exclude<RoomMode, 'wheel'>) {
   const [session, setSession] = useState<Session | null>(null)
   const [lobby, setLobby] = useState<RoomLobby | null>(null)
   const [publicRoom, setPublicRoom] = useState<PublicRoom | null>(null)
   const [questionSet, setQuestionSet] = useState<ParticipantQuestionSet | null>(null)
   const [participantRecord, setParticipantRecord] = useState<Participant | null>(null)
   const [quizResult, setQuizResult] = useState<ParticipantQuizResult | null>(null)
+  const [connectionError, setConnectionError] = useState('')
   useEffect(() => {
+    setSession(null); setLobby(null); setPublicRoom(null); setQuestionSet(null); setParticipantRecord(null); setQuizResult(null); setConnectionError('')
     if (!room) return
     if (!firebaseReady) {
       const applyDemo = () => {
         const demo = getDemo(room)
+        const resolution = resolveParticipantRoomMode(demo)
+        if (!demo || resolution.state !== 'ready' || resolution.mode !== mode) {
+          setSession(null); setLobby(null); setConnectionError(demo ? 'Данные комнаты не соответствуют выбранному режиму.' : 'Комната не найдена или больше недоступна.')
+          return
+        }
         setSession(demo)
-        setLobby(demo ? { roomId: demo.roomId, hostUid: demo.hostUid, workspaceId: demo.workspaceId || '', phase: demo.phase, maxParticipants: demo.maxParticipants, createdAt: demo.createdAt, ...(demo.closedAt ? { closedAt: demo.closedAt } : {}) } : null)
+        setLobby({ roomId: demo.roomId, hostUid: demo.hostUid, workspaceId: demo.workspaceId || '', phase: demo.phase, maxParticipants: demo.maxParticipants, createdAt: demo.createdAt, mode: demo.mode, ...(demo.closedAt ? { closedAt: demo.closedAt } : {}) })
       }
       applyDemo(); const sync = (event: StorageEvent) => { if (event.key === demoKey(room)) applyDemo() }
       window.addEventListener('storage', sync); return () => window.removeEventListener('storage', sync)
@@ -34,22 +41,48 @@ function useParticipantSession(room: string, participantId?: string) {
       if (!active) return
       stopPublic = subscribePublicRoom(room, value => {
         if (!active) return
-        setPublicRoom(value)
-        if (value) { stopLobby(); setLobby(null); return }
+        if (value) {
+          const resolution = resolveParticipantRoomMode(value)
+          if (resolution.state !== 'ready' || resolution.mode !== mode) {
+            setPublicRoom(null); setLobby(null); setConnectionError('Данные комнаты не соответствуют выбранному режиму.')
+            return
+          }
+          setPublicRoom(value); setConnectionError(''); stopLobby(); setLobby(null); return
+        }
         // A legacy room has no safe projection until its host opens it once.
         // Only then is its old lobby read for a non-sensitive waiting state.
-        stopLobby = subscribeRoomLobby(room, legacy => { if (active) setLobby(legacy) }, () => { if (active) setLobby(null) })
-      }, () => { if (active) setPublicRoom(null) })
-      stopQuestions = subscribeParticipantQuestionSet(room, value => { if (active) setQuestionSet(value) }, () => { if (active) setQuestionSet(null) })
+        stopLobby()
+        stopLobby = subscribeRoomLobby(room, legacy => {
+          if (!active) return
+          const resolution = resolveLegacyParticipantRoomMode(legacy)
+          if (resolution.state !== 'ready' || resolution.mode !== mode) {
+            setLobby(null); setConnectionError('Данные комнаты не соответствуют выбранному режиму.')
+            return
+          }
+          setLobby(legacy); setConnectionError('')
+        }, () => { if (active) { setLobby(null); setConnectionError('Не удалось загрузить данные комнаты.') } })
+      }, () => { if (active) { setPublicRoom(null); setConnectionError('Не удалось загрузить данные комнаты.') } })
+      stopQuestions = subscribeParticipantQuestionSet(room, value => {
+        if (!active) return
+        const resolution = value ? resolveParticipantRoomMode(value) : null
+        const hasDeclaredMode = Boolean(value?.mode || value?.gameTypeId)
+        if (resolution && hasDeclaredMode && (resolution.state !== 'ready' || resolution.mode !== mode)) {
+          setQuestionSet(null); setConnectionError('Материалы комнаты не соответствуют выбранному режиму.')
+          return
+        }
+        setQuestionSet(value)
+      }, () => { if (active) { setQuestionSet(null); setConnectionError('Не удалось загрузить материалы комнаты.') } })
       if (participantId) {
-        stopParticipant = subscribeParticipantRecord(room, participantId, value => { if (active) setParticipantRecord(value) }, () => { if (active) setParticipantRecord(null) })
+        stopParticipant = subscribeParticipantRecord(room, participantId, value => { if (active) setParticipantRecord(value) }, () => { if (active) { setParticipantRecord(null); setConnectionError('Не удалось восстановить данные участника.') } })
         stopQuizResult = subscribeParticipantQuizResult(room, participantId, value => { if (active) setQuizResult(value) }, () => { if (active) setQuizResult(null) })
       }
     })
     return () => { active = false; stopLobby(); stopPublic(); stopQuestions(); stopParticipant(); stopQuizResult() }
-  }, [participantId, room])
+  }, [mode, participantId, room])
   useEffect(() => {
-    if (!publicRoom || !questionSet || !participantId || !participantRecord) { setSession(null); return }
+    const roomResolution = resolveParticipantRoomMode(publicRoom)
+    const questionResolution = questionSet ? resolveParticipantRoomMode(questionSet) : null
+    if (!publicRoom || !questionSet || !participantId || !participantRecord || roomResolution.state !== 'ready' || roomResolution.mode !== mode || (questionResolution?.state === 'ready' && questionResolution.mode !== mode)) { setSession(null); return }
     // The shell deliberately resembles a Session so existing participant UI
     // stays unchanged, but its data comes exclusively from public questions
     // and this participant's own record. It contains no answer keys.
@@ -63,21 +96,84 @@ function useParticipantSession(room: string, participantId?: string) {
       status: publicRoom.phase,
       maxParticipants: publicRoom.maxParticipants,
       hostUid: '',
-      mode: publicRoom.mode || questionSet.mode || 'diagnostic',
+      mode,
       productId: publicRoom.productId || questionSet.productId,
-      gameTypeId: publicRoom.gameTypeId || questionSet.gameTypeId,
+      gameTypeId: mode,
       packId: publicRoom.packId || questionSet.packId,
       scoringTemplateId: publicRoom.scoringTemplateId || questionSet.scoringTemplateId,
       packSnapshot: { title: publicRoom.packTitle || questionSet.packTitle || '', description: '', questions: questionSet.questions, settings: {} },
       questions: questionSet.questions,
       participants: { [participantId]: participantRecord },
     } as Session)
-  }, [participantId, publicRoom, questionSet, participantRecord])
-  return [session, setSession, lobby || (publicRoom ? { roomId: publicRoom.roomId, hostUid: '', workspaceId: '', phase: publicRoom.phase, maxParticipants: publicRoom.maxParticipants, createdAt: publicRoom.createdAt, mode: publicRoom.mode, packId: publicRoom.packId, packTitle: publicRoom.packTitle, difficulty: publicRoom.difficulty, closedAt: publicRoom.closedAt } : null), quizResult] as const
+  }, [mode, participantId, publicRoom, questionSet, participantRecord])
+  return [session, setSession, lobby || (publicRoom ? { roomId: publicRoom.roomId, hostUid: '', workspaceId: '', phase: publicRoom.phase, maxParticipants: publicRoom.maxParticipants, createdAt: publicRoom.createdAt, mode, packId: publicRoom.packId, packTitle: publicRoom.packTitle, difficulty: publicRoom.difficulty, closedAt: publicRoom.closedAt } : null), quizResult, connectionError] as const
 }
 
 const Shell = ({ children, screen = '' }: { children: React.ReactNode; screen?: string }) => <main className="mobile-wrap mobile-flow"><div className={`mobile-card phone-screen ${screen}`}>{children}</div></main>
 const Action = ({ children, onClick, disabled = false, secondary = false }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; secondary?: boolean }) => <button className={secondary ? 'mobile-action secondary' : 'mobile-action'} disabled={disabled} onClick={onClick}>{children}</button>
+
+type ParticipantRoomGate =
+  | { roomId: string; state: 'loading' }
+  | { roomId: string; state: 'ready'; mode: RoomMode; manifest: ModeManifest }
+  | { roomId: string; state: 'error'; message: string }
+
+const connectionScreen = () => <Shell screen="waiting-screen"><p className="flow-label">ПОДКЛЮЧАЕМ</p><h1>Подключаемся<br />к комнате…</h1><p>Проверяем ссылку и загружаем режим встречи.</p><span className="stage-spinner" /></Shell>
+const roomErrorScreen = (message: string) => <Shell screen="waiting-screen"><p className="flow-label">КОМНАТА НЕДОСТУПНА</p><h1>Не удалось открыть комнату</h1><p>{message}</p></Shell>
+
+/**
+ * A room's manifest is selected only after public Firebase metadata has
+ * arrived. Keeping the roomId alongside state prevents a previous room's
+ * subscription from rendering while a new QR/link is opening.
+ */
+function useParticipantRoomGate(roomId: string): ParticipantRoomGate {
+  const [gate, setGate] = useState<ParticipantRoomGate>(() => roomId ? { roomId, state: 'loading' } : { roomId, state: 'error', message: 'Нужна действующая ссылка на комнату ведущего.' })
+  useEffect(() => {
+    let active = true
+    let stopPublic: () => void = () => undefined
+    let stopLegacyLobby: () => void = () => undefined
+    const setResolution = (resolution: ReturnType<typeof resolveParticipantRoomMode> | ReturnType<typeof resolveLegacyParticipantRoomMode>) => {
+      if (!active) return
+      if (resolution.state === 'ready') setGate({ roomId, state: 'ready', mode: resolution.mode, manifest: resolution.manifest })
+      else setGate({ roomId, state: 'error', message: resolution.message })
+    }
+
+    if (!roomId) {
+      setGate({ roomId, state: 'error', message: 'Нужна действующая ссылка на комнату ведущего.' })
+      return () => { active = false }
+    }
+    setGate({ roomId, state: 'loading' })
+
+    if (!firebaseReady) {
+      const applyDemo = () => setResolution(resolveParticipantRoomMode(getDemo(roomId)))
+      applyDemo()
+      const sync = (event: StorageEvent) => { if (event.key === demoKey(roomId)) applyDemo() }
+      window.addEventListener('storage', sync)
+      return () => { active = false; window.removeEventListener('storage', sync) }
+    }
+
+    void ensureAuth().then(() => {
+      if (!active) return
+      stopPublic = subscribePublicRoom(roomId, publicRoom => {
+        if (!active) return
+        if (publicRoom) {
+          stopLegacyLobby()
+          setResolution(resolveParticipantRoomMode(publicRoom))
+          return
+        }
+        stopLegacyLobby()
+        stopLegacyLobby = subscribeRoomLobby(roomId, legacyLobby => setResolution(resolveLegacyParticipantRoomMode(legacyLobby)), () => {
+          if (active) setGate({ roomId, state: 'error', message: 'Не удалось загрузить данные комнаты. Проверьте соединение и обновите страницу.' })
+        })
+      }, () => {
+        if (active) setGate({ roomId, state: 'error', message: 'Не удалось загрузить данные комнаты. Проверьте соединение и обновите страницу.' })
+      })
+    }).catch(() => {
+      if (active) setGate({ roomId, state: 'error', message: 'Не удалось подключиться к комнате. Проверьте соединение и обновите страницу.' })
+    })
+    return () => { active = false; stopPublic(); stopLegacyLobby() }
+  }, [roomId])
+  return gate
+}
 
 function ScoreRing({ score }: { score: number }) {
   const [draw, setDraw] = useState(false)
@@ -101,9 +197,9 @@ function createPoster(participant: Participant, scores: Scores) {
   const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = `карточка-${participant.nickname}.png`; link.click()
 }
 
-export function MobileParticipantFlow({ room }: { room: string }) {
+function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; mode: Exclude<RoomMode, 'wheel'>; modeManifest: ModeManifest }) {
   const [participant, setParticipant] = useState<Participant | null>(null)
-  const [session, setSession, lobby, quizResult] = useParticipantSession(room, participant?.id)
+  const [session, setSession, lobby, quizResult, connectionError] = useParticipantSession(room, participant?.id, mode)
   const [screen, setScreen] = useState<'intro' | 'nickname'>('intro')
   const [name, setName] = useState('')
   const [notice, setNotice] = useState('')
@@ -115,13 +211,11 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   let activeQuestions: Question[] = []
   let moduleError = ''
   try {
-    activeQuestions = getGameModule(session?.gameTypeId).getQuestions(session, questions)
+    activeQuestions = modeManifest.runtime.getQuestions(session, questions)
   } catch (error) {
-    moduleError = error instanceof Error ? error.message : 'Не удалось определить режим комнаты.'
+    moduleError = error instanceof Error ? error.message : 'Не удалось открыть материалы комнаты.'
   }
-  const isQuiz = session?.mode === 'quiz' || session?.gameTypeId === 'quiz' || lobby?.mode === 'quiz'
-  const modeManifest = getModeManifest(isQuiz ? 'quiz' : session?.gameTypeId || lobby?.mode)
-  const FullParticipantFlow = modeManifest.participantFlow
+  const isQuiz = mode === 'quiz'
   const introQuestionCount = isQuiz ? (session ? activeQuestions.length : 15) : activeQuestions.length
 
   useEffect(() => {
@@ -172,7 +266,7 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   const answer = async (value: ResponseValue) => {
     if (!participant || !session || saving) return
     if (isQuiz && value === 'SKIP') return setNotice('В этой викторине пропуск вопроса недоступен.')
-    if (session.phase !== 'live') return setNotice(session.phase === 'closed' ? 'Сессия завершена ведущим. Ответы больше не принимаются.' : 'Ответы пока не принимаются. Дождитесь запуска диагностики.')
+    if (session.phase !== 'live') return setNotice(session.phase === 'closed' ? 'Сессия завершена ведущим. Ответы больше не принимаются.' : `Ответы пока не принимаются. Дождитесь запуска ${modeManifest.title.toLocaleLowerCase('ru-RU')}.`)
     const question = activeQuestions[participant.currentQuestionIndex]
     if (!activeQuestions.length || !question) return setNotice('Не удалось определить текущий вопрос. Обновите страницу или обратитесь к ведущему.')
     const nextIndex = participant.currentQuestionIndex + 1
@@ -197,10 +291,9 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   }
   const openReport = async () => { if (!participant) return; try { if (firebaseReady) await markPersonalViewed(room, participant.id); else if (session) { const next = { ...participant, personalViewedAt: Date.now() }; const demo = { ...session, participants: { ...session.participants, [participant.id]: next } }; setDemo(demo); setSession(demo); setParticipant(next) } } finally { setShowReport(true) } }
 
-  if (FullParticipantFlow && room) return <FullParticipantFlow room={room} />
-  if (!room) return <Shell screen="intro-screen"><p className="flow-label">ОНЛАЙН-ДИАГНОСТИКА</p><h1>Нужен QR-код ведущего</h1><p>Отсканируйте код, чтобы открыть личную ссылку на диагностику.</p></Shell>
-  if (firebaseReady && !authReady) return <Shell screen="waiting-screen"><p className="flow-label">ПОДКЛЮЧАЕМ</p><h1>Проверяем подключение</h1><p>Восстанавливаем безопасную сессию участника.</p></Shell>
-  if (moduleError) return <Shell screen="waiting-screen"><p className="flow-label">КОМНАТА НЕДОСТУПНА</p><h1>Неизвестный режим комнаты</h1><p>{moduleError} Попросите ведущего создать комнату заново.</p></Shell>
+  if (firebaseReady && !authReady) return connectionScreen()
+  if (connectionError) return roomErrorScreen(connectionError)
+  if (moduleError) return roomErrorScreen(moduleError)
   if (lobby?.phase === 'closed' || session?.phase === 'closed' || isSessionExpired(session || lobby)) return <Shell screen="waiting-screen"><div className="ready-spark">✓</div><p className="flow-label">СЕССИЯ ЗАВЕРШЕНА</p><h1>{isQuiz ? 'Эта викторина уже завершена' : 'Эта диагностика уже завершена'}</h1><p>{isSessionExpired(session || lobby) ? 'Время активности этой комнаты истекло. Ответы больше не принимаются.' : 'Ведущий закрыл комнату. Ответы больше не принимаются, а подключиться по этой ссылке нельзя.'}</p></Shell>
   if (!participant && screen === 'intro') return <Shell screen="intro-screen"><p className="flow-label gold">{isQuiz ? 'БИБЛЕЙСКАЯ ВИКТОРИНА' : 'ОНЛАЙН-ДИАГНОСТИКА'}</p><h1>{isQuiz ? (lobby?.packTitle || session?.packSnapshot?.title || 'Библейская\nвикторина') : <>Атмосфера<br />нашей молодёжи</>}</h1><p>{isQuiz ? 'Проверь свои знания Библии. Выбери один правильный ответ в каждом вопросе.' : 'Небольшая анонимная диагностика, которая помогает увидеть сильные стороны и точки роста.'}</p><div className="intro-info"><b>✦</b><strong>{introQuestionCount} {isQuiz ? 'вопросов викторины' : 'простых вопросов'}</strong><small>{isQuiz ? '1 балл за верный ответ · без таймера' : `${Object.keys(categories).length} тем · в своём темпе · без оценок`}</small><i /><span>{isQuiz ? 'Общий результат появится, когда все участники завершат игру.' : 'В конце ты получишь личную карточку с результатами.'}</span></div><Action onClick={() => setScreen('nickname')}>{isQuiz ? 'Начать викторину' : 'Начать диагностику'}</Action><small className="flow-footnote">{isQuiz ? 'Отвечай внимательно — правильный ответ только один.' : 'Твоя искренность поможет нам стать ближе.'}</small></Shell>
   if (!participant) return <Shell screen="nickname-screen"><p className="flow-label">ШАГ 1 ИЗ 2</p><h1>Как тебя<br />называть?</h1><p>{isQuiz ? 'Укажи имя или никнейм — он появится в общем рейтинге после завершения игры.' : 'Можно указать имя или придумать никнейм — результаты всё равно останутся анонимными.'}</p><input value={name} onChange={event => setName(event.target.value)} placeholder="Например, «Свет»" maxLength={20} /><small className="input-help">{isQuiz ? 'Это имя увидят только в общем результате викторины.' : 'Это нужно только для твоей личной карточки.'}</small>{!isQuiz && <div className="flow-note"><b>Важно</b><p>Нет правильных или неправильных ответов. Главное — отвечать честно.</p></div>}<Action onClick={() => void join()}>Продолжить</Action>{notice && <p className="flow-error">{notice}</p>}</Shell>
@@ -212,9 +305,20 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   }
   if (participant.status === 'finished' && !reportReady) return <Shell screen="report-loading"><div className="report-loader"><i /><b>✦</b></div><p className="flow-label">ГОТОВО</p><h1>Подготавливаем<br />твой отчёт</h1><p>Собираем твою личную карточку — это займёт всего пару секунд.</p></Shell>
   if (participant.status === 'finished' && !showReport) return <Shell screen="report-ready"><div className="ready-spark">✓</div><p className="flow-label">ТВОЙ ОТЧЁТ ГОТОВ</p><h1>{participant.nickname}, спасибо!</h1><p>Ты ответил(а) на все вопросы. Твоя личная карточка готова и доступна только тебе.</p><Action onClick={() => void openReport()}>Открыть личный отчёт <span>→</span></Action></Shell>
-  if (participant.status === 'finished') return <PersonalReport participant={participant} scores={getGameModule(session?.gameTypeId).score(participant.answers || {}, activeQuestions, session)} onClose={() => setShowReport(false)} />
+  if (participant.status === 'finished') return <PersonalReport participant={participant} scores={modeManifest.runtime.score(participant.answers || {}, activeQuestions, session)} onClose={() => setShowReport(false)} />
   const question = activeQuestions[participant.currentQuestionIndex]
   if (!question) return <Shell screen="waiting-screen"><p className="flow-label">ВОПРОС НЕДОСТУПЕН</p><h1>Не удалось открыть текущий вопрос</h1><p>Обновите страницу. Если проблема останется, обратитесь к ведущему.</p>{notice && <p className="flow-error">{notice}</p>}</Shell>
   const ModeParticipantScreen = modeManifest.participantScreen
   return <Shell screen="question-screen"><ModeParticipantScreen question={question} currentIndex={participant.currentQuestionIndex} total={activeQuestions.length} packTitle={session.packSnapshot?.title} saving={saving} notice={notice} onAnswer={value => void answer(value)} /></Shell>
+}
+
+export function MobileParticipantFlow({ room }: { room: string }) {
+  const gate = useParticipantRoomGate(room)
+  if (gate.roomId !== room || gate.state === 'loading') return connectionScreen()
+  if (gate.state === 'error') return roomErrorScreen(gate.message)
+
+  const ModeParticipantFlow = gate.manifest.participantFlow
+  if (ModeParticipantFlow) return <ModeParticipantFlow key={`${room}:${gate.mode}`} room={room} />
+  if (gate.mode === 'wheel') return roomErrorScreen('Не удалось открыть режим комнаты.')
+  return <QuestionParticipantFlow key={`${room}:${gate.mode}`} room={room} mode={gate.mode} modeManifest={gate.manifest} />
 }

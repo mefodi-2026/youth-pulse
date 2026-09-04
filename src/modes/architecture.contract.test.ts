@@ -3,6 +3,7 @@ import { getModeManifest, productionModes } from './modeRegistry'
 import { resolveCanonicalPackQuestions } from './contentPackAdapter'
 import type { ContentPack } from '../types'
 import './modeRegistry.contract.test'
+import './participantRouting.contract.test'
 import './wheel/contract.test'
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {

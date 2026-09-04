@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build --configLoader runner && node scripts/create-spa-fallback.mjs",
+    "test:contracts": "node scripts/run-participant-routing-contract.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

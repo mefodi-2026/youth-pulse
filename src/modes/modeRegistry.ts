@@ -44,6 +44,12 @@ const registry = createModeRegistry([diagnosticManifest, quizManifest, wheelMani
 export const modeRegistry = registry as Readonly<Record<RoomMode, ModeManifest>>
 export const productionModes = Object.values(modeRegistry).filter(manifest => manifest.productionMenu)
 
+/** Returns only a mode explicitly registered by the product. */
+export const resolveRegisteredRoomMode = (mode?: string): RoomMode | undefined => {
+  const manifest = mode ? registry[mode] : undefined
+  return manifest?.mode as RoomMode | undefined
+}
+
 /** Old rooms without mode/gameTypeId remain diagnostics by contract. */
 export const getModeManifest = (mode?: string) => {
   if (!mode) return diagnosticManifest

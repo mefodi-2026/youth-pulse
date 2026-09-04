@@ -8,6 +8,7 @@ import { getScoringTemplate } from './scoring'
 import { orderQuestionsByCategory } from './questionOrder'
 import { participantQuestionsPath, participantResultPath, publicRoomPath, roomParticipantPath, roomParticipantResultsPath, roomPath } from '../core/roomService'
 import { normalizeQuestionsForMode, resolveCanonicalPackQuestions } from '../modes/contentPackAdapter'
+import { resolveRegisteredRoomMode } from '../modes/modeRegistry'
 import { firebaseAuth as auth, firebaseAuthPersistence as authPersistence, firebaseDb as db, firebaseFunctions as functions, firebaseReady } from '../repositories/firebaseClient'
 import { getSessionQuestions, type Answer, type ContentPack, type FeedbackItem, type Invite, type LeaderProfile, type Participant, type ParticipantQuestion, type ParticipantQuestionSet, type ParticipantQuizResult, type ProductConfig, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type RoomMode, type ScoringTemplateId, type Session, type SessionArchive, type SessionEvent, type SessionEventType, type SessionPhase, type TemplateSelection, type TemplateSnapshot, type UserStatus, type Workspace, type WorkspaceProduct } from '../types'
 
@@ -95,37 +96,49 @@ const normalizePackTitle = (title: unknown) => {
 const defaultPackDescription = 'Интерактивная диагностика для молодёжных групп.'
 const normalizePackStatus = (status: unknown): ContentPack['status'] => status === 'draft' || status === 'archived' ? status : 'published'
 
+/**
+ * Public projections must always carry an explicit mode. The diagnostic value
+ * here is a one-time compatibility conversion for records created before
+ * modes existed; participant rendering never uses it as an unloaded fallback.
+ */
+const roomModeForPublicProjection = (session: Pick<Session, 'mode' | 'gameTypeId'>): RoomMode => {
+  return resolveRegisteredRoomMode(session.mode || session.gameTypeId) || 'diagnostic'
+}
+
 /** Safe metadata for a participant: no host UID, workspace ID, answers or settings. */
-const createPublicRoom = (session: Session): PublicRoom => ({
-  roomId: session.roomId,
-  ...(session.roomTitle ? { roomTitle: session.roomTitle } : {}),
-  ...(session.displayCode ? { displayCode: session.displayCode } : {}),
-  phase: session.phase,
-  maxParticipants: session.maxParticipants,
-  createdAt: session.createdAt,
-  ...(session.lastActivityAt ? { lastActivityAt: session.lastActivityAt } : {}),
-  ...(session.closedAt ? { closedAt: session.closedAt } : {}),
-  ...(session.endedAt ? { endedAt: session.endedAt } : {}),
-  ...(session.mode ? { mode: session.mode } : {}),
-  ...(session.productId ? { productId: session.productId } : {}),
-  ...(session.gameTypeId ? { gameTypeId: session.gameTypeId } : {}),
-  ...(session.packId ? { packId: session.packId } : {}),
-  ...(session.packSnapshot?.title ? { packTitle: session.packSnapshot.title } : {}),
-  ...(session.difficulty ? { difficulty: session.difficulty } : {}),
-  ...(session.scoringTemplateId ? { scoringTemplateId: session.scoringTemplateId } : {}),
-  ...(session.mode === 'wheel' && session.wheel ? {
-    wheel: {
-      inputMode: session.wheel.config.inputMode,
-      drawOrder: session.wheel.config.drawOrder,
-      phase: session.wheel.phase === 'collecting' || session.wheel.phase === 'ready' || session.wheel.phase === 'completed'
-        ? session.wheel.phase
-        : 'collecting',
-      nameCount: Object.keys(session.wheel.pools?.names || {}).length,
-      taskCount: Object.keys(session.wheel.pools?.tasks || {}).length,
-      submissionCount: Object.keys(session.wheel.participants || {}).length,
-    },
-  } : {}),
-})
+const createPublicRoom = (session: Session): PublicRoom => {
+  const mode = roomModeForPublicProjection(session)
+  return {
+    roomId: session.roomId,
+    ...(session.roomTitle ? { roomTitle: session.roomTitle } : {}),
+    ...(session.displayCode ? { displayCode: session.displayCode } : {}),
+    phase: session.phase,
+    maxParticipants: session.maxParticipants,
+    createdAt: session.createdAt,
+    ...(session.lastActivityAt ? { lastActivityAt: session.lastActivityAt } : {}),
+    ...(session.closedAt ? { closedAt: session.closedAt } : {}),
+    ...(session.endedAt ? { endedAt: session.endedAt } : {}),
+    mode,
+    ...(session.productId ? { productId: session.productId } : {}),
+    ...(session.gameTypeId ? { gameTypeId: session.gameTypeId } : {}),
+    ...(session.packId ? { packId: session.packId } : {}),
+    ...(session.packSnapshot?.title ? { packTitle: session.packSnapshot.title } : {}),
+    ...(session.difficulty ? { difficulty: session.difficulty } : {}),
+    ...(session.scoringTemplateId ? { scoringTemplateId: session.scoringTemplateId } : {}),
+    ...(mode === 'wheel' && session.wheel ? {
+      wheel: {
+        inputMode: session.wheel.config.inputMode,
+        drawOrder: session.wheel.config.drawOrder,
+        phase: session.wheel.phase === 'collecting' || session.wheel.phase === 'ready' || session.wheel.phase === 'completed'
+          ? session.wheel.phase
+          : 'collecting',
+        nameCount: Object.keys(session.wheel.pools?.names || {}).length,
+        taskCount: Object.keys(session.wheel.pools?.tasks || {}).length,
+        submissionCount: Object.keys(session.wheel.participants || {}).length,
+      },
+    } : {}),
+  }
+}
 
 const toParticipantQuestion = (question: Question): ParticipantQuestion => ({
   id: question.id,
@@ -141,10 +154,11 @@ type ParticipantQuestionSetRecord = Omit<ParticipantQuestionSet, 'questions'> & 
 
 const createParticipantQuestionSet = (session: Session): ParticipantQuestionSetRecord => {
   const questionSet = getSessionQuestions(session, builtInQuestions)
+  const mode = roomModeForPublicProjection(session)
   return {
     roomId: session.roomId,
     createdAt: session.createdAt,
-    ...(session.mode ? { mode: session.mode } : {}),
+    mode,
     ...(session.productId ? { productId: session.productId } : {}),
     ...(session.gameTypeId ? { gameTypeId: session.gameTypeId } : {}),
     ...(session.packId ? { packId: session.packId } : {}),
@@ -1046,10 +1060,13 @@ export const ensureParticipantRoomData = async (roomId: string, knownSession?: S
     get(ref(services.db, participantQuestionsPath(roomId))),
   ])
   const patch: Record<string, unknown> = {}
+  const existingPublicRoom = publicSnapshot.val() as PublicRoom | null
+  const publicMode = resolveRegisteredRoomMode(existingPublicRoom?.mode || existingPublicRoom?.gameTypeId)
   if (!publicSnapshot.exists()) patch[publicRoomPath(roomId)] = createPublicRoom(session)
+  else if (!publicMode) patch[`${publicRoomPath(roomId)}/mode`] = roomModeForPublicProjection(session)
   // Wheel rooms do not use question packs. Writing an empty participant question
   // set would be rejected by the immutable question-set rules and is unnecessary.
-  if (session.mode !== 'wheel' && !participantQuestionsSnapshot.exists()) patch[participantQuestionsPath(roomId)] = createParticipantQuestionSet(session)
+  if (roomModeForPublicProjection(session) !== 'wheel' && !participantQuestionsSnapshot.exists()) patch[participantQuestionsPath(roomId)] = createParticipantQuestionSet(session)
   if (Object.keys(patch).length) await update(ref(services.db), patch)
 }
 
