@@ -91,9 +91,13 @@ const buildPublishedPack = (pack: ContentPack): ContentPack => {
 const systemDiagnosticPackTitle = 'Проверь себя'
 const normalizePackTitle = (title: unknown) => {
   const value = typeof title === 'string' ? title.trim() : ''
-  return value && !/^\?+$/.test(value) ? value : systemDiagnosticPackTitle
+  return value && !/^\?+$/.test(value) && !/диагностик/i.test(value) ? value : systemDiagnosticPackTitle
 }
 const defaultPackDescription = 'Интерактивный формат «Проверь себя» для молодёжных групп.'
+const normalizeDiagnosticPackDescription = (description: unknown) => {
+  const value = typeof description === 'string' ? description.trim() : ''
+  return value && !/диагностик/i.test(value) ? value : defaultPackDescription
+}
 const normalizePackStatus = (status: unknown): ContentPack['status'] => status === 'draft' || status === 'archived' ? status : 'published'
 
 /**
@@ -202,7 +206,7 @@ export const createDiagnosticTemplateSnapshot = (questionSet: Question[] = built
   sourcePackId: source?.sourcePackId || source?.packId || diagnosticPackId,
   templateOrigin: source?.templateOrigin || 'system',
   title: normalizePackTitle(source?.title),
-  description: source?.description || defaultPackDescription,
+  description: normalizeDiagnosticPackDescription(source?.description),
   questions: copyQuestions(orderQuestionsByCategory(source?.questions?.length ? source.questions : source?.content?.questions?.length ? source.content.questions : questionSet)),
   content: { questions: copyQuestions(orderQuestionsByCategory(source?.questions?.length ? source.questions : source?.content?.questions?.length ? source.content.questions : questionSet)) },
   settings: copySettings(source?.settings || { maxParticipants: 30, skippedAnswerScore: -1 }),
@@ -240,7 +244,7 @@ const normalizeContentPack = (value: unknown, _fallbackQuestions: Question[], de
     ...(raw.sourcePackId || defaults.sourcePackId ? { sourcePackId: raw.sourcePackId || defaults.sourcePackId } : {}),
     templateOrigin: raw.templateOrigin || defaults.templateOrigin || 'system',
     title: isQuiz ? (typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : defaults.title || 'Библейская викторина') : normalizePackTitle(raw.title || defaults.title),
-    description: raw.description || defaults.description || defaultPackDescription,
+    description: isQuiz ? raw.description || defaults.description || defaultPackDescription : normalizeDiagnosticPackDescription(raw.description || defaults.description),
     questions: orderedQuestions,
     content: { questions: orderedQuestions },
     ...(publicQuestionSet.length ? { publicContent: { questions: toParticipantQuestions(publicQuestionSet) } } : {}),
