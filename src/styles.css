@@ -849,6 +849,10 @@
 .app-modal.quiz-modal .app-modal-dialog { border-color:rgba(154,220,191,.24); background:linear-gradient(145deg,#0c372c,#082b22); box-shadow:inset 0 1px 0 rgba(255,255,255,.055),0 24px 70px rgba(0,0,0,.55); }
 .app-modal.quiz-modal .app-modal-content>p { color:#9aafa5; font-size:16px; }
 .app-modal.quiz-modal .app-modal-close { border-color:rgba(154,220,191,.24); color:#eef5ee; background:#0d3e31; }
+.app-modal.workspace-modal { background:rgba(3,18,14,.82); }
+.app-modal.workspace-modal .app-modal-dialog { border-color:rgba(154,220,191,.24); background:linear-gradient(145deg,#0c372c,#082b22); box-shadow:inset 0 1px 0 rgba(255,255,255,.055),0 24px 70px rgba(0,0,0,.55); }
+.app-modal.workspace-modal .app-modal-content>p { color:#9aafa5; font-size:16px; }
+.app-modal.workspace-modal .app-modal-close { border-color:rgba(154,220,191,.24); color:#eef5ee; background:#0d3e31; }
 @keyframes wheel-reveal { from { transform:translateY(12px) scale(.96); opacity:0; } to { transform:translateY(0) scale(1); opacity:1; } }
 @media (max-width:980px) {
   .wheel-prep-heading,.wheel-pending { grid-template-columns:1fr; }
@@ -985,4 +989,101 @@
   [data-participant-mode="quiz"] .phone-screen { min-height:100svh; border:0; border-radius:0; }
   [data-participant-mode="quiz"] .question-screen { padding:26px 20px 18px; }
   [data-participant-mode="quiz"] .answer-options button { min-height:54px; }
+}
+
+/* Operational host tabs use the same calm emerald hierarchy on phones. */
+@media (max-width:980px) {
+  .host-shell[data-host-tab="profile"],
+  .host-shell[data-host-tab="settings"],
+  .host-shell[data-host-tab="rules"],
+  .host-shell[data-host-tab="rooms"],
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) {
+    --workspace-ink:#03120e;
+    --workspace-surface:#082b22;
+    --workspace-surface-raised:#0c372c;
+    --workspace-field:#0d3e31;
+    --workspace-accent:#32ce8b;
+    --workspace-text:#eef5ee;
+    --workspace-text-muted:#9aafa5;
+    --workspace-border:rgba(154,220,191,.16);
+    --workspace-warning:#c8ae67;
+    --text:var(--workspace-text);
+    --muted:var(--workspace-text-muted);
+    --mint:var(--workspace-accent);
+    --gold:var(--workspace-warning);
+    --line:var(--workspace-border);
+    background:radial-gradient(620px 380px at 88% -8%,rgba(13,91,67,.22),transparent 67%),var(--workspace-ink);
+  }
+  .host-shell[data-host-tab="profile"] .host-content,
+  .host-shell[data-host-tab="settings"] .host-content,
+  .host-shell[data-host-tab="rules"] .host-content,
+  .host-shell[data-host-tab="rooms"] .host-content,
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .host-content { padding:82px 18px 42px; }
+  .host-shell[data-host-tab="profile"] .host-header,
+  .host-shell[data-host-tab="settings"] .host-header,
+  .host-shell[data-host-tab="rules"] .host-header,
+  .host-shell[data-host-tab="rooms"] .host-header,
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .host-header { margin-bottom:24px; }
+  .host-shell[data-host-tab="profile"] .glass,
+  .host-shell[data-host-tab="settings"] .glass,
+  .host-shell[data-host-tab="rules"] .glass,
+  .host-shell[data-host-tab="rooms"] .glass,
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .glass { border-color:var(--workspace-border); background:linear-gradient(145deg,var(--workspace-surface-raised),var(--workspace-surface)); box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 16px 36px rgba(0,0,0,.17); }
+  .host-shell[data-host-tab="profile"] .profile-panel,
+  .host-shell[data-host-tab="settings"] .settings-panel,
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .control-panel,
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .qr-card,
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .participant-list,
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .export-panel,
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .empty-state { padding:22px; border-radius:20px; }
+  .host-shell[data-host-tab="profile"] .profile-panel > p:not(.eyebrow),
+  .host-shell[data-host-tab="settings"] .settings-panel > p:not(.eyebrow),
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .control-panel > p:not(.eyebrow),
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .empty-state p { color:var(--workspace-text-muted); font-size:16px; line-height:1.5; }
+  .host-shell[data-host-tab="profile"] .profile-panel dl { grid-template-columns:1fr; gap:10px; }
+  .host-shell[data-host-tab="profile"] .profile-panel dl > div { min-height:0; padding:15px; border-color:var(--workspace-border); background:rgba(3,18,14,.35); }
+  .host-shell[data-host-tab="profile"] .profile-panel dd { font-size:16px; }
+  .host-shell[data-host-tab="settings"] .stack { gap:14px; }
+  .host-shell[data-host-tab="settings"] .settings-panel { display:grid; gap:11px; }
+  .host-shell[data-host-tab="settings"] .settings-panel input,
+  .host-shell[data-host-tab="rooms"] .history-filters input,
+  .host-shell[data-host-tab="rooms"] .history-filters select,
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .room-title-input input { width:100%; min-height:50px; border-color:var(--workspace-border); border-radius:14px; color:var(--workspace-text); background:var(--workspace-field); font-size:16px; }
+  .host-shell[data-host-tab="rules"] .rules-panel { display:grid; gap:22px; }
+  .host-shell[data-host-tab="rules"] .rules-intro { padding:0; }
+  .host-shell[data-host-tab="rules"] .rules-intro p,
+  .host-shell[data-host-tab="rules"] .rule-card p { color:var(--workspace-text-muted); font-size:16px; }
+  .host-shell[data-host-tab="rules"] .rule-card { grid-template-columns:40px minmax(0,1fr); gap:12px; min-height:0; padding:20px; border-radius:18px; }
+  .host-shell[data-host-tab="rules"] .rule-card > span { color:var(--workspace-accent); }
+  .host-shell[data-host-tab="rooms"] .history-filters { padding:18px; border-color:var(--workspace-border); border-radius:18px; background:rgba(3,18,14,.35); }
+  .host-shell[data-host-tab="rooms"] .history-filters>div { grid-template-columns:1fr; gap:10px; }
+  .host-shell[data-host-tab="rooms"] .history-filters label { color:var(--workspace-text-muted); font-size:14px; }
+  .host-shell[data-host-tab="rooms"] .archive-card,
+  .host-shell[data-host-tab="rooms"] .room-row { align-items:stretch; gap:18px; padding:20px; border-radius:18px; }
+  .host-shell[data-host-tab="rooms"] .archive-card p:not(.eyebrow),
+  .host-shell[data-host-tab="rooms"] .room-row p:not(.eyebrow) { color:var(--workspace-text-muted); font-size:15px; line-height:1.48; }
+  .host-shell[data-host-tab="rooms"] .archive-actions { display:grid; grid-template-columns:1fr; width:100%; }
+  .host-shell[data-host-tab="rooms"] .archive-actions .button { width:100%; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .room-tabs { flex-wrap:nowrap; margin:0 -18px 20px; padding:0 18px 4px; overflow:auto; scrollbar-width:none; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .room-tabs::-webkit-scrollbar { display:none; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .room-tabs button { flex:0 0 auto; min-height:42px; border-color:var(--workspace-border); color:var(--workspace-text-muted); background:rgba(3,18,14,.42); font-size:15px; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .room-tabs button.selected { color:#042016; border-color:var(--workspace-accent); background:var(--workspace-accent); }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .metrics { grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .metric { min-height:116px; padding:15px; border-color:var(--workspace-border); border-radius:17px; background:linear-gradient(160deg,var(--workspace-surface-raised),var(--workspace-surface)); }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .metric strong { color:var(--workspace-accent); font-size:32px; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .metric p,
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .metric small { color:var(--workspace-text-muted); font-size:12px; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .control-actions { display:grid; grid-template-columns:1fr; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .control-actions .button { width:100%; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .room-title-editor { padding:16px; border-color:var(--workspace-border); border-radius:16px; background:rgba(3,18,14,.34); }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .qr-card img { width:min(100%,268px); margin:12px auto; padding:11px; border-radius:16px; background:#f7fbf8; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .qr-card code { display:block; max-height:8em; overflow:auto; border:1px solid var(--workspace-border); border-radius:12px; padding:12px; color:var(--workspace-text-muted); background:rgba(3,18,14,.46); overflow-wrap:anywhere; white-space:pre-wrap; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .participant-rows { max-height:360px; overflow:auto; overscroll-behavior:contain; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .participant-rows > div { align-items:center; gap:8px; border-color:var(--workspace-border); }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .participant-rows b { min-width:0; color:var(--workspace-text); font-size:16px; overflow-wrap:anywhere; }
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .participant-rows span { color:var(--workspace-text-muted); font-size:13px; white-space:nowrap; }
+}
+
+@media (max-width:430px) {
+  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .metrics { grid-template-columns:1fr; }
 }
