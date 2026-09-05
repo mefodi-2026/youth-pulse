@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import type { Question } from '../types'
-import { Button } from './DesignSystem'
+import { AppIcon, Button } from './DesignSystem'
 import { Modal } from './Modal'
 
 type QuestionPackPreviewProps = {
@@ -10,6 +10,8 @@ type QuestionPackPreviewProps = {
   title?: string
   description?: string
   className?: string
+  appearance?: 'default' | 'quiz'
+  showActionIcons?: boolean
 }
 
 type RestrictedAction = 'edit' | 'delete' | null
@@ -19,23 +21,23 @@ type RestrictedAction = 'edit' | 'delete' | null
  * scoped to this pack instance so neither another pack nor another mode can
  * surface an unrelated notice.
  */
-export function QuestionPackPreview({ modeLabel, packId, questions, title, description, className = '' }: QuestionPackPreviewProps) {
+export function QuestionPackPreview({ modeLabel, packId, questions, title, description, className = '', appearance = 'default', showActionIcons = false }: QuestionPackPreviewProps) {
   const [expanded, setExpanded] = useState(false)
   const [restrictedAction, setRestrictedAction] = useState<RestrictedAction>(null)
   const contentId = useId()
   const actionLabel = restrictedAction === 'delete' ? 'Удаление' : 'Редактирование'
   const restrictedMessage = `Редактирование и удаление вопросов в режиме «${modeLabel}» пока недоступны. Эта возможность появится после выпуска полноценного приложения.`
 
-  return <section className={`question-pack-preview ${expanded ? 'is-open' : ''} ${className}`.trim()} data-pack-id={packId}>
+  return <section className={`question-pack-preview ${expanded ? 'is-open' : ''} ${className}`.trim()} data-pack-id={packId} data-appearance={appearance}>
     <header className="question-pack-preview-header">
       <div className="question-pack-preview-copy">
         {title && <h3>{title}</h3>}
         <p>{questions.length} вопросов{description ? ` · ${description}` : ''}</p>
       </div>
       <div className="question-pack-preview-actions">
-        <Button secondary aria-expanded={expanded} aria-controls={contentId} onClick={() => setExpanded(value => !value)}>{expanded ? 'Скрыть вопросы' : 'Показать вопросы'}</Button>
-        <Button secondary onClick={() => setRestrictedAction('edit')}>Редактировать</Button>
-        <Button secondary danger onClick={() => setRestrictedAction('delete')}>Удалить</Button>
+        <Button secondary className="question-pack-preview-action" aria-expanded={expanded} aria-controls={contentId} onClick={() => setExpanded(value => !value)}>{showActionIcons && <AppIcon name="eye" size={17} />}<span>{expanded ? 'Скрыть вопросы' : 'Показать вопросы'}</span></Button>
+        <Button secondary className="question-pack-preview-action" onClick={() => setRestrictedAction('edit')}>{showActionIcons && <AppIcon name="edit" size={17} />}<span>Редактировать</span></Button>
+        <Button secondary danger className="question-pack-preview-action" onClick={() => setRestrictedAction('delete')}>{showActionIcons && <AppIcon name="trash" size={17} />}<span>Удалить</span></Button>
       </div>
     </header>
     <div id={contentId} className="question-pack-preview-collapse" aria-hidden={!expanded}>
