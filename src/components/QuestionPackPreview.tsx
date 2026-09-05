@@ -50,7 +50,7 @@ export function QuestionPackPreview({ modeLabel, packId, questions, title, descr
         </ol>
       </div>
     </div>
-    <Modal open={restrictedAction !== null} title={`${actionLabel} недоступно`} onClose={() => setRestrictedAction(null)}>
+    <Modal open={restrictedAction !== null} title={`${actionLabel} недоступно`} className={appearance === 'quiz' ? 'quiz-modal' : ''} onClose={() => setRestrictedAction(null)}>
       <p>{restrictedMessage}</p>
       <div className="app-modal-actions"><Button secondary onClick={() => setRestrictedAction(null)}>Понятно</Button></div>
     </Modal>

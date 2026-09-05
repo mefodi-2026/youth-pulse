@@ -318,7 +318,10 @@ export function MobileParticipantFlow({ room }: { room: string }) {
   if (gate.state === 'error') return roomErrorScreen(gate.message)
 
   const ModeParticipantFlow = gate.manifest.participantFlow
-  if (ModeParticipantFlow) return <ModeParticipantFlow key={`${room}:${gate.mode}`} room={room} />
-  if (gate.mode === 'wheel') return roomErrorScreen('Не удалось открыть режим комнаты.')
-  return <QuestionParticipantFlow key={`${room}:${gate.mode}`} room={room} mode={gate.mode} modeManifest={gate.manifest} />
+  const content = ModeParticipantFlow
+    ? <ModeParticipantFlow key={`${room}:${gate.mode}`} room={room} />
+    : gate.mode === 'wheel'
+      ? roomErrorScreen('Не удалось открыть режим комнаты.')
+      : <QuestionParticipantFlow key={`${room}:${gate.mode}`} room={room} mode={gate.mode} modeManifest={gate.manifest} />
+  return <div data-participant-mode={gate.mode}>{content}</div>
 }

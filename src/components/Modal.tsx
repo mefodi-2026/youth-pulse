@@ -11,6 +11,7 @@ export interface ModalProps {
   onClose?: () => void
   closeLabel?: string
   labelledBy?: string
+  className?: string
 }
 
 /**
@@ -18,7 +19,7 @@ export interface ModalProps {
  * close on backdrop click: confirmations stay explicit and the page beneath it
  * never receives an accidental action.
  */
-export function Modal({ open, title, children, onClose, closeLabel = 'Закрыть', labelledBy }: ModalProps) {
+export function Modal({ open, title, children, onClose, closeLabel = 'Закрыть', labelledBy, className = '' }: ModalProps) {
   const generatedId = useId()
   const titleId = labelledBy || generatedId
   const dialogRef = useRef<HTMLElement>(null)
@@ -66,7 +67,7 @@ export function Modal({ open, title, children, onClose, closeLabel = 'Закры
   }, [open])
 
   if (!open) return null
-  return createPortal(<div className="app-modal" role="presentation">
+  return createPortal(<div className={`app-modal ${className}`.trim()} role="presentation">
     <section ref={dialogRef} className="app-modal-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
       <header className="app-modal-header"><h2 id={titleId}>{title}</h2>{onClose && <button type="button" className="app-modal-close" aria-label={closeLabel} onClick={onClose}>×</button>}</header>
       <div className="app-modal-content">{children}</div>
