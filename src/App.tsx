@@ -794,18 +794,17 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     const title = value?.trim() || ''
     return !title || /^\?+$/.test(title) ? 'Проверь себя' : title
   }
-  const roomPilotDetailsControl = <Glass className="room-pilot-details">
-    <p className="eyebrow">ПАРАМЕТРЫ КОМНАТЫ</p>
-    <h3>Настройте новую комнату</h3>
-    <p>Название, формат и ожидаемое число участников сохраняются только в истории и экспорте ведущего.</p>
+  const roomPilotDetailsControl = <section className="room-create-parameters">
+    <p className="eyebrow">ПАРАМЕТРЫ</p>
+    <label className="room-title-input">Название комнаты<input value={roomTitleDraft} onChange={event => setRoomTitleDraft(event.target.value)} placeholder={defaultRoomTitle()} maxLength={80} /></label>
     <div className="room-pilot-fields">
       <label>Формат<select value={roomDetails.mode} onChange={event => { const mode = event.target.value as RoomMode; const policy = getModeDefinition(mode).setupPolicy; setRoomDetails(previous => ({ ...previous, mode })); setScoringTemplateId(policy.defaultScoringTemplateId); const selection = policy.initialSelection(modePackContext(mode)); if (selection) setTemplateSelection(selection) }}><option value="diagnostic">Проверь себя</option><option value="quiz">Библейская викторина</option></select></label>
       <label>Предполагаемое количество участников<select value={roomDetails.estimatedParticipants} onChange={event => setRoomDetails(previous => ({ ...previous, estimatedParticipants: Number(event.target.value) }))}>{[10, 15, 20, 25, 30].map(count => <option value={count} key={count}>{count} участников</option>)}</select></label>
-      {roomDetails.mode === 'diagnostic' ? <label>Шаблон подсчёта<select value={scoringTemplateId} onChange={event => setScoringTemplateId(event.target.value as ScoringTemplateId)}><option value="standard-v1">Стандартный: A 3 · B 2 · C 1 · D 0 · пропуск −1</option><option value="strict-v1">Строгий: A 2 · B 1 · C 0 · D −1 · пропуск −2</option></select></label> : <label>Подсчёт ответов<input disabled value="Верный ответ — 1 балл · неверный — 0" /></label>}
+      {roomDetails.mode === 'diagnostic' && <label>Подсчёт<select value={scoringTemplateId} onChange={event => setScoringTemplateId(event.target.value as ScoringTemplateId)}><option value="standard-v1">Стандартный</option><option value="strict-v1">Строгий</option></select></label>}
     </div>
-    <p className="room-template-hint">Выбранный шаблон фиксируется в комнате и не изменится, даже если настройки набора обновят позже.</p>
-  </Glass>
-  const packSelectionControl = <Glass className="pack-picker">
+    <p className="room-rules-caption">{roomDetails.mode === 'quiz' ? 'Верный ответ — 1 балл · неверный — 0' : scoringTemplateId === 'strict-v1' ? 'Строгий: A 2 · B 1 · C 0 · D −1 · пропуск −2' : 'Стандартный: A 3 · B 2 · C 1 · D 0 · пропуск −1'}</p>
+  </section>
+  const packSelectionControl = <section className="room-create-packs">
     <p className="eyebrow">НАБОР ВОПРОСОВ</p>
     {systemPacksState === 'loading'
       ? <p>Загружаем опубликованные наборы…</p>
@@ -814,28 +813,11 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
         : roomDetails.mode === 'diagnostic'
           ? !activeDiagnosticPack && firebaseReady
             ? <><h3>Нет опубликованного диагностического набора</h3><p className="connection-warning">Владелец платформы должен опубликовать системный набор перед созданием комнаты.</p></>
-            : <><h3>{displayPackTitle(activeDiagnosticPack?.title)}</h3><p>{diagnosticQuestions.length} вопросов · версия {activeDiagnosticPack?.packVersion || 1}</p><p>{activeDiagnosticPack?.description || 'Системный набор вопросов для режима «Проверь себя». '}</p>{activeDiagnosticPack && activeDiagnosticPack.questions.length === 0 && <p className="connection-warning">В этом наборе пока нет вопросов, поэтому его нельзя использовать для создания комнаты.</p>}</>
+            : <div className="room-auto-pack"><b>{displayPackTitle(activeDiagnosticPack?.title)}</b><span>{diagnosticQuestions.length} вопросов</span>{activeDiagnosticPack && activeDiagnosticPack.questions.length === 0 && <p className="connection-warning">В этом наборе пока нет вопросов, поэтому его нельзя использовать для создания комнаты.</p>}</div>
           : <>
-            <h3>Выберите набор викторины</h3>
-            <p>Сначала добавьте опубликованный набор в свой workspace. Это создаст вашу отдельную копию и не изменит глобальную библиотеку.</p>
-            {!quizSystemPacks.length && <p className="connection-warning">Пока нет опубликованных наборов викторины. Владелец может создать стартовые наборы в глобальной библиотеке.</p>}
-            <div className="quiz-pack-list">
-              {quizSystemPacks.map(pack => {
-                const copied = workspaceQuizPacks[pack.packId]
-                const action = quizPackActions[pack.packId]
-                return <div className={`quiz-pack-row ${selectedQuizWorkspacePack?.packId === pack.packId ? 'selected' : ''}`} key={pack.packId}>
-                  <div><b>{displayPackTitle(pack.title)}</b><small>{pack.difficulty === 'easy' ? 'Лёгкий уровень' : pack.difficulty === 'medium' ? 'Средний уровень' : 'Сложный уровень'} · {pack.questions.length} вопросов · v{pack.packVersion}</small></div>
-                  {copied
-                    ? <Button secondary onClick={() => setTemplateSelection(workspaceQuizSelection(copied.packId))}>{action?.state === 'copied' ? 'Добавлено в workspace' : templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === copied.packId ? 'Выбрано' : 'Уже добавлено'}</Button>
-                    : <Button secondary disabled={action?.state === 'adding'} onClick={() => void addQuizPack(pack)}>{action?.state === 'adding' ? 'Добавляем…' : 'Добавить в мой workspace'}</Button>}
-                  {action?.message && <small className={action.state === 'error' ? 'connection-warning' : 'room-template-hint'}>{action.message}</small>}
-                </div>
-              })}
-            </div>
-            {!!quizWorkspacePacks.length && <div className="quiz-pack-current"><p className="eyebrow">МОИ ДОБАВЛЕННЫЕ НАБОРЫ</p>{quizWorkspacePacks.map(pack => <button type="button" key={pack.packId} className={templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === pack.packId ? 'selected' : ''} onClick={() => setTemplateSelection({ selectedPackId: pack.packId, templateSource: 'workspace' })}>{displayPackTitle(pack.title)} <small>{pack.questions.length} вопросов · v{pack.packVersion}</small></button>)}</div>}
-            {selectedQuizWorkspacePack && <p className="room-template-hint">Выбрано: {displayPackTitle(selectedQuizWorkspacePack.title)} · {selectedQuizWorkspacePack.questions.length} вопросов. Комната сохранит независимый snapshot этой версии.</p>}
+            {quizWorkspacePacks.length ? <div className="room-setup-pack-list">{quizWorkspacePacks.map(pack => <button type="button" key={pack.packId} className={templateSelection.templateSource === 'workspace' && templateSelection.selectedPackId === pack.packId ? 'selected' : ''} onClick={() => setTemplateSelection(workspaceQuizSelection(pack.packId))}><b>{displayPackTitle(pack.title)}</b><span>{pack.difficulty === 'easy' ? 'Лёгкий уровень' : pack.difficulty === 'medium' ? 'Средний уровень' : 'Сложный уровень'} · {pack.questions.length} вопросов</span></button>)}</div> : <div className="room-empty-pack"><p>Добавьте набор из библиотеки, чтобы создать викторину.</p><Button secondary onClick={() => navigate('quiz')}>Открыть библиотеку</Button></div>}
           </>}
-  </Glass>
+  </section>
   const setupModeManifest = getModeDefinition(roomDetails.mode)
   const ModeSetupScreen = setupModeManifest.setupScreen
   if (tab === 'roomSetup' && ModeSetupScreen) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
@@ -857,8 +839,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     />
   </HostLayout>
   if (tab === 'roomSetup') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
-    <header className="host-header"><div><p className="eyebrow">НОВАЯ ВСТРЕЧА</p><h1>Настройка комнаты</h1><p className="room-header-title">Сначала подтвердите параметры — комната появится только после нажатия кнопки ниже.</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
-    <Glass className="start-panel"><p className="eyebrow">ШАГ 1 · ПАРАМЕТРЫ</p><h2>Создайте новую комнату</h2><p>Выберите формат, ожидаемое число участников и набор вопросов. Комната и QR-код появятся только после подтверждения.</p>{roomPilotDetailsControl}{packSelectionControl}<label className="room-title-input">Название комнаты<input value={roomTitleDraft} onChange={event => setRoomTitleDraft(event.target.value)} placeholder={defaultRoomTitle()} maxLength={80} /></label><div className="control-actions"><Button disabled={busy || systemPacksState === 'loading' || (firebaseReady && (!activeSetupValid || !activeSetupPack || activeSetupPack.questions.length === 0))} onClick={() => void create()}>{busy ? 'Создаём…' : 'Подтвердить и создать комнату'}</Button><Button secondary disabled={busy} onClick={() => navigate(session && session.phase !== 'closed' ? 'currentRoom' : 'overview')}>Отмена</Button></div>{createError && <p className="connection-warning">{createError}</p>}{actionError && <p className="connection-warning">{actionError}</p>}</Glass>
+    <header className="host-header room-create-header"><div><p className="eyebrow">НОВАЯ ВСТРЕЧА</p><h1>Создание комнаты</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header>
+    <Glass className="room-create-shell"><div className="room-create-layout">{roomPilotDetailsControl}{packSelectionControl}</div><div className="room-create-actions"><div className="control-actions"><Button disabled={busy || systemPacksState === 'loading' || (firebaseReady && (!activeSetupValid || !activeSetupPack || activeSetupPack.questions.length === 0))} onClick={() => void create()}>{busy ? 'Создаём…' : 'Создать комнату'}</Button><Button secondary disabled={busy} onClick={() => navigate(session && session.phase !== 'closed' ? 'currentRoom' : 'overview')}>Отмена</Button></div>{createError && <p className="connection-warning" role="alert">{createError}</p>}{actionError && <p className="connection-warning" role="alert">{actionError}</p>}</div></Glass>
   </HostLayout>
   const feedbackUrl = createFeedbackUrl(feedbackFormUrl, session)
   const currentRoomTabs = session ? <RoomTabs active={roomView} session={session} onChange={view => navigate('currentRoom', room, view)} /> : null
@@ -868,7 +850,6 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   if (tab === 'currentRoom' && roomView === 'results') {
     const viewedSession = resultRoom === room ? session : archives[resultRoom] || session
     if (viewedSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={viewedSession.roomId} session={viewedSession} participants={Object.keys(viewedSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode>
-      <header className="host-header host-results-header"><div><p className="eyebrow">{getRoomModeTitle(viewedSession).toUpperCase()} · {getRoomResultsLabel(viewedSession).toUpperCase()}</p><h1>{viewedSession.roomTitle || viewedSession.displayCode || viewedSession.roomId}</h1></div></header>
       <Results room={viewedSession.roomId} sessionOverride={viewedSession} embedded actions={viewedSession.phase === 'closed' ? <Button onClick={() => openRoomSetup(viewedSession.mode)}>Создать новую комнату</Button> : <><Button onClick={() => requestCloseCurrentRoom(viewedSession.mode)}>Создать новую комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить и вернуться в главное меню</Button></>} />
       {closeRequest && <Modal open title="Завершить комнату?" className={viewedSession.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'} onClose={() => setCloseRequest(null)}><p>Участники больше не смогут отправлять данные. История, результаты и архив останутся сохранены.</p><div className="app-modal-actions"><Button onClick={() => void confirmCloseCurrentRoom()}>Подтвердить завершение</Button><Button secondary onClick={() => setCloseRequest(null)}>Отмена</Button></div></Modal>}
     </HostLayout>
@@ -1133,7 +1114,7 @@ function QuizResults({ session, embedded, actions }: { session: Session; embedde
     const frame = window.requestAnimationFrame(() => setPodiumRevealed(true))
     return () => window.cancelAnimationFrame(frame)
   }, [allFinishedScoresLoaded, podiumRevealed, podiumRows.length, scoresReady])
-  const content = <><p className="eyebrow">БИБЛЕЙСКАЯ ВИКТОРИНА · РЕЗУЛЬТАТЫ</p><h1>{session.roomTitle || session.packSnapshot?.title || 'Результаты викторины'}</h1><Glass className="quiz-results-board"><div className="quiz-results-summary"><b>{rows.length}</b><span>завершили игру</span></div><QuizWinnersPodium rows={allFinishedScoresLoaded ? podiumRows : []} revealed={podiumRevealed} pending={Boolean(podiumRows.length && (!scoresReady || !allFinishedScoresLoaded))} /></Glass><p className="privacy">Показаны только никнеймы и итоговые баллы. Ответы участников не раскрываются.</p>{actions && <div className="results-actions">{actions}</div>}</>
+  const content = <><p className="eyebrow">БИБЛЕЙСКАЯ ВИКТОРИНА · РЕЗУЛЬТАТЫ</p><h1>Победители викторины</h1><Glass className="quiz-results-board"><div className="quiz-results-summary"><b>{rows.length}</b><span>завершили игру</span></div><QuizWinnersPodium rows={allFinishedScoresLoaded ? podiumRows : []} revealed={podiumRevealed} pending={Boolean(podiumRows.length && (!scoresReady || !allFinishedScoresLoaded))} /></Glass><p className="privacy">Показаны только никнеймы и итоговые баллы. Ответы участников не раскрываются.</p>{actions && <div className="results-actions">{actions}</div>}</>
   return embedded ? <div className="results quiz-results">{content}</div> : <main className="results quiz-results">{content}</main>
 }
 
