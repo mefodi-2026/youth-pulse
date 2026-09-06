@@ -67,6 +67,7 @@
 .host-menu-backdrop { display:none; }
 .host-content { transition:max-width .28s ease,padding .28s ease; }
 .results-mode .host-content { max-width:none; padding:0; }
+.results-mode.host-shell { display:block; }
 .results-mode .host-results-header { position:absolute; z-index:2; top:28px; right:clamp(22px,5vw,72px); left:clamp(68px,8vw,112px); margin:0; pointer-events:none; }
 .results-mode .host-results-header h1 { font-size:clamp(1.7rem,3vw,2.7rem); }
 .results-mode .results { padding-top:140px; }
@@ -462,6 +463,7 @@
 .quiz-pack-current button small { color:inherit; font-size:10px; }
 .room-template-hint { margin:14px 0 0; color:var(--mint); font-size:12px; }
 .quiz-results { gap:0; }
+.results-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin:28px auto 0; }
 .quiz-results-board { width:min(1120px,100%); margin-top:12px; padding:clamp(18px,3vw,32px); display:grid; gap:18px; text-align:left; overflow:hidden; }
 .quiz-results-summary { display:inline-grid; justify-self:start; gap:3px; min-width:132px; padding:12px 16px; border:1px solid var(--line); border-radius:16px; background:rgba(3,30,22,.64); }
 .quiz-results-summary b { color:var(--mint); font-size:34px; letter-spacing:-.07em; line-height:.9; }
@@ -1266,6 +1268,55 @@
 .stage-dashboard[data-stage-mode="diagnostic"] .stage-hero-copy>p:last-child,
 .stage-dashboard[data-stage-mode="diagnostic"] .stage-result-control p:not(.eyebrow),
 .stage-dashboard[data-stage-mode="diagnostic"] .stage-privacy { color:var(--stage-muted); font-size:15px; }
+.stage-result-control .stage-results-button { display:inline-flex; align-items:center; justify-content:center; }
+
+/* One room journey shared by «Проверь себя» and the Bible quiz.  The phase
+   decides the content; legacy room tabs only choose a URL, never a second
+   subscription or a competing layout. */
+.room-journey { display:grid; gap:18px; max-width:1180px; }
+.room-connection-flow { grid-template-columns:minmax(270px,360px) minmax(0,1fr); align-items:stretch; }
+.room-connection-qr,.room-connection-participants,.room-progress-board,.room-results-ready { padding:clamp(22px,3vw,32px); }
+.room-connection-qr { display:grid; align-content:start; gap:14px; }
+.room-connection-qr .qr { width:min(100%,286px); margin:auto; }
+.room-connection-qr code { display:block; max-height:7.25em; overflow:auto; border:1px solid var(--line); border-radius:14px; padding:12px; color:var(--muted); background:rgba(2,22,16,.46); overflow-wrap:anywhere; white-space:pre-wrap; }
+.room-copy-button { min-width:220px; }
+.room-connection-participants { display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:18px; min-height:490px; }
+.room-connection-participants h2,.room-progress-board h2,.room-results-ready h2 { margin:5px 0 8px; }
+.room-connection-participants .participants-panel-header p:not(.eyebrow),.room-progress-board p:not(.eyebrow),.room-results-ready p:not(.eyebrow) { max-width:620px; margin-bottom:0; font-size:16px; }
+.room-connection-participants .participant-rows { max-height:292px; overflow:auto; overscroll-behavior:contain; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.room-connection-participants .participant-rows>div { display:flex; justify-content:space-between; gap:14px; padding:14px 2px; border-bottom:1px solid rgba(154,220,191,.1); }
+.room-connection-participants .participant-rows>div:last-child { border-bottom:0; }
+.room-connection-participants .participant-rows b { min-width:0; overflow-wrap:anywhere; }
+.room-connection-participants .participant-rows span { flex:0 0 auto; color:var(--muted); font-size:13px; }
+.room-journey-actions { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.room-progress-flow { max-width:1120px; }
+.room-progress-flow .metrics { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.room-progress-board { display:grid; grid-template-columns:minmax(0,1fr) 168px; gap:28px; align-items:center; }
+.room-completion-bar { height:12px; margin:26px 0 10px; overflow:hidden; border-radius:999px; background:rgba(2,24,18,.7); }
+.room-completion-bar i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#21ba7c,var(--mint)); box-shadow:0 0 22px rgba(50,206,139,.26); transition:width .6s cubic-bezier(.22,1,.36,1); }
+.room-completion-caption { color:var(--text); font-size:15px; }
+.room-completion-ring { width:168px; aspect-ratio:1; display:grid; place-content:center; border:1px solid rgba(50,206,139,.32); border-radius:50%; background:rgba(3,31,23,.58); box-shadow:0 0 0 14px rgba(50,206,139,.045); text-align:center; }
+.room-completion-ring b { color:var(--mint); font-size:42px; letter-spacing:-.075em; line-height:.95; }
+.room-completion-ring span { margin-top:8px; color:var(--muted); font-size:11px; line-height:1.35; }
+.room-results-ready { display:flex; align-items:center; justify-content:space-between; gap:24px; border-color:rgba(154,220,191,.18); background:rgba(3,28,21,.64); }
+.room-results-ready.is-ready { border-color:rgba(50,206,139,.45); background:linear-gradient(120deg,rgba(12,67,50,.88),rgba(5,40,30,.9)); }
+.stage-results-view .stage-results-message { min-height:300px; }
+
+@media (max-width:980px) {
+  .room-connection-flow { grid-template-columns:1fr; }
+  .room-connection-participants { min-height:0; }
+  .room-connection-participants .participant-rows { max-height:260px; }
+  .room-progress-flow .metrics { grid-template-columns:1fr; }
+  .room-results-ready { align-items:flex-start; flex-direction:column; }
+}
+@media (max-width:620px) {
+  .room-connection-qr,.room-connection-participants,.room-progress-board,.room-results-ready { padding:20px; }
+  .room-copy-button,.room-journey-actions .button { width:100%; }
+  .room-progress-board { grid-template-columns:1fr; }
+  .room-completion-ring { width:138px; }
+  .room-connection-participants .participant-rows>div { align-items:flex-start; flex-direction:column; gap:3px; }
+  .results-actions .button { width:100%; }
+}
 
 @media (max-width:980px) {
   .host-shell[data-host-tab="main"] {

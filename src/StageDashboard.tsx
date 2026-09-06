@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { questions } from './data/questions'
-import { ensureAuth, firebaseReady, subscribeSession, updatePhase } from './repositories/firebaseRepository'
+import { ensureAuth, firebaseReady, subscribeSession } from './repositories/firebaseRepository'
 import { getGameModule } from './lib/gameRegistry'
 import { type Participant, type Session } from './types'
-import { appBasePath } from './lib/urls'
 import { getModeManifest } from './modes/modeRegistry'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
@@ -37,8 +36,7 @@ function useStageSession(room: string) {
 const Metric = ({ value, label, caption }: { value: number; label: string; caption: string }) => <div className="stage-stat"><strong>{value}</strong><div><b>{label}</b><small>{caption}</small></div></div>
 
 export function StageDashboard({ room }: { room: string }) {
-  const [session, setSession, state] = useStageSession(room)
-  const [opening, setOpening] = useState(false)
+  const [session, , state] = useStageSession(room)
 
   if (!session) return <main className="stage-dashboard stage-loading"><div className="stage-light" /><p className="eyebrow">ЭКРАН ПРОГРЕССА</p><h1>{state === 'error' ? 'Не удалось подключиться к комнате' : 'Подключаемся к сессии'}</h1><p>{state === 'error' ? 'Проверьте соединение и откройте экран ещё раз.' : 'Загружаем живые данные участников…'}</p>{state === 'error' ? <button className="stage-retry" onClick={() => window.location.reload()}>Повторить</button> : <span className="stage-spinner" />}</main>
 
@@ -53,23 +51,10 @@ export function StageDashboard({ room }: { room: string }) {
   const viewed = people.filter(person => Boolean(person.personalViewedAt)).length
   const progress = Math.round(answered / totalAnswers * 100)
   const isQuiz = session.mode === 'quiz' || session.gameTypeId === 'quiz'
-  const ready = people.length > 0 && finished === people.length && (isQuiz || viewed === people.length)
-  const phaseLabel = session.phase === 'lobby' ? 'Собираем участников' : ready ? 'Группа готова к общему результату' : `Ждём завершения ${isQuiz ? 'викторины' : 'режима «Проверь себя»'}`
-  const reveal = async () => {
-    if (!ready || opening) return
-    setOpening(true)
-    try {
-      if (firebaseReady) {
-        await updatePhase(room, 'resultsIntro')
-        window.setTimeout(() => { void updatePhase(room, 'resultsReal') }, 20000)
-      } else {
-        const next = { ...session, phase: 'resultsIntro' as const, resultsIntroStartedAt: Date.now() }
-        setDemo(next); setSession(next)
-        window.setTimeout(() => { const real = { ...next, phase: 'resultsReal' as const }; setDemo(real); setSession(real) }, 20000)
-      }
-      window.location.assign(`${appBasePath()}/host?tab=results&room=${encodeURIComponent(room)}`)
-    } catch { setOpening(false) }
-  }
+  const ready = people.length > 0 && finished === people.length
+  const phaseLabel = session.phase === 'lobby' ? 'Собираем участников' : ready ? 'Все участники завершили' : 'Участники выполняют задания'
 
-  return <main className={`stage-dashboard ${isQuiz ? 'quiz-stage' : ''}`} data-stage-mode={isQuiz ? 'quiz' : session.mode}><div className="stage-light" /><header className="stage-header"><div><p className="eyebrow">{isQuiz ? 'БИБЛЕЙСКАЯ ВИКТОРИНА' : 'ПРОВЕРЬ СЕБЯ'}</p><h1>{phaseLabel}</h1></div><span className={ready ? 'stage-ready' : 'stage-live'}>{ready ? 'ВСЁ ГОТОВО' : 'ЭФИР ИДЁТ'}</span></header><section className="stage-hero-card"><div className="stage-hero-copy"><p className="eyebrow">ОБЩИЙ ПРОГРЕСС</p><strong>{progress}<small>%</small></strong><p>{finished === people.length && people.length ? 'Ответы завершены. Ждём, пока каждый откроет личный результат.' : 'Участники отвечают в своём темпе. Личные ответы не отображаются.'}</p></div><div className="stage-ring"><b>{finished}</b><span>из {people.length || '—'}<br />завершили</span></div><div className="stage-progress-track"><i style={{ width: `${progress}%` }} /></div><span className="stage-progress-note">{answered} из {totalAnswers} ответов</span></section><section className="stage-stats"><Metric value={people.length} label="Подключились" caption="участников в комнате" /><Metric value={people.filter(person => person.status === 'answering').length} label="Сейчас отвечают" caption={isQuiz ? 'проходят викторину' : 'проходят «Проверь себя»'} /><Metric value={finished} label="Завершили" caption="ответили на вопросы" /><Metric value={viewed} label="Открыли карточку" caption="увидели личный результат" /></section><section className={`stage-result-control ${ready ? 'is-ready' : ''}`}><div><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ</p><h2>{ready ? 'Можно показывать общую картину' : 'Результат пока закрыт'}</h2><p>{ready ? `Все участники завершили ${isQuiz ? 'викторину' : '«Проверь себя»'} и открыли личные карточки.` : `Ждём: завершили ${finished} из ${people.length || '—'}, личный результат открыли ${viewed} из ${people.length || '—'}.`}</p></div><button className="stage-results-button" disabled={!ready || opening} onClick={() => void reveal()}>{opening ? 'Открываем…' : 'Получить результаты'}</button></section><p className="stage-privacy">На этом экране — только общий ход сессии. Имена и ответы участников не показываются.</p></main>
+  if (session.phase === 'resultsIntro' || session.phase === 'resultsReal') return <main className={`stage-dashboard stage-results-view ${isQuiz ? 'quiz-stage' : ''}`} data-stage-mode={isQuiz ? 'quiz' : session.mode}><div className="stage-light" /><header className="stage-header"><div><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {isQuiz ? 'БИБЛЕЙСКАЯ ВИКТОРИНА' : 'ПРОВЕРЬ СЕБЯ'}</p><h1>{isQuiz ? 'Победители и результаты' : 'Наша общая картина'}</h1></div><span className="stage-ready">РЕЗУЛЬТАТЫ ОТКРЫТЫ</span></header><section className="stage-hero-card stage-results-message"><div className="stage-hero-copy"><p className="eyebrow">ПОКАЗ СИНХРОНИЗИРОВАН</p><strong>{finished}<small>/{people.length}</small></strong><p>{isQuiz ? 'Ведущий открыл итоговый рейтинг. Победители показаны на его общем экране.' : 'Ведущий открыл общую диаграмму. Личные ответы и карточки участников не отображаются.'}</p></div><div className="stage-ring"><b>✓</b><span>общий<br />результат</span></div></section><p className="stage-privacy">Этот экран переключился по действию ведущего. Он не создаёт и не меняет данные комнаты.</p></main>
+
+  return <main className={`stage-dashboard ${isQuiz ? 'quiz-stage' : ''}`} data-stage-mode={isQuiz ? 'quiz' : session.mode}><div className="stage-light" /><header className="stage-header"><div><p className="eyebrow">{isQuiz ? 'БИБЛЕЙСКАЯ ВИКТОРИНА' : 'ПРОВЕРЬ СЕБЯ'}</p><h1>{phaseLabel}</h1></div><span className={ready ? 'stage-ready' : 'stage-live'}>{ready ? 'ВСЁ ГОТОВО' : 'ЭФИР ИДЁТ'}</span></header><section className="stage-hero-card"><div className="stage-hero-copy"><p className="eyebrow">ОБЩИЙ ПРОГРЕСС</p><strong>{progress}<small>%</small></strong><p>{ready ? 'Все участники завершили. Ведущий может открыть общий результат.' : 'Участники выполняют задания в своём темпе. Личные ответы не отображаются.'}</p></div><div className="stage-ring"><b>{finished}</b><span>из {people.length || '—'}<br />завершили</span></div><div className="stage-progress-track"><i style={{ width: `${progress}%` }} /></div><span className="stage-progress-note">Завершили {finished} из {people.length || 0} · {answered} из {totalAnswers} ответов</span></section><section className="stage-stats"><Metric value={people.length} label="Подключились" caption="участников в комнате" /><Metric value={people.filter(person => person.status === 'answering').length} label="Сейчас проходят" caption={isQuiz ? 'викторину' : '«Проверь себя»'} /><Metric value={finished} label="Завершили" caption={`из ${people.length || 0} участников`} /><Metric value={viewed} label="Открыли карточку" caption="увидели личный результат" /></section><section className={`stage-result-control ${ready ? 'is-ready' : ''}`}><div><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ</p><h2>{ready ? 'Готов к показу ведущим' : 'Результат пока закрыт'}</h2><p>{ready ? 'Ведущий сам решает, когда синхронно открыть общий результат.' : `Ждём: завершили ${finished} из ${people.length || 0}.`}</p></div><span className="stage-results-button">{ready ? 'Ждём ведущего' : 'Идёт прохождение'}</span></section><p className="stage-privacy">На этом экране — только общий ход сессии. Имена и ответы участников не показываются.</p></main>
 }

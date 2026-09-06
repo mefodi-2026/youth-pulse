@@ -276,7 +276,10 @@ function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, s
   const canReturnToRoom = Boolean(room && session && session.phase !== 'closed' && tab !== 'overview' && tab !== 'currentRoom')
   const visualMode = session?.gameTypeId || session?.mode || (tab === 'roomSetup' ? readRoomSetupMode() : modeRegistry[tab as RoomMode] ? tab : '')
   const activeRoom = Boolean(room && session && session.phase !== 'closed')
-  return <main data-host-tab={tab} data-room-mode={visualMode} className={`host-shell host-tab-${tab} ${menuOpen ? 'is-menu-open' : 'is-menu-collapsed'} ${resultsMode ? 'results-mode' : ''}`}><button type="button" className="host-menu-toggle" aria-label="Открыть меню" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><i /><i /><i /></button><div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />{menuOpen && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand"><span>✦</span><b>Атмосфера</b><small>панель ведущего</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}><AppIcon name={icon} size={18} />{label}</button>)}</nav>{activeRoom && <div className="menu-room"><small>ТЕКУЩАЯ КОМНАТА</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside><section className="host-content">{canReturnToRoom && <button type="button" className="return-to-room" onClick={() => selectTab('currentRoom')}>← Вернуться к текущей комнате</button>}{children}</section></main>
+  return <main data-host-tab={tab} data-room-mode={visualMode} className={`host-shell host-tab-${tab} ${menuOpen ? 'is-menu-open' : 'is-menu-collapsed'} ${resultsMode ? 'results-mode' : ''}`}>
+    {!resultsMode && <><button type="button" className="host-menu-toggle" aria-label="Открыть меню" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><i /><i /><i /></button><div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />{menuOpen && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand"><span>✦</span><b>Атмосфера</b><small>панель ведущего</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}><AppIcon name={icon} size={18} />{label}</button>)}</nav>{activeRoom && <div className="menu-room"><small>ТЕКУЩАЯ КОМНАТА</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside></>}
+    <section className="host-content">{canReturnToRoom && <button type="button" className="return-to-room" onClick={() => selectTab('currentRoom')}>← Вернуться к текущей комнате</button>}{children}</section>
+  </main>
 }
 
 function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; initialTab?: HostTab; initialRoom?: string }) {
@@ -321,6 +324,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const copyingQuizPacksRef = useRef(new Set<string>())
   const [roomTitleDraft, setRoomTitleDraft] = useState('')
   const [roomTitleSaving, setRoomTitleSaving] = useState(false)
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+  const copyResetTimer = useRef<number | null>(null)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [roomDetails, setRoomDetails] = useState<RoomPilotDetails>({ groupName: '', city: '', mode: initialTab === 'roomSetup' ? readRoomSetupMode() || 'diagnostic' : 'diagnostic', estimatedParticipants: 30 })
   const [scoringTemplateId, setScoringTemplateId] = useState<ScoringTemplateId>('standard-v1')
@@ -390,6 +395,15 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   useEffect(() => {
     if (tab === 'currentRoom' && session?.mode === 'wheel') setMenuOpen(false)
   }, [tab, session?.roomId, session?.mode])
+
+  useEffect(() => () => { if (copyResetTimer.current) window.clearTimeout(copyResetTimer.current) }, [])
+
+  // The room phase is the source of truth after a reload or an old bookmarked
+  // view. Results must never reopen underneath the host navigation shell.
+  useEffect(() => {
+    if (tab !== 'currentRoom' || !session || (session.phase !== 'resultsIntro' && session.phase !== 'resultsReal') || roomView === 'results') return
+    navigate('currentRoom', room, 'results')
+  }, [room, roomView, session?.phase, tab])
 
   // A closed room is kept in Firebase and its archive, but it must never be
   // restored as the active room for the leader after a reload.
@@ -624,6 +638,20 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const start = async () => {
     await changePhase('live')
   }
+  const copyJoinLink = async () => {
+    if (!joinUrl) return
+    setCopyState('idle')
+    if (copyResetTimer.current) window.clearTimeout(copyResetTimer.current)
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Копирование не поддерживается этим браузером.')
+      await navigator.clipboard.writeText(joinUrl)
+      setCopyState('copied')
+      copyResetTimer.current = window.setTimeout(() => setCopyState('idle'), 2600)
+    } catch (error) {
+      setCopyState('error')
+      console.warn('Не удалось скопировать ссылку комнаты', error)
+    }
+  }
   const showResults = async () => {
     if (!session) return
     if (!await changePhase('resultsIntro')) return
@@ -841,20 +869,14 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     const viewedSession = resultRoom === room ? session : archives[resultRoom] || session
     if (viewedSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={viewedSession.roomId} session={viewedSession} participants={Object.keys(viewedSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode>
       <header className="host-header host-results-header"><div><p className="eyebrow">{getRoomModeTitle(viewedSession).toUpperCase()} · {getRoomResultsLabel(viewedSession).toUpperCase()}</p><h1>{viewedSession.roomTitle || viewedSession.displayCode || viewedSession.roomId}</h1></div></header>
-      {currentRoomTabs}
-      <Results room={viewedSession.roomId} sessionOverride={viewedSession} embedded />
+      <Results room={viewedSession.roomId} sessionOverride={viewedSession} embedded actions={viewedSession.phase === 'closed' ? <Button onClick={() => openRoomSetup(viewedSession.mode)}>Создать новую комнату</Button> : <><Button onClick={() => requestCloseCurrentRoom(viewedSession.mode)}>Создать новую комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить и вернуться в главное меню</Button></>} />
+      {closeRequest && <Modal open title="Завершить комнату?" className={viewedSession.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'} onClose={() => setCloseRequest(null)}><p>Участники больше не смогут отправлять данные. История, результаты и архив останутся сохранены.</p><div className="app-modal-actions"><Button onClick={() => void confirmCloseCurrentRoom()}>Подтвердить завершение</Button><Button secondary onClick={() => setCloseRequest(null)}>Отмена</Button></div></Modal>}
     </HostLayout>
     return <HostLayout menu={menu} tab={tab} onTab={navigate} room={lastClosedRoom} session={null} participants={0} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
       <header className="host-header"><div><p className="eyebrow">РЕЗУЛЬТАТЫ</p><h1>Нет выбранной комнаты</h1></div></header>
       <Glass className="empty-state"><p>Откройте завершённую комнату из истории, чтобы увидеть результаты.</p><Button onClick={() => navigate('rooms')}>Открыть историю комнат</Button></Glass>
     </HostLayout>
   }
-
-  if (tab === 'currentRoom' && roomView === 'participants' && session) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
-    <header className="host-header"><div><p className="eyebrow">{session.phase === 'closed' ? 'АРХИВНАЯ КОМНАТА' : 'ПОДКЛЮЧЕНИЕ УЧАСТНИКОВ'}</p><h1>Участники и QR</h1><p className="room-header-title">{session.roomTitle || session.displayCode || room}</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{session.phase === 'closed' ? 'ЗАВЕРШЕНА' : firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО'}</span></header>
-    {currentRoomTabs}
-    <div className="host-grid room-participants-grid"><Glass className="qr-card"><p className="eyebrow">ПОДКЛЮЧЕНИЕ</p>{qr ? <img src={qr} alt="QR-код комнаты" /> : <p>Генерируем QR-код…</p>}<code>{joinUrl}</code><Button secondary onClick={() => void navigator.clipboard?.writeText(joinUrl)}>Скопировать ссылку</Button></Glass><Glass className="participant-list"><p className="eyebrow">УЧАСТНИКИ · {participants.length}</p><h2>{session.phase === 'closed' ? 'Комната завершена' : 'Кто уже подключился'}</h2>{participants.length ? <div className="participant-rows">{participants.map(person => <div key={person.id}><b>{person.nickname}</b><span>{person.status === 'finished' ? 'Завершил(а)' : person.status === 'answering' ? 'Отвечает' : 'Ожидает'}</span></div>)}</div> : <p>Пока никто не подключился. Покажите QR-код или отправьте ссылку.</p>}</Glass></div>
-  </HostLayout>
 
   if (tab === 'currentRoom' && roomView === 'export') {
     const exportRoom = session || (lastClosedRoom ? archives[lastClosedRoom] : null)
@@ -880,12 +902,17 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       <ModeHostScreen session={session} joinUrl={joinUrl} onClose={session.mode === 'wheel' ? closeWheelRoom : closeRoom} onPlayAgain={session.mode === 'wheel' ? startWheelAgain : undefined} onExitToMain={session.mode === 'wheel' ? exitWheelToMain : undefined} />
     </HostLayout>
     return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
-      <header className="host-header"><div><p className="eyebrow">ТЕКУЩАЯ КОМНАТА · {getRoomModeTitle(session).toUpperCase()}</p><h1>{session.roomTitle || session.displayCode || room}</h1><p className="room-header-title">{getRoomStatusText(session)}</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО'}</span></header>
+      <header className="host-header"><div><p className="eyebrow">ТЕКУЩАЯ КОМНАТА · {getRoomModeTitle(session).toUpperCase()}</p><h1>{session.phase === 'lobby' ? 'Подключение участников' : 'Участники выполняют задания'}</h1><p className="room-header-title">{session.roomTitle || session.displayCode || room}</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО'}</span></header>
       {currentRoomTabs}
-      <div className="metrics"><Metric label="Подключились" value={participants.length} note={`из ${session.maxParticipants} участников`} /><Metric label="Сейчас отвечают" value={answering} note="в своём темпе" /><Metric label="Завершили" value={finished} note={allFinished ? 'все готовы' : 'ждём завершения'} /></div>
-      <Glass className="control-panel"><p className="eyebrow">ТЕКУЩАЯ ФАЗА</p><h2>{getRoomStatusText(session)}</h2><p>{getRoomStatusDescription(session)}</p><div className="control-actions">{session.phase === 'lobby' && <Button onClick={() => void start()}>Запустить {getRoomModeTitle(session).toLocaleLowerCase('ru-RU')}</Button>}<Button secondary onClick={() => navigate('currentRoom', room, 'participants')}>Участники и QR</Button><Button disabled={!allFinished && session.phase === 'live'} onClick={() => void showResults()}>{getRoomResultsLabel(session)}</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить сессию</Button></div></Glass>
+      {session.phase === 'lobby' ? <section className="room-journey room-connection-flow">
+        <Glass className="room-connection-qr"><p className="eyebrow">ПОДКЛЮЧЕНИЕ</p>{qr ? <img src={qr} alt="QR-код для подключения к комнате" className="qr" /> : <p>Генерируем QR-код…</p>}<code>{joinUrl}</code><Button secondary className="room-copy-button" onClick={() => void copyJoinLink()}>{copyState === 'copied' ? '✓ Ссылка скопирована' : 'Скопировать ссылку'}</Button>{warning && <p className="connection-warning">{warning}</p>}{copyState === 'error' && <p className="connection-warning" role="alert">Не удалось скопировать ссылку. Скопируйте адрес из поля вручную.</p>}</Glass>
+        <Glass className="room-connection-participants"><div className="participants-panel-header"><div><p className="eyebrow">УЧАСТНИКИ · {participants.length}</p><h2>{participants.length ? 'Уже подключились' : 'Ждём первых участников'}</h2><p>После одного нажатия «Продолжить» участник автоматически перейдёт в ожидание ведущего.</p></div><span>{session.displayCode || room}</span></div>{participants.length ? <div className="participant-rows">{participants.sort((a, b) => a.joinedAt - b.joinedAt).map(person => <div key={person.id}><b>{person.nickname}</b><span>{person.status === 'finished' ? 'Завершил(а)' : person.status === 'answering' ? 'Отвечает' : 'Ожидает'}</span></div>)}</div> : <p className="participants-empty">Покажите QR-код или отправьте ссылку. Запуск станет доступен после первого подключения.</p>}<div className="room-journey-actions"><Button disabled={!participants.length} onClick={() => void start()}>Запустить {getRoomModeTitle(session).toLocaleLowerCase('ru-RU')}</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить сессию</Button></div>{actionError && <p className="connection-warning" role="alert">{actionError}</p>}</Glass>
+      </section> : <section className="room-journey room-progress-flow">
+        <div className="metrics"><Metric label="Подключились" value={participants.length} note={`из ${participants.length} текущих участников`} /><Metric label="Сейчас проходят" value={answering} note="в своём темпе" /><Metric label="Завершили" value={finished} note={`из ${participants.length || '—'} участников`} /></div>
+        <Glass className="room-progress-board"><div><p className="eyebrow">ОБЩИЙ ПРОГРЕСС</p><h2>Участники выполняют задания</h2><p>{session.mode === 'quiz' ? 'Каждый проходит викторину в своём темпе. На общем экране виден только ход игры.' : 'Каждый отвечает в своём темпе. На общем экране виден только общий прогресс.'}</p><div className="room-completion-bar" aria-label={`Завершили ${finished} из ${participants.length || 0} участников`}><i style={{ width: `${participants.length ? Math.round(finished / participants.length * 100) : 0}%` }} /></div><b className="room-completion-caption">Завершили {finished} из {participants.length || 0}</b></div><div className="room-completion-ring"><b>{participants.length ? Math.round(finished / participants.length * 100) : 0}%</b><span>завершение<br />комнаты</span></div></Glass>
+        <Glass className={`room-results-ready ${allFinished ? 'is-ready' : ''}`}><div><p className="eyebrow">ИТОГИ</p><h2>{allFinished ? 'Все участники завершили' : 'Итоги пока закрыты'}</h2><p>{allFinished ? 'Ведущий может синхронно открыть общий результат на экране проектора.' : `Ждём завершения: ${finished} из ${participants.length || 0}.`}</p></div><div className="room-journey-actions"><Button secondary onClick={() => window.open(hostUrl(`/stage?room=${room}`), 'atmosphere-stage')}>Открыть экран прогресса</Button><Button disabled={!allFinished} onClick={() => void showResults()}>{session.mode === 'quiz' ? 'Показать победителей' : 'Показать результаты'}</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить сессию</Button></div></Glass>{actionError && <p className="connection-warning" role="alert">{actionError}</p>}
+      </section>}
       {closeRequest && <Modal open title="Завершить комнату?" className={session.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'} onClose={() => setCloseRequest(null)}><p>Участники больше не смогут отправлять данные. История, результаты и архив останутся сохранены.</p><div className="app-modal-actions"><Button onClick={() => void confirmCloseCurrentRoom()}>Подтвердить завершение</Button><Button secondary onClick={() => setCloseRequest(null)}>Отмена</Button></div></Modal>}
-      {actionError && <Modal open title="Не удалось выполнить действие" className={session.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'} onClose={() => setActionError('')}><p>{actionError}</p></Modal>}
     </HostLayout>
   }
 
@@ -1040,7 +1067,7 @@ function Stage({ room }: { room: string }) {
   return <main className="stage"><div className="stage-glow" /><p className="eyebrow">ПРОВЕРЬ СЕБЯ</p><h1>{session?.phase === 'lobby' ? 'Скоро начнём' : session?.phase === 'resultsIntro' ? 'Собираем общую картину' : session?.phase === 'resultsReal' ? 'Результаты готовы' : session ? 'Мы идём вместе' : 'Ожидаем комнату'}</h1><p className="stage-caption">{session?.phase === 'lobby' ? 'Участники подключаются по QR-коду.' : session?.phase === 'live' ? 'Каждый отвечает в своём темпе. Здесь — только общий прогресс.' : 'Спасибо каждому, кто ответил честно.'}</p><div className="stage-metrics"><Metric label="Подключились" value={people.length} note="участников" /><Metric label="Отвечают" value={people.filter(person => person.status === 'answering').length} note="в своём темпе" /><Metric label="Завершили" value={people.filter(person => person.status === 'finished').length} note="готовы к итогу" /></div><Glass className="stage-progress"><p>Общий прогресс</p><strong>{answers} <small>из {total} ответов</small></strong><div className="progress large"><i style={{ width: `${progress}%` }} /></div><span>{progress}%</span></Glass><small className="privacy">На этом экране отображаются только общие числа.</small></main>
 }
 
-function Results({ room, sessionOverride, embedded = false }: { room: string; sessionOverride?: Session | null; embedded?: boolean }) {
+function Results({ room, sessionOverride, embedded = false, actions }: { room: string; sessionOverride?: Session | null; embedded?: boolean; actions?: React.ReactNode }) {
   const [liveSession] = useRoom(room)
   const session = sessionOverride || liveSession
   const [now, setNow] = useState(Date.now())
@@ -1048,7 +1075,7 @@ function Results({ room, sessionOverride, embedded = false }: { room: string; se
   const elapsed = session?.resultsIntroStartedAt ? now - session.resultsIntroStartedAt : 0
   const showReal = session?.phase === 'resultsReal' || elapsed >= 20000
   const people = Object.values(session?.participants || {})
-  if (session?.mode === 'quiz' || session?.gameTypeId === quizGameTypeId) return <QuizResults session={session} embedded={embedded} />
+  if (session?.mode === 'quiz' || session?.gameTypeId === quizGameTypeId) return <QuizResults session={session} embedded={embedded} actions={actions} />
   if (session?.mode === 'wheel' || session?.gameTypeId === 'wheel') {
     const WheelResults = getModeDefinition('wheel').mainScreen
     return WheelResults ? <div className={embedded ? 'results wheel-results' : 'wheel-results'}><WheelResults session={session} /></div> : <main className="results"><p>История игры недоступна.</p></main>
@@ -1057,7 +1084,7 @@ function Results({ room, sessionOverride, embedded = false }: { room: string; se
   const shown = showReal ? real : { communication: 96, forgiveness: 94, service: 97, care: 93, honesty: 95 }
   const overall = Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)
   const countdown = Math.max(0, Math.ceil((20000 - elapsed) / 1000))
-  if (embedded) return <div className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><ResultRing value={overall} /><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b className={value < 0 ? 'negative' : ''}>{value}%</b><i><em style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p></div>
+  if (embedded) return <div className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><ResultRing value={overall} /><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b className={value < 0 ? 'negative' : ''}>{value}%</b><i><em style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p>{actions && <div className="results-actions">{actions}</div>}</div>
   return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><ResultRing value={overall} /><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b className={value < 0 ? 'negative' : ''}>{value}%</b><i><em style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p><small className="privacy">Показаны только агрегированные результаты — без имён и личных ответов.</small></main>
   return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><div className="big-score"><b>{Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)}%</b><span>общий ориентир</span></div><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b>{value}%</b><i><em style={{ width: `${value}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p><small className="privacy">Показаны только агрегированные результаты — без имён и личных ответов.</small></main>
 }
@@ -1089,7 +1116,7 @@ function QuizWinnersPodium({ rows, revealed, pending = false }: { rows: QuizResu
   </section>
 }
 
-function QuizResults({ session, embedded }: { session: Session; embedded: boolean }) {
+function QuizResults({ session, embedded, actions }: { session: Session; embedded: boolean; actions?: React.ReactNode }) {
   const [scoreRecords, setScoreRecords] = useState<Record<string, import('./types').ParticipantQuizResult>>({})
   const [scoresReady, setScoresReady] = useState(false)
   const [podiumRevealed, setPodiumRevealed] = useState(false)
@@ -1106,7 +1133,7 @@ function QuizResults({ session, embedded }: { session: Session; embedded: boolea
     const frame = window.requestAnimationFrame(() => setPodiumRevealed(true))
     return () => window.cancelAnimationFrame(frame)
   }, [allFinishedScoresLoaded, podiumRevealed, podiumRows.length, scoresReady])
-  const content = <><p className="eyebrow">БИБЛЕЙСКАЯ ВИКТОРИНА · РЕЗУЛЬТАТЫ</p><h1>{session.roomTitle || session.packSnapshot?.title || 'Результаты викторины'}</h1><Glass className="quiz-results-board"><div className="quiz-results-summary"><b>{rows.length}</b><span>завершили игру</span></div><QuizWinnersPodium rows={allFinishedScoresLoaded ? podiumRows : []} revealed={podiumRevealed} pending={Boolean(podiumRows.length && (!scoresReady || !allFinishedScoresLoaded))} /></Glass><p className="privacy">Показаны только никнеймы и итоговые баллы. Ответы участников не раскрываются.</p></>
+  const content = <><p className="eyebrow">БИБЛЕЙСКАЯ ВИКТОРИНА · РЕЗУЛЬТАТЫ</p><h1>{session.roomTitle || session.packSnapshot?.title || 'Результаты викторины'}</h1><Glass className="quiz-results-board"><div className="quiz-results-summary"><b>{rows.length}</b><span>завершили игру</span></div><QuizWinnersPodium rows={allFinishedScoresLoaded ? podiumRows : []} revealed={podiumRevealed} pending={Boolean(podiumRows.length && (!scoresReady || !allFinishedScoresLoaded))} /></Glass><p className="privacy">Показаны только никнеймы и итоговые баллы. Ответы участников не раскрываются.</p>{actions && <div className="results-actions">{actions}</div>}</>
   return embedded ? <div className="results quiz-results">{content}</div> : <main className="results quiz-results">{content}</main>
 }
 
