@@ -23,12 +23,13 @@ function useStageSession(room: string) {
     }
     let active = true
     let unsubscribe: () => void = () => undefined
+    const timeout = window.setTimeout(() => { if (active) setState('error') }, 12000)
     setState('connecting')
     void ensureAuth().then(() => {
       if (!active) return
-      unsubscribe = subscribeSession(room, value => { if (active) { setSession(value); setState('ready') } }, () => { if (active) setState('error') })
-    }).catch(() => { if (active) setState('error') })
-    return () => { active = false; unsubscribe() }
+      unsubscribe = subscribeSession(room, value => { if (active) { window.clearTimeout(timeout); setSession(value); setState('ready') } }, () => { if (active) { window.clearTimeout(timeout); setState('error') } })
+    }).catch(() => { if (active) { window.clearTimeout(timeout); setState('error') } })
+    return () => { active = false; window.clearTimeout(timeout); unsubscribe() }
   }, [room])
   return [session, setSession, state] as const
 }

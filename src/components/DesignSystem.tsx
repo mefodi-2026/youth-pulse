@@ -55,6 +55,15 @@ export function StatusBadge({ children, tone = 'default', className = '' }: { ch
   return <span className={`ds-status ds-status-${tone} ${className}`.trim()}>{children}</span>
 }
 
+/** A neutral, mode-independent waiting state. It deliberately contains no
+ * product-mode copy, so an unresolved room can never flash another mode. */
+export function LoadingState({ eyebrow = 'ПОДКЛЮЧАЕМ', title = 'Загружаем…', description, className = '' }: { eyebrow?: string; title?: ReactNode; description?: ReactNode; className?: string }) {
+  return <section className={`ds-loading-state ${className}`.trim()} role="status" aria-live="polite">
+    <span className="ds-loading-spinner" aria-hidden="true" />
+    <div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1>{description && <p>{description}</p>}</div>
+  </section>
+}
+
 export function PageHeader({ eyebrow, title, description, status, className = '' }: { eyebrow?: string; title: ReactNode; description?: ReactNode; status?: ReactNode; className?: string }) {
   return <header className={`ds-page-header ${className}`.trim()}>
     <div>

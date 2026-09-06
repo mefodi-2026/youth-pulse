@@ -24,7 +24,7 @@ import { useRoom } from './core/hooks/useRoom'
 import { useSessionLifecycle } from './core/hooks/useSessionLifecycle'
 import { isSessionExpired } from './core/sessionLifecycle'
 import { Modal } from './components/Modal'
-import { AppIcon, type AppIconName, Button, PageHeader, StatusBadge, Surface as Glass } from './components/DesignSystem'
+import { AppIcon, type AppIconName, Button, LoadingState, PageHeader, StatusBadge, Surface as Glass } from './components/DesignSystem'
 import { QuestionPackPreview } from './components/QuestionPackPreview'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
@@ -66,7 +66,7 @@ function App() {
  * already has a persisted Firebase session is sent straight to the Host UI. */
 function AppEntry() {
   const leader = useLeaderProfile()
-  if (leader.loading) return <main className="auth-page"><Glass className="auth-card"><p className="eyebrow">ПРОВЕРКА ДОСТУПА</p><h1>Подключаем аккаунт…</h1></Glass></main>
+  if (leader.loading) return <main className="auth-page auth-loading-page"><LoadingState eyebrow="ПРОВЕРКА ДОСТУПА" title="Подключаем аккаунт…" description="Проверяем авторизацию и доступ к рабочему пространству." /></main>
   if (!leader.userUid) return <AuthRedirect to="/login" />
   return <AuthRedirect to={leader.profile?.status === 'active' ? '/host?tab=main' : '/account'} />
 }
@@ -98,7 +98,7 @@ function LandingPage() {
 
 function AuthRedirect({ to }: { to: string }) {
   useEffect(() => { go(to) }, [to])
-  return <main className="auth-page"><Glass className="auth-card"><p className="eyebrow">ПЕРЕХОД</p><h1>Открываем страницу…</h1></Glass></main>
+  return <main className="auth-page auth-loading-page"><LoadingState eyebrow="ПЕРЕХОД" title="Открываем страницу…" description="Подготавливаем нужный раздел." /></main>
 }
 
 function useLeaderProfile() {
@@ -125,7 +125,7 @@ function useLeaderProfile() {
 
 function LeaderRoute({ children, allowInactive = false }: { children: (profile: LeaderProfile) => React.ReactNode; allowInactive?: boolean }) {
   const leader = useLeaderProfile()
-  if (leader.loading) return <main className="auth-page"><Glass className="auth-card"><p className="eyebrow">ПРОВЕРКА ДОСТУПА</p><h1>Подключаем аккаунт…</h1></Glass></main>
+  if (leader.loading) return <main className="auth-page auth-loading-page"><LoadingState eyebrow="ПРОВЕРКА ДОСТУПА" title="Подключаем аккаунт…" description="Проверяем авторизацию и доступ к рабочему пространству." /></main>
   if (!leader.userUid) return <AuthRedirect to="/login" />
   if (!leader.profile) return <main className="auth-page"><Glass className="auth-card"><p className="eyebrow">АККАУНТ НЕ ГОТОВ</p><h1>Профиль ведущего не найден</h1><p>{leader.error || 'Завершите регистрацию или обратитесь к администратору.'}</p><Button onClick={() => void logoutLeader().then(() => go('/login'))}>Выйти</Button></Glass></main>
   if (!allowInactive && leader.profile.status !== 'active') return <AuthRedirect to="/account" />
@@ -275,7 +275,8 @@ function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, s
   const selectTab = (next: HostTab) => { onTab(next); if (next === 'results' || window.innerWidth < 980) setMenuOpen(false) }
   const canReturnToRoom = Boolean(room && session && session.phase !== 'closed' && tab !== 'overview' && tab !== 'currentRoom')
   const visualMode = session?.gameTypeId || session?.mode || (tab === 'roomSetup' ? readRoomSetupMode() : modeRegistry[tab as RoomMode] ? tab : '')
-  return <main data-host-tab={tab} data-room-mode={visualMode} className={`host-shell host-tab-${tab} ${menuOpen ? 'is-menu-open' : 'is-menu-collapsed'} ${resultsMode ? 'results-mode' : ''}`}><button type="button" className="host-menu-toggle" aria-label="Открыть меню" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><i /><i /><i /></button><div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />{menuOpen && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand"><span>✦</span><b>Атмосфера</b><small>панель ведущего</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}><AppIcon name={icon} size={18} />{label}</button>)}</nav>{room && <div className="menu-room"><small>{session?.phase === 'closed' ? 'ЗАВЕРШЁННАЯ КОМНАТА' : 'ТЕКУЩАЯ КОМНАТА'}</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside><section className="host-content">{canReturnToRoom && <button type="button" className="return-to-room" onClick={() => selectTab('currentRoom')}>← Вернуться к текущей комнате</button>}{children}</section></main>
+  const activeRoom = Boolean(room && session && session.phase !== 'closed')
+  return <main data-host-tab={tab} data-room-mode={visualMode} className={`host-shell host-tab-${tab} ${menuOpen ? 'is-menu-open' : 'is-menu-collapsed'} ${resultsMode ? 'results-mode' : ''}`}><button type="button" className="host-menu-toggle" aria-label="Открыть меню" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><i /><i /><i /></button><div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />{menuOpen && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand"><span>✦</span><b>Атмосфера</b><small>панель ведущего</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}><AppIcon name={icon} size={18} />{label}</button>)}</nav>{activeRoom && <div className="menu-room"><small>ТЕКУЩАЯ КОМНАТА</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside><section className="host-content">{canReturnToRoom && <button type="button" className="return-to-room" onClick={() => selectTab('currentRoom')}>← Вернуться к текущей комнате</button>}{children}</section></main>
 }
 
 function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; initialTab?: HostTab; initialRoom?: string }) {
@@ -284,7 +285,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   // A persisted room is only a resume candidate. Reloading must begin at the
   // main menu instead of silently reopening a live room from an old URL.
   const [room, setRoom] = useState(() => localStorage.getItem(roomKey) || '')
-  const [session, setSession] = useRoom(room)
+  const [session, setSession, roomConnection] = useRoom(room)
   const [qr, setQr] = useState('')
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState('')
@@ -401,6 +402,15 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     if (room) setRoom('')
     if (tab !== 'main') navigate('main', '')
   }, [room, roomKey, lastRoomKey, session?.phase])
+  // A persisted room code is merely a resume candidate. Once Firebase has
+  // confirmed that it no longer exists, remove it before rendering an empty
+  // state so the side bar and content cannot disagree.
+  useEffect(() => {
+    if (!room || roomConnection !== 'ready' || session) return
+    if (localStorage.getItem(roomKey) === room) localStorage.removeItem(roomKey)
+    if (localStorage.getItem('atmosphere-host-room') === room) localStorage.removeItem('atmosphere-host-room')
+    setRoom('')
+  }, [room, roomConnection, roomKey, session])
   useEffect(() => {
     if (!joinUrl) return
     console.info('diagnostic joinUrl', { qr: joinUrl, copy: joinUrl, manual: joinUrl })
@@ -855,6 +865,12 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   }
 
   if (tab === 'currentRoom') {
+    if (room && roomConnection === 'connecting') return <HostLayout menu={menu} tab={tab} onTab={navigate} room="" session={null} participants={0} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
+      <LoadingState className="host-loading-state" eyebrow="ТЕКУЩАЯ КОМНАТА" title="Подключаемся к комнате…" description="Проверяем доступ и загружаем актуальные данные встречи." />
+    </HostLayout>
+    if (room && roomConnection === 'error') return <HostLayout menu={menu} tab={tab} onTab={navigate} room="" session={null} participants={0} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
+      <header className="host-header"><div><p className="eyebrow">ТЕКУЩАЯ КОМНАТА</p><h1>Не удалось подключиться к комнате</h1></div></header><Glass className="empty-state"><p>Проверьте соединение и обновите страницу. Данные другой комнаты не будут показаны.</p><Button onClick={() => window.location.reload()}>Повторить</Button></Glass>
+    </HostLayout>
     if (!session || session.phase === 'closed') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={lastClosedRoom} session={null} participants={0} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
       <header className="host-header"><div><p className="eyebrow">ТЕКУЩАЯ КОМНАТА</p><h1>У вас пока нет активной комнаты</h1></div></header>
       <Glass className="empty-state"><p>Создайте комнату, чтобы увидеть участников, статистику и результаты.</p><Button onClick={() => openRoomSetup(diagnosticMode)}>Создать комнату</Button>{lastClosedRoom && <Button secondary onClick={() => navigate('rooms')}>Посмотреть историю комнат</Button>}</Glass>
@@ -888,8 +904,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
 
   if (tab === 'diagnostic') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
     <header className="host-header"><div><p className="eyebrow">РЕЖИМ · ПРОВЕРЬ СЕБЯ</p><h1>{getModeDefinition(diagnosticMode).title}</h1><p className="room-header-title">{getModeDefinition(diagnosticMode).description}</p></div></header>
-    <Glass className="mode-intro"><p className="eyebrow">ОПУБЛИКОВАННЫЙ НАБОР</p><h2>{displayPackTitle(activeDiagnosticPack?.title)}</h2><p>{diagnosticQuestions.length} вопросов · категории, проценты, пропуск и личные пожелания доступны только в режиме «Проверь себя».</p><div className="control-actions"><Button onClick={() => openRoomSetup(diagnosticMode)}>Создать комнату</Button></div><small>Набор доступен только для просмотра и запуска.</small></Glass>
-    <QuestionPackPreview modeLabel="Проверь себя" packId={activeDiagnosticPack?.packId || diagnosticPackId} title={displayPackTitle(activeDiagnosticPack?.title)} questions={diagnosticQuestions} description="категории, проценты и личные результаты" />
+    <div className="mode-catalogue"><Glass className="mode-intro"><p className="eyebrow">ОПУБЛИКОВАННЫЙ НАБОР</p><h2>{displayPackTitle(activeDiagnosticPack?.title)}</h2><p>{diagnosticQuestions.length} вопросов · категории, проценты, пропуск и личные пожелания доступны только в режиме «Проверь себя».</p><div className="control-actions"><Button onClick={() => openRoomSetup(diagnosticMode)}>Создать комнату</Button></div><small>Набор доступен только для просмотра и запуска.</small></Glass>
+    <QuestionPackPreview modeLabel="Проверь себя" packId={activeDiagnosticPack?.packId || diagnosticPackId} title={displayPackTitle(activeDiagnosticPack?.title)} questions={diagnosticQuestions} description="категории, проценты и личные результаты" /></div>
   </HostLayout>
 
   if (tab === 'quiz') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>

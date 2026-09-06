@@ -12,16 +12,17 @@ export function useRoom(room: string) {
     if (firebaseReady) {
       let active = true
       let unsubscribe: () => void = () => undefined
+      const timeout = window.setTimeout(() => { if (active) setConnection('error') }, 12000)
       setConnection('connecting')
       void ensureAuth().then(() => {
         if (!active) return
         unsubscribe = subscribeSession(room, value => {
           if (!active) return
-          setSession(value); setConnection('ready')
+          window.clearTimeout(timeout); setSession(value); setConnection('ready')
           if (value) void ensureParticipantRoomData(room, value).catch(error => console.warn('participant room projection was not prepared', { room, error }))
-        }, () => { if (active) setConnection('error') })
-      }).catch(() => { if (active) setConnection('error') })
-      return () => { active = false; unsubscribe() }
+        }, () => { if (active) { window.clearTimeout(timeout); setConnection('error') } })
+      }).catch(() => { if (active) { window.clearTimeout(timeout); setConnection('error') } })
+      return () => { active = false; window.clearTimeout(timeout); unsubscribe() }
     }
     const sync = (event: StorageEvent) => { if (event.key === demoKey(room)) setSession(getDemoSession(room)) }
     window.addEventListener('storage', sync); setSession(getDemoSession(room)); setConnection('ready')

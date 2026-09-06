@@ -131,8 +131,10 @@ function useParticipantRoomGate(roomId: string): ParticipantRoomGate {
     let active = true
     let stopPublic: () => void = () => undefined
     let stopLegacyLobby: () => void = () => undefined
+    let timeout = 0
     const setResolution = (resolution: ReturnType<typeof resolveParticipantRoomMode> | ReturnType<typeof resolveLegacyParticipantRoomMode>) => {
       if (!active) return
+      window.clearTimeout(timeout)
       if (resolution.state === 'ready') setGate({ roomId, state: 'ready', mode: resolution.mode, manifest: resolution.manifest })
       else setGate({ roomId, state: 'error', message: resolution.message })
     }
@@ -142,13 +144,16 @@ function useParticipantRoomGate(roomId: string): ParticipantRoomGate {
       return () => { active = false }
     }
     setGate({ roomId, state: 'loading' })
+    timeout = window.setTimeout(() => {
+      if (active) setGate({ roomId, state: 'error', message: 'Комната отвечает слишком долго. Проверьте соединение и обновите страницу.' })
+    }, 12000)
 
     if (!firebaseReady) {
       const applyDemo = () => setResolution(resolveParticipantRoomMode(getDemo(roomId)))
       applyDemo()
       const sync = (event: StorageEvent) => { if (event.key === demoKey(roomId)) applyDemo() }
       window.addEventListener('storage', sync)
-      return () => { active = false; window.removeEventListener('storage', sync) }
+      return () => { active = false; window.clearTimeout(timeout); window.removeEventListener('storage', sync) }
     }
 
     void ensureAuth().then(() => {
@@ -162,15 +167,15 @@ function useParticipantRoomGate(roomId: string): ParticipantRoomGate {
         }
         stopLegacyLobby()
         stopLegacyLobby = subscribeRoomLobby(roomId, legacyLobby => setResolution(resolveLegacyParticipantRoomMode(legacyLobby)), () => {
-          if (active) setGate({ roomId, state: 'error', message: 'Не удалось загрузить данные комнаты. Проверьте соединение и обновите страницу.' })
+          if (active) { window.clearTimeout(timeout); setGate({ roomId, state: 'error', message: 'Не удалось загрузить данные комнаты. Проверьте соединение и обновите страницу.' }) }
         })
       }, () => {
-        if (active) setGate({ roomId, state: 'error', message: 'Не удалось загрузить данные комнаты. Проверьте соединение и обновите страницу.' })
+        if (active) { window.clearTimeout(timeout); setGate({ roomId, state: 'error', message: 'Не удалось загрузить данные комнаты. Проверьте соединение и обновите страницу.' }) }
       })
     }).catch(() => {
-      if (active) setGate({ roomId, state: 'error', message: 'Не удалось подключиться к комнате. Проверьте соединение и обновите страницу.' })
+      if (active) { window.clearTimeout(timeout); setGate({ roomId, state: 'error', message: 'Не удалось подключиться к комнате. Проверьте соединение и обновите страницу.' }) }
     })
-    return () => { active = false; stopPublic(); stopLegacyLobby() }
+    return () => { active = false; window.clearTimeout(timeout); stopPublic(); stopLegacyLobby() }
   }, [roomId])
   return gate
 }

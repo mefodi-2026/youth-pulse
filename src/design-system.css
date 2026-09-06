@@ -33,7 +33,7 @@
     --ds-text-faint: rgba(255, 255, 255, .46);
     --ds-border: rgba(255, 255, 255, .15);
     --ds-border-strong: rgba(255, 255, 255, .26);
-    --ds-focus: var(--ds-warning);
+    --ds-focus: var(--ds-accent);
     --ds-shadow-sm: 0 8px 24px rgba(0, 0, 0, .14);
     --ds-shadow-md: 0 18px 54px rgba(0, 0, 0, .2);
     --ds-shadow-lg: 0 28px 90px rgba(0, 0, 0, .24);
@@ -46,7 +46,7 @@
     --ds-accent-glow: radial-gradient(circle, rgba(27, 81, 72, .28), transparent 68%);
     --ds-feature: rgba(255, 255, 255, .06);
     --ds-input: rgba(18, 63, 56, .58);
-    --ds-focus-ring: rgba(169, 141, 85, .16);
+    --ds-focus-ring: rgba(65, 241, 130, .18);
     --ds-page-gradient: radial-gradient(800px 420px at 88% -8%, rgba(27, 81, 72, .26), transparent 65%), var(--ds-background);
     --ds-progress-track: rgba(255, 255, 255, .12);
 
@@ -141,7 +141,7 @@
   }
 
   .eyebrow {
-    color: var(--ds-warning);
+    color: var(--ds-text-faint);
     font-size: var(--ds-text-label);
     font-weight: 750;
     letter-spacing: .12em;
@@ -289,7 +289,7 @@
 
   .brand span,
   .host-menu nav span {
-    color: var(--ds-warning);
+    color: var(--ds-text-faint);
   }
 
   .host-menu nav {
@@ -322,6 +322,28 @@
     max-width: 1600px;
     padding: clamp(40px, 4.5vw, 72px) clamp(40px, 5.5vw, 96px);
   }
+
+  .auth-loading-page,
+  .auth-loading-page .ds-loading-state { min-height: 100vh; }
+  .ds-loading-state {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--ds-space-5);
+    width: min(100%, 620px);
+    min-height: 148px;
+    margin: auto;
+    padding: var(--ds-space-8);
+    border: 1px solid var(--ds-border);
+    border-radius: var(--ds-radius-xl);
+    color: var(--ds-text);
+    background: linear-gradient(145deg, var(--ds-surface-elevated), var(--ds-surface));
+    box-shadow: inset 0 1px 0 var(--ds-border-inset), var(--ds-shadow-md);
+  }
+  .ds-loading-state h1 { margin: var(--ds-space-2) 0; font-size: var(--ds-text-section); }
+  .ds-loading-state p:not(.eyebrow) { margin: 0; color: var(--ds-text-muted); line-height: 1.5; }
+  .ds-loading-spinner { width: 32px; height: 32px; border: 3px solid rgba(65, 241, 130, .18); border-top-color: var(--ds-accent); border-radius: 50%; animation: spin .8s linear infinite; }
+  .host-loading-state { width: min(100%, 1040px); min-height: 184px; margin: 0; }
 
   .host-header {
     margin-bottom: var(--ds-space-10);
@@ -365,7 +387,7 @@
   }
 
   .landing-feature-list article > span {
-    color: var(--ds-warning);
+    color: var(--ds-text-faint);
   }
 
   .landing-feature-list article b {
@@ -381,7 +403,7 @@
   }
 
   .landing-orbit strong {
-    color: var(--ds-warning);
+    color: var(--ds-text-faint);
   }
 
   .home-steps {
@@ -504,6 +526,14 @@
     gap: var(--ds-space-4);
   }
 
+  .control-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ds-space-3);
+  }
+  .control-actions > .button { flex: 0 0 auto; }
+
   .metric,
   .stage-stat {
     border-color: var(--ds-border);
@@ -516,7 +546,7 @@
   .stage-hero-copy strong,
   .stage-ring b,
   .big-score b {
-    color: var(--ds-warning);
+    color: var(--ds-text);
   }
 
   .overview-grid,
@@ -566,7 +596,7 @@
   .room-title-input input:focus,
   .question-editor input:focus,
   .question-editor select:focus {
-    border-color: var(--ds-warning);
+    border-color: var(--ds-accent);
     box-shadow: 0 0 0 4px var(--ds-focus-ring);
   }
 
@@ -736,8 +766,8 @@
   .stage-ready,
   .status.demo,
   .ds-status-muted {
-    color: var(--ds-background);
-    background: var(--ds-warning);
+    color: var(--ds-text);
+    background: var(--ds-surface-elevated);
   }
 
   .stage-progress-track,
@@ -892,7 +922,7 @@
   .wheel-end-button,
   .wheel-reveal-card,
   .wheel-performing-card {
-    border-color: var(--ds-warning);
+    border-color: var(--ds-border-strong);
   }
 
   .fortune-wheel-rim {
@@ -910,7 +940,7 @@
 
   .fortune-wheel-hub-outer {
     fill: var(--ds-text);
-    stroke: var(--ds-warning);
+    stroke: var(--ds-border-strong);
   }
 
   .fortune-wheel-hub {
@@ -920,7 +950,7 @@
 
   .fortune-wheel-pointer,
   .fortune-wheel-pointer.is-task {
-    border-top-color: var(--ds-warning);
+    border-top-color: var(--ds-accent);
   }
 
   .fortune-wheel-pointer::after,
@@ -933,7 +963,7 @@
   }
 
   .app-modal-dialog {
-    border-color: var(--ds-warning);
+    border-color: var(--ds-border-strong);
     background: var(--ds-hero);
     box-shadow: var(--ds-shadow-lg);
   }
@@ -1637,7 +1667,7 @@
 
   .host-menu .app-icon {
     flex: 0 0 18px;
-    color: var(--ds-warning);
+    color: var(--ds-text-faint);
     transition: color var(--fast);
   }
 
@@ -1663,7 +1693,7 @@
   .host-shell[data-room-mode="diagnostic"] .status.demo { color: var(--mode-text); background: var(--mode-raised); }
 
   .host-shell[data-host-tab="main"] .home-copy .eyebrow,
-  .host-shell[data-room-mode="diagnostic"] .eyebrow { color: var(--mode-warning); }
+  .host-shell[data-room-mode="diagnostic"] .eyebrow { color: var(--mode-muted); }
 
   .host-shell[data-host-tab="main"] .home-copy h2 { color: var(--mode-text); }
   .host-shell[data-host-tab="main"] .home-lead { color: var(--mode-text); }
@@ -1741,6 +1771,14 @@
   .host-shell[data-room-mode="diagnostic"] .export-panel,
   .host-shell[data-room-mode="diagnostic"] .empty-state { max-width: 1040px; padding: clamp(28px, 3vw, 40px); border-radius: 24px; }
 
+  .host-shell[data-room-mode="diagnostic"] .mode-catalogue {
+    display: grid;
+    width: min(1040px, 100%);
+    gap: var(--ds-space-5);
+  }
+  .host-shell[data-room-mode="diagnostic"] .mode-catalogue .mode-intro,
+  .host-shell[data-room-mode="diagnostic"] .mode-catalogue .question-pack-preview { width: 100%; max-width: none; margin: 0; }
+
   .host-shell[data-room-mode="diagnostic"] .start-panel > p:not(.eyebrow),
   .host-shell[data-room-mode="diagnostic"] .pack-picker > p:not(.eyebrow),
   .host-shell[data-room-mode="diagnostic"] .room-pilot-details > p:not(.eyebrow),
@@ -1798,12 +1836,38 @@
   .host-shell[data-room-mode="diagnostic"] .privacy,
   .host-shell[data-room-mode="diagnostic"] .closing { color: var(--mode-muted); }
 
-  /* Wheel keeps its approved game-specific composition, while its shell,
-     fields and dialogs inherit the same spacing, contrast and focus behavior. */
-  .host-shell[data-room-mode="wheel"] { background: radial-gradient(820px 500px at 84% -16%, rgba(13, 91, 67, .22), transparent 68%), #03120e; }
-  .host-shell[data-room-mode="wheel"] .host-content { max-width: 1600px; padding-bottom: 64px; }
-  .host-shell[data-room-mode="wheel"] .wheel-host { gap: 24px; }
-  .host-shell[data-room-mode="wheel"] .wheel-setup { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 20px 52px rgba(0, 0, 0, .2); }
+  /* Wheel retains its game composition but now receives the same surfaces,
+     spacing and semantic colors as the host and quiz workspaces. */
+  .host-shell[data-room-mode="wheel"] {
+    --wheel-ink: #03120e;
+    --wheel-surface: #082b22;
+    --wheel-raised: #0c372c;
+    --wheel-field: #0d3e31;
+    --wheel-accent: #32ce8b;
+    --wheel-text: #eef5ee;
+    --wheel-muted: #9aafa5;
+    --wheel-border: rgba(154, 220, 191, .2);
+    --text: var(--wheel-text);
+    --muted: var(--wheel-muted);
+    --mint: var(--wheel-accent);
+    --gold: var(--wheel-muted);
+    --line: var(--wheel-border);
+    background: radial-gradient(780px 460px at 84% -14%, rgba(13, 91, 67, .22), transparent 68%), var(--wheel-ink);
+  }
+  .host-shell[data-room-mode="wheel"] .host-content { max-width: 1480px; padding-top: clamp(40px, 4.5vw, 72px); padding-bottom: 72px; }
+  .host-shell[data-room-mode="wheel"] .host-header { margin-bottom: var(--ds-space-8); }
+  .host-shell[data-room-mode="wheel"] .wheel-host { gap: var(--ds-space-6); }
+  .host-shell[data-room-mode="wheel"] .wheel-setup,
+  .host-shell[data-room-mode="wheel"] .mode-intro,
+  .host-shell[data-room-mode="wheel"] .wheel-join,
+  .host-shell[data-room-mode="wheel"] .wheel-pool,
+  .host-shell[data-room-mode="wheel"] .wheel-game-panel,
+  .host-shell[data-room-mode="wheel"] .wheel-pending,
+  .host-shell[data-room-mode="wheel"] .wheel-finish-screen {
+    border-color: var(--wheel-border);
+    background: linear-gradient(145deg, var(--wheel-raised), var(--wheel-surface));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), var(--ds-shadow-md);
+  }
   .host-shell[data-room-mode="wheel"] .wheel-setup input:focus-visible,
   .host-shell[data-room-mode="wheel"] .wheel-host-input input:focus-visible,
   .host-shell[data-room-mode="wheel"] .wheel-host-input textarea:focus-visible,
