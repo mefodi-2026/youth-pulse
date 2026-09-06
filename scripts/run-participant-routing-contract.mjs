@@ -12,14 +12,14 @@ try {
     logLevel: 'error',
     ssr: { noExternal: true },
     build: {
-      ssr: 'src/modes/participantRouting.contract.test.ts',
+      ssr: 'src/modes/architecture.contract.test.ts',
       outDir: outputDir,
       emptyOutDir: true,
-      rollupOptions: { output: { entryFileNames: 'participant-routing-contract.mjs' } },
+      rollupOptions: { output: { entryFileNames: 'architecture-contract.mjs' } },
     },
   })
-  await import(`${pathToFileURL(join(outputDir, 'participant-routing-contract.mjs')).href}?run=${Date.now()}`)
-  console.log('Participant routing contracts passed.')
+  await import(`${pathToFileURL(join(outputDir, 'architecture-contract.mjs')).href}?run=${Date.now()}`)
+  console.log('Architecture and participant routing contracts passed.')
 } finally {
   await rm(outputDir, { recursive: true, force: true })
 }

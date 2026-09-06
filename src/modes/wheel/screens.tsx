@@ -29,7 +29,7 @@ const phaseLabels = {
 } as const
 
 const phaseInstructions = {
-  setup: 'Завершите настройку комнаты.', collecting: 'Дождитесь участников или заполните оба списка.',
+  setup: 'Завершите настройку комнаты.', collecting: 'Подготовьте оба списка перед началом игры.',
   ready: 'Крутите следующее колесо, когда будете готовы.',
   spinning_name: 'Выбираем участника. Результат синхронизирован на всех экранах.',
   name_revealed: 'Подтвердите имя, чтобы открыть колесо заданий.',
@@ -88,7 +88,7 @@ export function WheelSetupScreen({ onBack, leaderUid, workspaceId, defaultTitle,
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось создать комнату.') }
     finally { setBusy(false) }
   }
-  return <section className="glass wheel-setup"><p className="eyebrow">КОЛЕСО ФОРТУНЫ · НАСТРОЙКА</p><h2>Подготовьте сбор данных</h2><label>Название комнаты<input value={title} maxLength={80} onChange={event => setTitle(event.target.value)} /></label><fieldset><legend>Кто вводит данные</legend>{(['participants', 'host'] as const).map(value => <button type="button" className={inputMode === value ? 'selected' : ''} key={value} onClick={() => setInputMode(value)}>{labels[value]}</button>)}</fieldset><fieldset><legend>Порядок колёс</legend>{(['name_then_task', 'task_then_name'] as const).map(value => <button type="button" className={drawOrder === value ? 'selected' : ''} key={value} onClick={() => setDrawOrder(value)}>{labels[value]}</button>)}</fieldset><p className="wheel-hint">После создания порядок колёс и способ ввода фиксируются для этой комнаты.</p>{error && <p className="connection-warning">{error}</p>}<div className="control-actions"><button type="button" className="button" disabled={busy} onClick={() => void create()}>{busy ? 'Создаём…' : 'Создать комнату'}</button><button type="button" className="button secondary" disabled={busy} onClick={onBack}>Отмена</button></div></section>
+  return <section className="glass wheel-setup"><p className="eyebrow">КОЛЕСО ФОРТУНЫ · НАСТРОЙКА</p><h2>Подготовьте игру</h2><label>Название комнаты<input value={title} maxLength={80} onChange={event => setTitle(event.target.value)} /></label><fieldset><legend>Источник имён и заданий</legend>{(['participants', 'host'] as const).map(value => <button type="button" className={inputMode === value ? 'selected' : ''} key={value} onClick={() => setInputMode(value)}>{labels[value]}</button>)}</fieldset><fieldset><legend>Порядок вращения</legend>{(['name_then_task', 'task_then_name'] as const).map(value => <button type="button" className={drawOrder === value ? 'selected' : ''} key={value} onClick={() => setDrawOrder(value)}>{labels[value]}</button>)}</fieldset><p className="wheel-hint">Источник данных и порядок вращения выбираются независимо и фиксируются для этой комнаты.</p>{error && <p className="connection-warning">{error}</p>}<div className="control-actions"><button type="button" className="button" disabled={busy} onClick={() => void create()}>{busy ? 'Создаём…' : 'Создать комнату'}</button><button type="button" className="button secondary" disabled={busy} onClick={onBack}>Отмена</button></div></section>
 }
 
 const fullVisibleRound = (wheel?: WheelRoomState): WheelPublicRound | undefined => {
@@ -134,7 +134,7 @@ function WheelPerformingStage({ round, roundNumber, nameCount, taskCount, pendin
 }) {
   return <section className="wheel-performing-stage" aria-labelledby="wheel-performing-title">
     <div className="wheel-performing-toolbar" aria-label="Статус текущей игры">
-      <span>◎ Раунд <b>{roundNumber}</b></span><span>♙ Участники <b>{nameCount}</b></span><span>▣ Задания <b>{taskCount}</b></span>
+      <span>◎ Раунд <b>{roundNumber}</b></span><span>♙ Имена <b>{nameCount}</b></span><span>▣ Задания <b>{taskCount}</b></span>
       <button type="button" className="wheel-library-button" disabled={disabled} onClick={onOpenLibrary}>▤ Библиотека{pendingCount ? ` ${pendingCount}` : ''}</button>
     </div>
     <article className="wheel-performing-focus">
@@ -163,26 +163,47 @@ export function WheelParticipantFlow({ room }: ModeParticipantFlowProps) {
   const [participantId, setParticipantId] = useState(''); const [publicRoom, setPublicRoom] = useState<PublicRoom | null>(null); const [entry, setEntry] = useState<WheelParticipantEntry | null>(null)
   const [displayName, setDisplayName] = useState(''); const [taskText, setTaskText] = useState(''); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState('')
   useEffect(() => {
-    let active = true; let stopEntry: () => void = () => undefined
-    const stopRoom = subscribeWheelPublicRoom(room, value => { if (active) { setPublicRoom(value); setLoading(false) } }, reason => { if (active) { setError(reason.message); setLoading(false) } })
-    void prepareWheelParticipantAuth().then(uid => { if (!active) return; setParticipantId(uid); stopEntry = subscribeOwnWheelEntry(room, uid, value => { if (!active) return; setEntry(value); if (value) { setDisplayName(value.displayName); setTaskText(value.taskText) } }, reason => setError(reason.message)) }).catch(reason => { if (active) { setError(reason instanceof Error ? reason.message : 'Не удалось подключиться.'); setLoading(false) } })
+    let active = true; let participantAccessStarted = false; let stopEntry: () => void = () => undefined
+    setParticipantId(''); setEntry(null); setDisplayName(''); setTaskText(''); setError(''); setLoading(true)
+    const startParticipantAccess = () => {
+      if (participantAccessStarted) return
+      participantAccessStarted = true
+      void prepareWheelParticipantAuth().then(uid => {
+        if (!active) return
+        setParticipantId(uid)
+        stopEntry = subscribeOwnWheelEntry(room, uid, value => {
+          if (!active) return
+          setEntry(value)
+          if (value) { setDisplayName(value.displayName); setTaskText(value.taskText) }
+        }, reason => { if (active) setError(reason.message) })
+      }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'Не удалось подключиться.') })
+    }
+    const stopRoom = subscribeWheelPublicRoom(room, value => {
+      if (!active) return
+      setPublicRoom(value); setLoading(false)
+      const publicWheel = value?.mode === 'wheel' ? value.wheel : undefined
+      // A host-prepared room is view-only on this route: never create an
+      // anonymous participant or read/write a participant entry for it.
+      if (!publicWheel || publicWheel.inputMode !== 'participants' || value?.phase === 'closed' || publicWheel.phase !== 'collecting') return
+      startParticipantAccess()
+    }, reason => { if (active) { setError(reason.message); setLoading(false) } })
     return () => { active = false; stopRoom(); stopEntry() }
   }, [room])
   const locked = publicRoom?.phase === 'closed' || isSessionExpired(publicRoom) || publicRoom?.wheel?.phase !== 'collecting'
-  const submit = async () => { if (!participantId || locked || saving) return; setSaving(true); setError(''); try { setEntry(await saveWheelParticipantEntry(room, { displayName, taskText })) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось сохранить данные.') } finally { setSaving(false) } }
+  const submit = async () => { if (!participantId || publicRoom?.wheel?.inputMode !== 'participants' || locked || saving) return; setSaving(true); setError(''); try { setEntry(await saveWheelParticipantEntry(room, { displayName, taskText })) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось сохранить данные.') } finally { setSaving(false) } }
   if (loading) return <main className="mobile-wrap wheel-mobile"><section className="mobile-card"><p className="flow-label">ПОДКЛЮЧАЕМ</p><h1>Открываем комнату…</h1><span className="stage-spinner" /></section></main>
   if (!publicRoom || publicRoom.mode !== 'wheel') return <main className="mobile-wrap wheel-mobile"><section className="mobile-card"><p className="flow-label">КОМНАТА НЕДОСТУПНА</p><h1>Колесо не найдено</h1><p>{error || 'Проверьте ссылку или попросите ведущего создать новую комнату.'}</p></section></main>
   const publicWheel = publicRoom.wheel
   if (!publicWheel) return <main className="mobile-wrap wheel-mobile"><section className="mobile-card"><h1>Состояние игры недоступно</h1><p>Обновите страницу или попросите ведущего открыть комнату заново.</p></section></main>
+  if (publicWheel.inputMode === 'host') return <main className="mobile-wrap wheel-mobile"><section className="mobile-card wheel-waiting"><p className="flow-label">КОЛЕСО ФОРТУНЫ</p><h1>Игра готовится ведущим</h1><p>В этой игре данные добавляет ведущий. Следите за игрой на общем экране</p></section></main>
   if (publicRoom.phase === 'closed' || isSessionExpired(publicRoom)) return <main className="mobile-wrap wheel-mobile"><section className="mobile-card wheel-waiting"><p className="flow-label">СЕССИЯ ЗАВЕРШЕНА</p><h1>Спасибо за участие</h1><p>{isSessionExpired(publicRoom) ? 'Время активности игры истекло. Новые данные отправить нельзя.' : 'Ведущий завершил эту комнату. Новые данные отправить нельзя.'}</p></section></main>
   if (publicWheel.phase !== 'collecting') return <main className="mobile-wrap wheel-mobile"><section className="mobile-card"><WheelAudiencePanel phase={publicWheel.phase} drawOrder={publicWheel.drawOrder} round={publicWheel.currentRound} activeSpin={publicWheel.activeSpin} history={publicWheel.history} nameCount={publicWheel.nameCount} taskCount={publicWheel.taskCount} roundCount={publicWheel.roundCount ?? 0} pendingCount={publicWheel.pendingCount ?? 0} />{error && <p className="flow-error">{error}</p>}</section></main>
-  if (publicWheel.inputMode === 'host') return <main className="mobile-wrap wheel-mobile"><section className="mobile-card wheel-waiting"><p className="flow-label">КОЛЕСО ФОРТУНЫ</p><h1>Ведущий готовит игру</h1><p>Имена и задания вводит ведущий. Ожидайте начала на общем экране.</p></section></main>
   return <main className="mobile-wrap wheel-mobile"><section className="mobile-card"><p className="flow-label">КОЛЕСО ФОРТУНЫ</p><h1>{entry ? 'Данные сохранены' : 'Добавь себя в игру'}</h1><p>{locked ? 'Сбор данных завершён. Изменения больше недоступны.' : 'Укажи имя и придумай одно задание. Одинаковые имена не перепутаются.'}</p><label>Имя или никнейм<input value={displayName} disabled={locked} maxLength={60} onChange={event => setDisplayName(event.target.value)} /></label><label>Задание<textarea value={taskText} disabled={locked} maxLength={240} onChange={event => setTaskText(event.target.value)} /></label><button type="button" className="mobile-action" disabled={locked || saving || !displayName.trim() || !taskText.trim()} onClick={() => void submit()}>{saving ? 'Сохраняем…' : entry ? 'Сохранить исправления' : 'Отправить ведущему'}</button>{entry && <div className="waiting-status"><span /><div><b>Ты в игре</b><small>Ждём остальных участников</small></div></div>}{error && <p className="flow-error">{error}</p>}</section></main>
 }
 
 function WheelList({ title, items, onDelete, onClear }: { title: string; items: Record<string, WheelPoolItem>; onDelete?: (id: string) => void; onClear?: () => void }) {
   const available = Object.values(items).filter(item => item.status === 'available')
-  return <section className="wheel-pool"><div><div><p className="eyebrow">{title === 'Имена участников' ? '◉ УЧАСТНИКИ' : '◈ ЗАДАНИЯ'}</p><h3>{title}</h3></div><b>{available.length}</b></div>{available.length ? <ul>{available.map(item => <li key={item.itemId}><i aria-hidden="true">⠿</i><span>{item.text}</span>{onDelete && <button type="button" aria-label={`Удалить: ${item.text}`} onClick={() => onDelete(item.itemId)}>⌫</button>}</li>)}</ul> : <p>Список пока пуст.</p>}{onClear && available.length > 0 && <footer><span>В списке: <b>{available.length}</b></span><button type="button" onClick={onClear}>Очистить список</button></footer>}</section>
+  return <section className="wheel-pool"><div><div><p className="eyebrow">{title === 'Имена в колесе' ? '◉ ИМЕНА' : '◈ ЗАДАНИЯ'}</p><h3>{title}</h3></div><b>{available.length}</b></div>{available.length ? <ul>{available.map(item => <li key={item.itemId}><i aria-hidden="true">⠿</i><span>{item.text}</span>{onDelete && <button type="button" aria-label={`Удалить: ${item.text}`} onClick={() => onDelete(item.itemId)}>⌫</button>}</li>)}</ul> : <p>Список пока пуст.</p>}{onClear && available.length > 0 && <footer><span>В списке: <b>{available.length}</b></span><button type="button" onClick={onClear}>Очистить список</button></footer>}</section>
 }
 
 function WheelJoinPanel({ joinUrl, entries }: { joinUrl: string; entries: Record<string, WheelParticipantEntry> }) {
@@ -216,6 +237,7 @@ export function WheelHostScreen({ session, joinUrl, onClose, onPlayAgain, onExit
   const [finishIntent, setFinishIntent] = useState<FinishIntent | null>(null); const [ending, setEnding] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const names = wheel?.pools?.names || {}; const tasks = wheel?.pools?.tasks || {}; const entries = wheel?.participants || {}
+  const participantInput = wheel?.config.inputMode === 'participants'
   const collecting = wheel?.phase === 'collecting'; const valid = canStartWheel(wheel); const nextTarget = getWheelNextSpinTarget(wheel)
   const spinning = wheel?.phase === 'spinning_name' || wheel?.phase === 'spinning_task'; const decision = wheel?.phase === 'decision'; const performing = wheel?.phase === 'performing'
   const pending = Object.values(wheel?.pendingTasks || {}).filter(item => item.status === 'pending')
@@ -255,10 +277,10 @@ export function WheelHostScreen({ session, joinUrl, onClose, onPlayAgain, onExit
   const disabled = busy || ending
   return <div className="wheel-host">
     <header className="wheel-host-brand"><p>◉ КОЛЕСО ФОРТУНЫ</p><div><span>{wheel ? phaseLabels[wheel.phase] : 'Загрузка'}</span><button type="button" className="wheel-end-button" disabled={disabled} onClick={() => setFinishIntent('close')}>Завершить игру</button></div></header>
-    {collecting && <><section className="wheel-prep-heading"><div><h1>Подготовка комнаты</h1><p>Добавьте имена и задания перед стартом</p></div><div className="wheel-counters"><article><span>◉ Имен</span><strong>{getAvailableWheelCount(wheel, 'name')}</strong></article><article><span>▣ Заданий</span><strong>{getAvailableWheelCount(wheel, 'task')}</strong></article><article><span>♙ Участников</span><strong>{Object.keys(entries).length}</strong></article></div></section>
-      <WheelJoinPanel joinUrl={joinUrl} entries={entries} />
+    {collecting && <><section className="wheel-prep-heading"><div><h1>Подготовка комнаты</h1><p>{participantInput ? 'Участники добавляют имена и задания перед стартом' : 'Заполните оба списка перед стартом'}</p></div><div className="wheel-counters"><article><span>◉ Имен</span><strong>{getAvailableWheelCount(wheel, 'name')}</strong></article><article><span>▣ Заданий</span><strong>{getAvailableWheelCount(wheel, 'task')}</strong></article>{participantInput ? <article><span>♙ Подключились</span><strong>{Object.keys(entries).length}</strong></article> : <article><span>◉ Источник данных</span><strong className="wheel-source-label">Ведущий</strong></article>}</div></section>
+      {participantInput && <WheelJoinPanel joinUrl={joinUrl} entries={entries} />}
       {wheel?.config.inputMode === 'host' && <section className="wheel-host-input"><div><label>Введите имя участника<input value={name} onChange={event => setName(event.target.value)} maxLength={60} /></label><button type="button" className="button secondary" disabled={busy || !name.trim() || Object.keys(names).length >= 50} onClick={() => add('names')}>＋ Добавить имя</button></div><div><label>Введите задание<textarea value={task} onChange={event => setTask(event.target.value)} maxLength={240} /></label><button type="button" className="button secondary" disabled={busy || !task.trim() || Object.keys(tasks).length >= 50} onClick={() => add('tasks')}>＋ Добавить задание</button></div></section>}
-      <div className="wheel-pools"><WheelList title="Имена участников" items={names} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('names', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('names') : undefined} /><WheelList title="Задания" items={tasks} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('tasks', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('tasks') : undefined} /></div>
+      <div className="wheel-pools"><WheelList title="Имена в колесе" items={names} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('names', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('names') : undefined} /><WheelList title="Задания" items={tasks} onDelete={wheel?.config.inputMode === 'host' ? id => removeItem('tasks', id) : undefined} onClear={wheel?.config.inputMode === 'host' ? () => clearItems('tasks') : undefined} /></div>
       <div className="wheel-prep-actions"><button type="button" className="button" disabled={disabled || !valid} onClick={() => void run(() => markWheelReady(session.roomId))}>▶ Начать игру</button></div>{!valid && <p className="wheel-hint">Для начала нужны одинаковые списки: от 2 до 50 имён и столько же заданий. Сейчас: {Object.keys(names).length} / {Object.keys(tasks).length}.</p>}</>}
     {!collecting && wheel && <section className={`glass wheel-game-panel ${performing ? 'wheel-game-panel-performing' : ''}`}>
       {performing && wheel.currentRound
@@ -271,7 +293,7 @@ export function WheelHostScreen({ session, joinUrl, onClose, onPlayAgain, onExit
         </div></>}
     </section>}
     {pending.length > 0 && !performing && <section className="glass wheel-pending"><div><p className="eyebrow">▤ БИБЛИОТЕКА</p><h2>Отложенные задания</h2><p>Откройте сохранённую пару без нового вращения.</p></div><WheelPendingLibrary pending={pending} disabled={disabled} onOpen={pendingId => void run(() => openWheelPendingTask(session.roomId, pendingId))} /></section>}
-    {wheel?.phase === 'completed' && <section className="glass wheel-finish-screen"><p className="eyebrow">ИГРА ЗАВЕРШЕНА</p><h2>Все доступные пары разыграны</h2><p>История этой игры сохранится в архиве. Для нового состава участников создайте отдельную игровую сессию.</p><div><button type="button" className="button" disabled={disabled} onClick={playAgain}>Сыграть ещё раз</button><button type="button" className="button secondary" disabled={disabled} onClick={() => setFinishIntent('exit')}>Выйти в главное меню</button></div></section>}
+    {wheel?.phase === 'completed' && <section className="glass wheel-finish-screen"><p className="eyebrow">ИГРА ЗАВЕРШЕНА</p><h2>Все доступные пары разыграны</h2><p>История этой игры сохранится в архиве. Для нового состава создайте отдельную игровую сессию.</p><div><button type="button" className="button" disabled={disabled} onClick={playAgain}>Сыграть ещё раз</button><button type="button" className="button secondary" disabled={disabled} onClick={() => setFinishIntent('exit')}>Выйти в главное меню</button></div></section>}
     <Modal open={Boolean(confirmation && wheel)} title={wheel?.phase === 'name_revealed' ? 'Подтвердите участника' : 'Подтвердите задание'} className="wheel-modal" onClose={disabled ? undefined : () => void run(() => cancelWheelSelection(session.roomId))}>
       <p className="eyebrow">{wheel?.phase === 'name_revealed' ? 'ВЫПАЛО ИМЯ' : 'ВЫПАЛО ЗАДАНИЕ'}</p>
       <strong className="app-modal-selection">{wheel?.phase === 'name_revealed' ? wheel?.currentRound?.selectedNameText : wheel?.currentRound?.selectedTaskText}</strong>
@@ -283,7 +305,7 @@ export function WheelHostScreen({ session, joinUrl, onClose, onPlayAgain, onExit
       <WheelPendingLibrary pending={pending} disabled={disabled} onOpen={pendingId => { setLibraryOpen(false); void run(() => openWheelPendingTask(session.roomId, pendingId)) }} />
     </Modal>
     <Modal open={Boolean(finishIntent)} title={finishIntent === 'exit' ? 'Выйти из игры?' : 'Завершить игру?'} className="wheel-modal" onClose={ending ? undefined : () => setFinishIntent(null)}>
-      <p>Участники больше не смогут отправлять данные. История раундов и результаты останутся в архиве.</p>
+      <p>{participantInput ? 'Участники больше не смогут отправлять данные.' : 'Комната будет завершена.'} История раундов и результаты останутся в архиве.</p>
       <div className="app-modal-actions"><button type="button" className="button" disabled={disabled} onClick={() => void confirmFinish()}>{ending ? 'Завершаем…' : 'Подтвердить завершение'}</button><button type="button" className="button secondary" disabled={ending} onClick={() => setFinishIntent(null)}>Отмена</button></div>
     </Modal>
     <Modal open={Boolean(error)} title="Действие не выполнено" className="wheel-modal" onClose={() => setError('')}><p>{error}</p></Modal>
@@ -293,7 +315,8 @@ export function WheelHostScreen({ session, joinUrl, onClose, onPlayAgain, onExit
 export function WheelMainScreen({ session }: ModeMainScreenProps) {
   const wheel = session.wheel; const names = getAvailableWheelCount(wheel, 'name'); const tasks = getAvailableWheelCount(wheel, 'task'); const entries = Object.keys(wheel?.participants || {}).length
   if (wheel && wheel.phase !== 'collecting') { const history: WheelPublicHistoryItem[] = Object.values(wheel.rounds || {}).map(round => ({ roundId: round.roundId, nameText: round.nameText, taskText: round.taskText, status: round.status })); return <main className="stage-dashboard wheel-stage" data-stage-mode="wheel"><div className="stage-light" /><WheelAudiencePanel phase={wheel.phase} drawOrder={wheel.config.drawOrder} round={fullVisibleRound(wheel)} activeSpin={wheel.activeSpin || undefined} history={history} nameCount={names} taskCount={tasks} roundCount={history.length} pendingCount={Object.values(wheel.pendingTasks || {}).filter(item => item.status === 'pending').length} /><p className="stage-privacy">Результат синхронизирован с экраном ведущего. Управление доступно только ведущему.</p></main> }
-  return <main className="stage-dashboard wheel-stage" data-stage-mode="wheel"><div className="stage-light" /><header className="stage-header"><div><p className="eyebrow">КОЛЕСО ФОРТУНЫ</p><h1>Собираем имена и задания</h1></div><span className="stage-live">ОЖИДАНИЕ</span></header><section className="wheel-stage-grid"><article><strong>{entries}</strong><span>участников отправили данные</span></article><article><strong>{names}</strong><span>имён в колесе</span></article><article><strong>{tasks}</strong><span>заданий в колесе</span></article></section><p className="stage-privacy">Имена и тексты заданий на общем экране появятся только после запуска колеса.</p></main>
+  const participantInput = wheel?.config.inputMode === 'participants'
+  return <main className="stage-dashboard wheel-stage" data-stage-mode="wheel"><div className="stage-light" /><header className="stage-header"><div><p className="eyebrow">КОЛЕСО ФОРТУНЫ</p><h1>{participantInput ? 'Собираем имена и задания' : 'Ведущий готовит имена и задания'}</h1></div><span className="stage-live">ОЖИДАНИЕ</span></header><section className={`wheel-stage-grid${participantInput ? '' : ' is-host-prepared'}`}>{participantInput && <article><strong>{entries}</strong><span>участников отправили данные</span></article>}<article><strong>{names}</strong><span>имён в колесе</span></article><article><strong>{tasks}</strong><span>заданий в колесе</span></article></section><p className="stage-privacy">Имена и тексты заданий на общем экране появятся только после запуска колеса.</p></main>
 }
 
 export function WheelParticipantPlaceholder(_props: ParticipantQuestionScreenProps) { return null }

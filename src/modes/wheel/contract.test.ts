@@ -13,7 +13,7 @@ import {
   startWheelSpinTransition,
   stopWheelForCloseTransition,
 } from './engine'
-import type { WheelDrawOrder, WheelRoomState } from './types'
+import type { WheelDrawOrder, WheelInputMode, WheelRoomState } from './types'
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(`Wheel contract failed: ${message}`)
@@ -33,6 +33,14 @@ assert(Object.keys(initialState.rounds).length === 0, 'new room must not contain
 assert(Object.keys(initialState.participants).length === 0, 'a replay room must start without previous participants')
 assert(Object.keys(initialState.pools.names).length === 0 && Object.keys(initialState.pools.tasks).length === 0, 'a replay room must start with empty wheel pools')
 assert(Object.keys(initialState.pendingTasks).length === 0 && initialState.currentRound === null && initialState.activeSpin === null, 'a replay room must not mix previous active state')
+
+for (const inputMode of ['participants', 'host'] as const) {
+  for (const drawOrder of ['name_then_task', 'task_then_name'] as const) {
+    const restored = createInitialWheelState({ inputMode, drawOrder })
+    assert(restored.config.inputMode === inputMode, `${inputMode}/${drawOrder} must preserve its input source after reload`)
+    assert(restored.config.drawOrder === drawOrder, `${inputMode}/${drawOrder} must preserve its draw order after reload`)
+  }
+}
 
 assert(canTransitionWheelPhase('setup', 'collecting'), 'setup must allow data collection')
 assert(canTransitionWheelPhase('ready', 'spinning_task'), 'task-first flow must be representable')
@@ -76,7 +84,7 @@ const expectFailure = (job: () => unknown, message: string) => {
   assert(failed, message)
 }
 
-const playableState = (drawOrder: WheelDrawOrder, pairCount = 3): WheelRoomState => {
+const playableState = (drawOrder: WheelDrawOrder, pairCount = 3, inputMode: WheelInputMode = 'host'): WheelRoomState => {
   const names = Object.fromEntries(Array.from({ length: pairCount }, (_, index) => [`name-${index}`, {
     itemId: `name-${index}`,
     text: `Участник ${index + 1}`,
@@ -88,9 +96,17 @@ const playableState = (drawOrder: WheelDrawOrder, pairCount = 3): WheelRoomState
     status: 'available' as const,
   }]))
   return {
-    ...createInitialWheelState({ inputMode: 'host', drawOrder }),
+    ...createInitialWheelState({ inputMode, drawOrder }),
     phase: 'ready',
     pools: { names, tasks },
+  }
+}
+
+for (const inputMode of ['participants', 'host'] as const) {
+  for (const drawOrder of ['name_then_task', 'task_then_name'] as const) {
+    const state = playableState(drawOrder, 2, inputMode)
+    assert(canStartWheel({ ...state, phase: 'collecting' }), `${inputMode}/${drawOrder} must start from filled lists, not connection count`)
+    assert(getWheelNextSpinTarget(state) === (drawOrder === 'name_then_task' ? 'name' : 'task'), `${inputMode}/${drawOrder} must keep its independent first spin`)
   }
 }
 
