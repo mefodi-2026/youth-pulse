@@ -1067,15 +1067,46 @@ function RoomTabs({ active, session, onChange }: { active: RoomViewTab; session:
   return <nav className="room-tabs" aria-label="Разделы текущей комнаты">{items.map(([id, label]) => <button type="button" className={active === id ? 'selected' : ''} onClick={() => onChange(id)} key={id}>{label}</button>)}</nav>
 }
 
+type QuizResultRow = { person: Participant; correct: number; total: number; percentage: number }
+
+function QuizPodiumEmblem({ place }: { place: number }) {
+  if (place === 1) return <svg className="quiz-podium-emblem crown" viewBox="0 0 64 52" aria-hidden="true"><path d="M8 42 14 14l18 16 18-16 6 28H8Z" /><path d="M12 46h40" /><circle cx="14" cy="11" r="5" /><circle cx="32" cy="8" r="5" /><circle cx="50" cy="11" r="5" /></svg>
+  return <svg className="quiz-podium-emblem medal" viewBox="0 0 56 64" aria-hidden="true"><path d="m16 4 12 24L40 4h10L34 34H22L6 4h10Z" /><circle cx="28" cy="43" r="16" /><text x="28" y="49" textAnchor="middle">{place}</text></svg>
+}
+
+function QuizWinnersPodium({ rows, revealed, pending = false }: { rows: QuizResultRow[]; revealed: boolean; pending?: boolean }) {
+  const places = [2, 1, 3].map(place => ({ place, row: rows[place - 1] })).filter((item): item is { place: number; row: QuizResultRow } => Boolean(item.row))
+  if (pending) return <div className="quiz-podium-empty"><b>Подготавливаем рейтинг</b><span>Сверяем итоговые баллы участников.</span></div>
+  if (!places.length) return <div className="quiz-podium-empty"><b>Победители появятся здесь</b><span>Пока нет завершённых ответов.</span></div>
+  return <section className={`quiz-winners-podium count-${places.length} ${revealed ? 'is-revealed' : ''}`} aria-label="Три лучших результата викторины">
+    <div className="quiz-podium-lights" aria-hidden="true"><i /><i /></div>
+    <div className="quiz-podium-arc" aria-hidden="true" />
+    <div className="quiz-podium-stage" aria-hidden="true" />
+    {places.map(({ place, row }) => <article className={`quiz-podium-place place-${place}`} key={row.person.id}>
+      <div className="quiz-podium-name"><QuizPodiumEmblem place={place} /><b title={row.person.nickname}>{row.person.nickname}</b><small>{row.correct} из {row.total} · {row.percentage}%</small></div>
+      <div className="quiz-podium-cylinder"><span className="quiz-podium-top" /><span className="quiz-podium-body"><strong>{place}</strong></span><span className="quiz-podium-base" /></div>
+    </article>)}
+  </section>
+}
+
 function QuizResults({ session, embedded }: { session: Session; embedded: boolean }) {
   const [scoreRecords, setScoreRecords] = useState<Record<string, import('./types').ParticipantQuizResult>>({})
-  useEffect(() => subscribeRoomQuizResults(session.roomId, setScoreRecords), [session.roomId])
+  const [scoresReady, setScoresReady] = useState(false)
+  const [podiumRevealed, setPodiumRevealed] = useState(false)
+  useEffect(() => subscribeRoomQuizResults(session.roomId, records => { setScoreRecords(records); setScoresReady(true) }), [session.roomId])
   const people = Object.values(session.participants || {})
-  const rows = people.filter(person => person.status === 'finished').map(person => {
+  const rows: QuizResultRow[] = people.filter(person => person.status === 'finished').map(person => {
     const score = scoreRecords[person.id]
     return { person, correct: score?.correct || 0, total: score?.total || 0, percentage: score?.percentage || 0 }
   }).sort((left, right) => right.correct - left.correct || (left.person.completedAt || Number.MAX_SAFE_INTEGER) - (right.person.completedAt || Number.MAX_SAFE_INTEGER) || left.person.nickname.localeCompare(right.person.nickname, 'ru'))
-  const content = <><p className="eyebrow">БИБЛЕЙСКАЯ ВИКТОРИНА · РЕЗУЛЬТАТЫ</p><h1>{session.roomTitle || session.packSnapshot?.title || 'Результаты викторины'}</h1><Glass className="quiz-results-board"><div><b>{rows.length}</b><span>завершили игру</span></div><ol>{rows.slice(0, 3).map((row, index) => <li key={row.person.id}><em>{index + 1}</em><span>{row.person.nickname}</span><strong>{row.correct} из {row.total} · {row.percentage}%</strong></li>)}</ol>{!rows.length && <p>Пока нет завершённых ответов.</p>}</Glass><p className="privacy">Показаны только никнеймы и итоговые баллы. Ответы участников не раскрываются.</p></>
+  const podiumRows = rows.slice(0, 3)
+  const allFinishedScoresLoaded = people.filter(person => person.status === 'finished').every(person => Boolean(scoreRecords[person.id]))
+  useEffect(() => {
+    if (podiumRevealed || !scoresReady || !podiumRows.length || !allFinishedScoresLoaded) return
+    const frame = window.requestAnimationFrame(() => setPodiumRevealed(true))
+    return () => window.cancelAnimationFrame(frame)
+  }, [allFinishedScoresLoaded, podiumRevealed, podiumRows.length, scoresReady])
+  const content = <><p className="eyebrow">БИБЛЕЙСКАЯ ВИКТОРИНА · РЕЗУЛЬТАТЫ</p><h1>{session.roomTitle || session.packSnapshot?.title || 'Результаты викторины'}</h1><Glass className="quiz-results-board"><div className="quiz-results-summary"><b>{rows.length}</b><span>завершили игру</span></div><QuizWinnersPodium rows={allFinishedScoresLoaded ? podiumRows : []} revealed={podiumRevealed} pending={Boolean(podiumRows.length && (!scoresReady || !allFinishedScoresLoaded))} /></Glass><p className="privacy">Показаны только никнеймы и итоговые баллы. Ответы участников не раскрываются.</p></>
   return embedded ? <div className="results quiz-results">{content}</div> : <main className="results quiz-results">{content}</main>
 }
 
