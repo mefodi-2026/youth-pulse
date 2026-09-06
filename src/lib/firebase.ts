@@ -1079,7 +1079,7 @@ export const ensureParticipantRoomData = async (roomId: string, knownSession?: S
   if (Object.keys(patch).length) await update(ref(services.db), patch)
 }
 
-export const joinSession = async (roomId: string, participant: Participant) => {
+export const joinSession = async (roomId: string, participant: Participant): Promise<Participant> => {
   const services = requireFirebase()
   await authPersistence
   if (!services.auth.currentUser) throw new Error('Firebase user is not ready.')
@@ -1096,15 +1096,20 @@ export const joinSession = async (roomId: string, participant: Participant) => {
   const lobby = (publicRoomSnapshot.val() || legacyLobbySnapshot?.val()) as (PublicRoom | RoomLobby | null)
   if (!lobby) throw new Error('Комната не найдена или больше недоступна.')
   if (lobby.phase === 'closed') throw new Error('Сессия завершена ведущим. Подключение больше недоступно.')
-  if (participantSnapshot.exists()) return
+  // Reuse the server record after a refresh or an interrupted client request.
+  // It may already contain answers, so never replace it with a fresh object.
+  if (participantSnapshot.exists()) return participantSnapshot.val() as Participant
   try {
     await set(ref(services.db, `sessions/${roomId}/participants/${participant.id}`), participant)
-    await set(ref(services.db, `sessions/${roomId}/lastActivityAt`), Date.now())
-    await recordParticipantEvent(roomId, participant.id, 'participant_joined')
   } catch (error) {
     console.error('participant join rejected', { roomId, participantId: participant.id, error })
     throw new Error('Не удалось подключиться к комнате. Возможно, она завершена или уже заполнена.')
   }
+  // Anonymous users may update the activity marker only while a room is live.
+  // Joining happens in the lobby, so this non-essential metric must never turn
+  // a successful participant write into a registration error.
+  void recordParticipantEvent(roomId, participant.id, 'participant_joined')
+  return participant
 }
 
 const assertCurrentUserIsRoomHost = async (roomId: string, expectedHostUid?: string) => {
