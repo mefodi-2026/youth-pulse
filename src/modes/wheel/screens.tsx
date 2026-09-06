@@ -272,21 +272,21 @@ export function WheelHostScreen({ session, joinUrl, onClose, onPlayAgain, onExit
     </section>}
     {pending.length > 0 && !performing && <section className="glass wheel-pending"><div><p className="eyebrow">▤ БИБЛИОТЕКА</p><h2>Отложенные задания</h2><p>Откройте сохранённую пару без нового вращения.</p></div><WheelPendingLibrary pending={pending} disabled={disabled} onOpen={pendingId => void run(() => openWheelPendingTask(session.roomId, pendingId))} /></section>}
     {wheel?.phase === 'completed' && <section className="glass wheel-finish-screen"><p className="eyebrow">ИГРА ЗАВЕРШЕНА</p><h2>Все доступные пары разыграны</h2><p>История этой игры сохранится в архиве. Для нового состава участников создайте отдельную игровую сессию.</p><div><button type="button" className="button" disabled={disabled} onClick={playAgain}>Сыграть ещё раз</button><button type="button" className="button secondary" disabled={disabled} onClick={() => setFinishIntent('exit')}>Выйти в главное меню</button></div></section>}
-    <Modal open={Boolean(confirmation && wheel)} title={wheel?.phase === 'name_revealed' ? 'Подтвердите участника' : 'Подтвердите задание'} onClose={disabled ? undefined : () => void run(() => cancelWheelSelection(session.roomId))}>
+    <Modal open={Boolean(confirmation && wheel)} title={wheel?.phase === 'name_revealed' ? 'Подтвердите участника' : 'Подтвердите задание'} className="wheel-modal" onClose={disabled ? undefined : () => void run(() => cancelWheelSelection(session.roomId))}>
       <p className="eyebrow">{wheel?.phase === 'name_revealed' ? 'ВЫПАЛО ИМЯ' : 'ВЫПАЛО ЗАДАНИЕ'}</p>
       <strong className="app-modal-selection">{wheel?.phase === 'name_revealed' ? wheel?.currentRound?.selectedNameText : wheel?.currentRound?.selectedTaskText}</strong>
       <p>Следующее колесо не запустится автоматически.</p>
       <div className="app-modal-actions"><button type="button" className="button" disabled={disabled} onClick={() => void run(() => startWheelSpin(session.roomId))}>{confirmationLabel}</button><button type="button" className="button secondary" disabled={disabled} onClick={() => void run(() => cancelWheelSelection(session.roomId))}>Отменить выбор</button></div>
     </Modal>
-    <Modal open={libraryOpen} title="Библиотека заданий" onClose={() => setLibraryOpen(false)}>
+    <Modal open={libraryOpen} title="Библиотека заданий" className="wheel-modal" onClose={() => setLibraryOpen(false)}>
       <p>Отложенные пары сохранены отдельно от текущего раунда. Откройте пару, когда будете готовы завершить её.</p>
       <WheelPendingLibrary pending={pending} disabled={disabled} onOpen={pendingId => { setLibraryOpen(false); void run(() => openWheelPendingTask(session.roomId, pendingId)) }} />
     </Modal>
-    <Modal open={Boolean(finishIntent)} title={finishIntent === 'exit' ? 'Выйти из игры?' : 'Завершить игру?'} onClose={ending ? undefined : () => setFinishIntent(null)}>
+    <Modal open={Boolean(finishIntent)} title={finishIntent === 'exit' ? 'Выйти из игры?' : 'Завершить игру?'} className="wheel-modal" onClose={ending ? undefined : () => setFinishIntent(null)}>
       <p>Участники больше не смогут отправлять данные. История раундов и результаты останутся в архиве.</p>
       <div className="app-modal-actions"><button type="button" className="button" disabled={disabled} onClick={() => void confirmFinish()}>{ending ? 'Завершаем…' : 'Подтвердить завершение'}</button><button type="button" className="button secondary" disabled={ending} onClick={() => setFinishIntent(null)}>Отмена</button></div>
     </Modal>
-    <Modal open={Boolean(error)} title="Действие не выполнено" onClose={() => setError('')}><p>{error}</p></Modal>
+    <Modal open={Boolean(error)} title="Действие не выполнено" className="wheel-modal" onClose={() => setError('')}><p>{error}</p></Modal>
   </div>
 }
 

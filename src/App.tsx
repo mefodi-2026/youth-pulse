@@ -24,7 +24,7 @@ import { useRoom } from './core/hooks/useRoom'
 import { useSessionLifecycle } from './core/hooks/useSessionLifecycle'
 import { isSessionExpired } from './core/sessionLifecycle'
 import { Modal } from './components/Modal'
-import { AppIcon, Button, Icon, PageHeader, StatusBadge, Surface as Glass } from './components/DesignSystem'
+import { AppIcon, type AppIconName, Button, PageHeader, StatusBadge, Surface as Glass } from './components/DesignSystem'
 import { QuestionPackPreview } from './components/QuestionPackPreview'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
@@ -243,7 +243,7 @@ type KnownHostTab = 'main' | 'roomSetup' | 'currentRoom' | 'rooms' | 'diagnostic
 // The open string branch keeps old bookmarked tabs harmlessly redirectable
 // without letting TypeScript erase their compatibility branches as unreachable.
 type HostTab = KnownHostTab | (string & {})
-type HostMenuItem = [HostTab, string, string]
+type HostMenuItem = [HostTab, string, AppIconName]
 type RoomViewTab = 'overview' | 'participants' | 'results' | 'export'
 type CanonicalHostTab = Exclude<HostTab, 'overview' | 'results' | 'questions' | 'export'>
 const hostTabs: HostTab[] = ['main', 'roomSetup', 'currentRoom', 'rooms', ...productionModes.map(mode => mode.id as HostTab), 'settings', 'profile', 'rules', 'overview', 'results', 'questions', 'export']
@@ -274,8 +274,8 @@ const readRoomSetupMode = (): RoomMode | undefined => {
 function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, setMenuOpen, children, resultsMode = false }: { menu: HostMenuItem[]; tab: HostTab; onTab: (tab: HostTab) => void; room: string; session: Session | null; participants: number; menuOpen: boolean; setMenuOpen: (value: boolean) => void; children: React.ReactNode; resultsMode?: boolean }) {
   const selectTab = (next: HostTab) => { onTab(next); if (next === 'results' || window.innerWidth < 980) setMenuOpen(false) }
   const canReturnToRoom = Boolean(room && session && session.phase !== 'closed' && tab !== 'overview' && tab !== 'currentRoom')
-  const visualMode = session?.gameTypeId || session?.mode || (tab === 'roomSetup' ? readRoomSetupMode() : tab === 'quiz' ? quizMode : '')
-  return <main data-host-tab={tab} data-room-mode={visualMode} className={`host-shell host-tab-${tab} ${menuOpen ? 'is-menu-open' : 'is-menu-collapsed'} ${resultsMode ? 'results-mode' : ''}`}><button type="button" className="host-menu-toggle" aria-label="Открыть меню" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><i /><i /><i /></button><div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />{menuOpen && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand"><span>✦</span><b>Атмосфера</b><small>панель ведущего</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}>{tab === 'main' ? <Icon>{icon}</Icon> : <span>{icon}</span>}{label}</button>)}</nav>{room && <div className="menu-room"><small>{session?.phase === 'closed' ? 'ЗАВЕРШЁННАЯ КОМНАТА' : 'ТЕКУЩАЯ КОМНАТА'}</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside><section className="host-content">{canReturnToRoom && <button type="button" className="return-to-room" onClick={() => selectTab('currentRoom')}>← Вернуться к текущей комнате</button>}{children}</section></main>
+  const visualMode = session?.gameTypeId || session?.mode || (tab === 'roomSetup' ? readRoomSetupMode() : modeRegistry[tab as RoomMode] ? tab : '')
+  return <main data-host-tab={tab} data-room-mode={visualMode} className={`host-shell host-tab-${tab} ${menuOpen ? 'is-menu-open' : 'is-menu-collapsed'} ${resultsMode ? 'results-mode' : ''}`}><button type="button" className="host-menu-toggle" aria-label="Открыть меню" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><i /><i /><i /></button><div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />{menuOpen && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand"><span>✦</span><b>Атмосфера</b><small>панель ведущего</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}><AppIcon name={icon} size={18} />{label}</button>)}</nav>{room && <div className="menu-room"><small>{session?.phase === 'closed' ? 'ЗАВЕРШЁННАЯ КОМНАТА' : 'ТЕКУЩАЯ КОМНАТА'}</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside><section className="host-content">{canReturnToRoom && <button type="button" className="return-to-room" onClick={() => selectTab('currentRoom')}>← Вернуться к текущей комнате</button>}{children}</section></main>
 }
 
 function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; initialTab?: HostTab; initialRoom?: string }) {
@@ -334,7 +334,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const finished = participants.filter(p => p.status === 'finished').length
   const answering = participants.filter(p => p.status === 'answering').length
   const allFinished = participants.length > 0 && finished === participants.length
-  const menu: HostMenuItem[] = [['main', 'Главное', '✦'], ['currentRoom', 'Текущая комната', '▣'], ['rooms', 'История комнат', '◫'], ...productionModes.map(mode => [mode.id as HostTab, mode.menuLabel, mode.icon] as HostMenuItem), ['settings', 'Настройки', '⚙'], ['profile', 'Профиль', '◐'], ['rules', 'Правила', '?']]
+  const menuIcons: Record<RoomMode, AppIconName> = { diagnostic: 'diagnostic', quiz: 'quiz', wheel: 'wheel' }
+  const menu: HostMenuItem[] = [['main', 'Главное', 'dashboard'], ['currentRoom', 'Текущая комната', 'room'], ['rooms', 'История комнат', 'history'], ...productionModes.map(mode => [mode.id as HostTab, mode.menuLabel, menuIcons[mode.mode as RoomMode]] as HostMenuItem), ['settings', 'Настройки', 'settings'], ['profile', 'Профиль', 'profile'], ['rules', 'Правила', 'rules']]
   const archiveEntries = useMemo(() => selectWorkspaceArchives(archives, leader), [archives, leader])
   const filteredArchiveEntries = useMemo(() => archiveEntries.filter(archived => {
     const query = historyFilters.query.trim().toLocaleLowerCase('ru-RU')
