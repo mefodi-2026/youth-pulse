@@ -1,17 +1,22 @@
 const { initializeApp, getApps } = require('firebase-admin/app')
 const { getDatabase } = require('firebase-admin/database')
 const { onCall, HttpsError } = require('firebase-functions/v2/https')
+const { logger } = require('firebase-functions')
 const { setGlobalOptions } = require('firebase-functions/v2')
 const { existingQuizAnswer } = require('./quizAnswerPolicy')
 
-if (!getApps().length) {
-  initializeApp({
-    databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://molodeh-c523e-default-rtdb.europe-west1.firebasedatabase.app',
-  })
-}
+const ROOM_DATABASE_URL = 'https://molodeh-c523e-default-rtdb.europe-west1.firebasedatabase.app'
+const ROOM_DATABASE_APP = 'room-data'
+
+// The Functions runtime can initialize its own default Admin app before this
+// module loads.  Never reuse that opaque instance for room data: it may be
+// configured for another database endpoint.  A named app binds every callable
+// in this module to the same regional RTDB as the published browser.
+const roomDatabaseApp = getApps().find(app => app.name === ROOM_DATABASE_APP)
+  || initializeApp({ databaseURL: ROOM_DATABASE_URL }, ROOM_DATABASE_APP)
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 })
 
-const db = getDatabase()
+const db = getDatabase(roomDatabaseApp)
 const asObject = value => value && typeof value === 'object' ? value : {}
 const publicQuestions = questions => Object.values(asObject(questions)).map(question => ({
   id: question.id,
@@ -191,35 +196,58 @@ exports.joinRoomAsGuest = onCall(async request => {
   const displayName = String(nickname || '').trim().slice(0, 20)
   if (displayName.length < 2) throw new HttpsError('invalid-argument', 'Введите никнейм от 2 до 20 символов.')
 
-  const [publicRoomSnap, existingSnap] = await Promise.all([
+  const roomRef = db.ref(`sessions/${roomId}`)
+  // Hydrate the same reference before starting its transaction.  RTDB invokes
+  // a transaction callback optimistically with a local null cache before the
+  // server snapshot arrives; treating that first invocation as "not found"
+  // would abort a real room registration.
+  const [publicRoomSnap, initialRoomSnap] = await Promise.all([
     db.ref(`publicRooms/${roomId}`).once('value'),
-    db.ref(`sessions/${roomId}/participants/${uid}`).once('value'),
+    roomRef.once('value'),
   ])
   const publicRoom = publicRoomSnap.val()
-  if (!publicRoom) throw new HttpsError('not-found', 'Комната не найдена или больше недоступна.')
+  if (!publicRoom) {
+    logger.warn('Guest room lookup failed', { roomId, source: 'publicRooms', database: ROOM_DATABASE_URL })
+    throw new HttpsError('not-found', 'Комната не найдена или больше недоступна.')
+  }
   if (publicRoom.phase === 'closed' || isExpiredRoom(publicRoom)) throw new HttpsError('failed-precondition', 'Сессия завершена или срок её активности истёк. Подключение больше недоступно.')
-  if (existingSnap.exists()) return { participant: existingSnap.val(), reused: true }
+  const initialRoom = initialRoomSnap.val()
+  if (!initialRoom || !['diagnostic', 'quiz'].includes(initialRoom.mode)) {
+    logger.warn('Guest room lookup failed', { roomId, source: 'sessions', database: ROOM_DATABASE_URL })
+    throw new HttpsError('not-found', 'Комната не найдена или больше недоступна.')
+  }
+  if (initialRoom.phase === 'closed' || isExpiredRoom(initialRoom)) throw new HttpsError('failed-precondition', 'Сессия завершена или срок её активности истёк. Подключение больше недоступно.')
+  if (initialRoom.participants?.[uid]) return { participant: initialRoom.participants[uid], reused: true }
 
   const now = Date.now()
   let failure = null
-  const roomRef = db.ref(`sessions/${roomId}`)
+  let firstTransactionPass = true
   const transaction = await roomRef.transaction(current => {
-    if (!current || !['diagnostic', 'quiz'].includes(current.mode)) { failure = 'not-found'; return }
-    if (current.phase === 'closed' || isExpiredRoom(current, now)) { failure = 'closed'; return }
-    const participants = asObject(current.participants)
+    // The Admin SDK's first transaction callback has no local cache even after
+    // an explicit once(). Use the verified snapshot only for that optimistic
+    // pass. A later server retry with null must still abort instead of
+    // resurrecting a deleted room.
+    const room = !current && firstTransactionPass ? initialRoom : current
+    firstTransactionPass = false
+    if (!room || !['diagnostic', 'quiz'].includes(room.mode)) { failure = 'not-found'; return }
+    if (room.phase === 'closed' || isExpiredRoom(room, now)) { failure = 'closed'; return }
+    const participants = asObject(room.participants)
     const currentParticipant = participants[uid]
-    if (currentParticipant) return current
-    const capacity = Math.max(1, Math.min(30, Number(current.maxParticipants) || 30))
+    if (currentParticipant) return room
+    const capacity = Math.max(1, Math.min(30, Number(room.maxParticipants) || 30))
     if (Object.keys(participants).length >= capacity) { failure = 'full'; return }
     const participant = { id: uid, nickname: displayName, joinedAt: now, status: 'waiting', currentQuestionIndex: 0, answers: {} }
     return {
-      ...current,
+      ...room,
       participants: { ...participants, [uid]: participant },
       participantCount: Object.keys(participants).length + 1,
       lastActivityAt: now,
     }
   })
-  if (failure === 'not-found') throw new HttpsError('not-found', 'Комната не найдена или больше недоступна.')
+  if (failure === 'not-found') {
+    logger.warn('Guest room registration transaction found no compatible session', { roomId, source: 'sessions', mode: publicRoom.mode || null })
+    throw new HttpsError('not-found', 'Комната не найдена или больше недоступна.')
+  }
   if (failure === 'closed') throw new HttpsError('failed-precondition', 'Сессия завершена или срок её активности истёк. Подключение больше недоступно.')
   if (failure === 'full') throw new HttpsError('resource-exhausted', 'Комната уже заполнена. Попросите ведущего создать новую.')
 
