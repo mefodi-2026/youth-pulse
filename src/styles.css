@@ -772,7 +772,7 @@
 .wheel-prep-heading .wheel-counters article { min-height:118px; border-color:rgba(51,215,154,.27); background:linear-gradient(135deg,rgba(22,94,69,.46),rgba(7,43,33,.72)); }
 .wheel-prep-heading .wheel-counters span { color:var(--muted); font-size:13px; font-weight:700; }
 .wheel-prep-heading .wheel-counters strong { font-size:clamp(2.4rem,4vw,4rem); }
-.wheel-prep-heading .wheel-counters .wheel-source-label { min-width:0; font-size:clamp(1.25rem,2.1vw,2rem); line-height:1.08; overflow-wrap:anywhere; }
+.wheel-prep-heading .wheel-counters .wheel-source-label { min-width:0; font-size:clamp(1rem,1.65vw,1.4rem); line-height:1.08; white-space:nowrap; }
 .wheel-host-input { padding:0; border:0; background:transparent; }
 .wheel-host-input>div { padding:20px; border:1px solid rgba(51,215,154,.3); border-radius:20px; background:linear-gradient(135deg,rgba(16,82,61,.55),rgba(7,43,33,.74)); }
 .wheel-host-input>div label { grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; color:var(--muted); }
