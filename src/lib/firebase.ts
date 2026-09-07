@@ -1079,6 +1079,27 @@ export const ensureParticipantRoomData = async (roomId: string, knownSession?: S
   if (Object.keys(patch).length) await update(ref(services.db), patch)
 }
 
+/** Registration is distinct from a later room sync.  In particular, an
+ * uncertain network response must not make a successfully created participant
+ * start over with another record. */
+export class ParticipantJoinError extends Error {
+  constructor(message: string, readonly retryable = true) {
+    super(message)
+    this.name = 'ParticipantJoinError'
+  }
+}
+
+const participantJoinFailure = (reason: unknown) => {
+  const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code).toLowerCase() : ''
+  if (code.includes('permission-denied') || code.includes('unauthenticated')) {
+    return new ParticipantJoinError('Firebase не подтвердил доступ для регистрации участника. Данные комнаты не изменены. Попробуйте ещё раз после восстановления соединения.', false)
+  }
+  if (code.includes('network') || code.includes('unavailable') || code.includes('disconnected')) {
+    return new ParticipantJoinError('Связь с комнатой прервалась до подтверждения регистрации. Проверьте интернет и повторите попытку.')
+  }
+  return new ParticipantJoinError('Не удалось подтвердить регистрацию участника. Проверьте соединение и повторите попытку.')
+}
+
 export const joinSession = async (roomId: string, participant: Participant): Promise<Participant> => {
   const services = requireFirebase()
   await authPersistence
@@ -1101,9 +1122,15 @@ export const joinSession = async (roomId: string, participant: Participant): Pro
   if (participantSnapshot.exists()) return participantSnapshot.val() as Participant
   try {
     await set(ref(services.db, `sessions/${roomId}/participants/${participant.id}`), participant)
-  } catch (error) {
-    console.error('participant join rejected', { roomId, participantId: participant.id, error })
-    throw new Error('Не удалось подключиться к комнате. Возможно, она завершена или уже заполнена.')
+  } catch (reason) {
+    // RTDB can lose the acknowledgement after committing a write. Re-read the
+    // participant's own path before offering a retry; this prevents duplicates
+    // and restores the original session, including any saved answers.
+    const reconciled = await get(ref(services.db, roomParticipantPath(roomId, participant.id))).catch(() => null)
+    if (reconciled?.exists()) return reconciled.val() as Participant
+    const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code) : ''
+    console.error('participant join rejected', { roomId, participantId: participant.id, code, reason })
+    throw participantJoinFailure(reason)
   }
   // Anonymous users may update the activity marker only while a room is live.
   // Joining happens in the lobby, so this non-essential metric must never turn
