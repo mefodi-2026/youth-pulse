@@ -1090,7 +1090,13 @@ export class ParticipantJoinError extends Error {
 }
 
 const participantJoinFailure = (reason: unknown) => {
-  const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code).toLowerCase() : ''
+  const code = typeof reason === 'object' && reason && 'code' in reason
+    ? String(reason.code).toLowerCase().replaceAll('_', '-')
+    : ''
+  if (code.includes('not-found')) return new ParticipantJoinError('Комната не найдена или больше недоступна.', false)
+  if (code.includes('failed-precondition')) return new ParticipantJoinError('Сессия завершена или срок её активности истёк. Подключение больше недоступно.', false)
+  if (code.includes('resource-exhausted')) return new ParticipantJoinError('Комната уже заполнена. Попросите ведущего создать новую.', false)
+  if (code.includes('invalid-argument')) return new ParticipantJoinError('Введите никнейм от 2 до 20 символов.', false)
   if (code.includes('permission-denied') || code.includes('unauthenticated')) {
     return new ParticipantJoinError('Firebase не подтвердил доступ для регистрации участника. Данные комнаты не изменены. Попробуйте ещё раз после восстановления соединения.', false)
   }
@@ -1121,22 +1127,25 @@ export const joinSession = async (roomId: string, participant: Participant): Pro
   // It may already contain answers, so never replace it with a fresh object.
   if (participantSnapshot.exists()) return participantSnapshot.val() as Participant
   try {
-    await set(ref(services.db, `sessions/${roomId}/participants/${participant.id}`), participant)
+    if (!functions) throw new ParticipantJoinError('Сервис регистрации участника временно недоступен.')
+    // The participant root is deliberately not writable by a browser. The
+    // callable verifies the anonymous identity and atomically creates (or
+    // restores) this exact record before returning its server-confirmed data.
+    const result = await httpsCallable(functions, 'joinRoomAsGuest')({ roomId, nickname: participant.nickname })
+    const registered = (result.data as { participant?: Participant }).participant
+    if (!registered || registered.id !== participant.id) throw new ParticipantJoinError('Сервер не подтвердил регистрацию участника.')
+    return registered
   } catch (reason) {
-    // RTDB can lose the acknowledgement after committing a write. Re-read the
-    // participant's own path before offering a retry; this prevents duplicates
-    // and restores the original session, including any saved answers.
+    // A network timeout can occur after the server transaction commits. Re-read
+    // only the caller's own record before offering a retry; this prevents
+    // duplicates and restores the original session, including saved answers.
     const reconciled = await get(ref(services.db, roomParticipantPath(roomId, participant.id))).catch(() => null)
     if (reconciled?.exists()) return reconciled.val() as Participant
+    if (reason instanceof ParticipantJoinError) throw reason
     const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code) : ''
     console.error('participant join rejected', { roomId, participantId: participant.id, code, reason })
     throw participantJoinFailure(reason)
   }
-  // Anonymous users may update the activity marker only while a room is live.
-  // Joining happens in the lobby, so this non-essential metric must never turn
-  // a successful participant write into a registration error.
-  void recordParticipantEvent(roomId, participant.id, 'participant_joined')
-  return participant
 }
 
 const assertCurrentUserIsRoomHost = async (roomId: string, expectedHostUid?: string) => {

@@ -26,6 +26,9 @@ const privateQuestions = questions => Object.values(asObject(questions)).map(que
   ...(question.explanation ? { explanation: question.explanation } : {}),
 }))
 const byQuestionId = (questions, questionId) => Object.values(asObject(questions)).find(question => question?.id === questionId)
+const ROOM_INACTIVITY_MS = 10 * 60 * 1000
+const roomActivityAt = room => Number(room?.lastActivityAt || room?.createdAt || 0)
+const isExpiredRoom = (room, at = Date.now()) => at - roomActivityAt(room) >= ROOM_INACTIVITY_MS
 const publicPack = source => {
   const sourceQuestions = source.questions || source.content?.questions || source.publicContent?.questions || {}
   const questions = publicQuestions(sourceQuestions)
@@ -173,6 +176,58 @@ exports.syncPublishedPacks = onCall(async request => {
   })
   if (Object.keys(patch).length) await db.ref().update(patch)
   return { synchronized: Object.keys(patch).length }
+})
+
+/** Registers a guest through trusted infrastructure.  The database rules
+ * intentionally keep the session root private; this callable is the only
+ * writer that can create a participant record after verifying the anonymous
+ * Firebase identity, room state, capacity and stable participant key. */
+exports.joinRoomAsGuest = onCall(async request => {
+  const uid = request.auth?.uid
+  const provider = request.auth?.token?.firebase?.sign_in_provider
+  const { roomId, nickname } = request.data || {}
+  if (!uid || provider !== 'anonymous') throw new HttpsError('permission-denied', 'Для подключения откройте ссылку участника в отдельном браузере или в режиме инкогнито.')
+  if (typeof roomId !== 'string' || !/^[A-Z0-9]{6,16}$/.test(roomId)) throw new HttpsError('invalid-argument', 'Некорректный код комнаты.')
+  const displayName = String(nickname || '').trim().slice(0, 20)
+  if (displayName.length < 2) throw new HttpsError('invalid-argument', 'Введите никнейм от 2 до 20 символов.')
+
+  const [publicRoomSnap, existingSnap] = await Promise.all([
+    db.ref(`publicRooms/${roomId}`).once('value'),
+    db.ref(`sessions/${roomId}/participants/${uid}`).once('value'),
+  ])
+  const publicRoom = publicRoomSnap.val()
+  if (!publicRoom) throw new HttpsError('not-found', 'Комната не найдена или больше недоступна.')
+  if (publicRoom.phase === 'closed' || isExpiredRoom(publicRoom)) throw new HttpsError('failed-precondition', 'Сессия завершена или срок её активности истёк. Подключение больше недоступно.')
+  if (existingSnap.exists()) return { participant: existingSnap.val(), reused: true }
+
+  const now = Date.now()
+  let failure = null
+  const roomRef = db.ref(`sessions/${roomId}`)
+  const transaction = await roomRef.transaction(current => {
+    if (!current || !['diagnostic', 'quiz'].includes(current.mode)) { failure = 'not-found'; return }
+    if (current.phase === 'closed' || isExpiredRoom(current, now)) { failure = 'closed'; return }
+    const participants = asObject(current.participants)
+    const currentParticipant = participants[uid]
+    if (currentParticipant) return current
+    const capacity = Math.max(1, Math.min(30, Number(current.maxParticipants) || 30))
+    if (Object.keys(participants).length >= capacity) { failure = 'full'; return }
+    const participant = { id: uid, nickname: displayName, joinedAt: now, status: 'waiting', currentQuestionIndex: 0, answers: {} }
+    return {
+      ...current,
+      participants: { ...participants, [uid]: participant },
+      participantCount: Object.keys(participants).length + 1,
+      lastActivityAt: now,
+    }
+  })
+  if (failure === 'not-found') throw new HttpsError('not-found', 'Комната не найдена или больше недоступна.')
+  if (failure === 'closed') throw new HttpsError('failed-precondition', 'Сессия завершена или срок её активности истёк. Подключение больше недоступно.')
+  if (failure === 'full') throw new HttpsError('resource-exhausted', 'Комната уже заполнена. Попросите ведущего создать новую.')
+
+  const room = transaction.snapshot.val()
+  const participant = room?.participants?.[uid]
+  if (!participant || participant.id !== uid) throw new HttpsError('internal', 'Сервер не подтвердил регистрацию участника.')
+  await db.ref(`publicRooms/${roomId}`).update({ lastActivityAt: now })
+  return { participant, reused: !transaction.committed }
 })
 
 /** Grade one quiz answer on trusted infrastructure. A participant can submit
