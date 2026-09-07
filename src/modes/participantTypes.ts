@@ -7,5 +7,8 @@ export interface ParticipantQuestionScreenProps {
   packTitle?: string
   saving: boolean
   notice: string
+  selectedAnswer?: ResponseValue | null
+  retryable?: boolean
   onAnswer: (value: ResponseValue) => void
+  onRetry?: () => void
 }

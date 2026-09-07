@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { categories, questions } from './data/questions'
-import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, saveAnswer, subscribeParticipantQuestionSet, subscribeParticipantQuizResult, subscribeParticipantRecord, subscribePublicRoom, subscribeRoomLobby, waitForAuthPersistence } from './repositories/firebaseRepository'
+import { ensureAuth, firebaseReady, joinSession, markPersonalViewed, ParticipantAnswerError, saveAnswer, subscribeParticipantQuestionSet, subscribeParticipantQuizResult, subscribeParticipantRecord, subscribePublicRoom, subscribeRoomLobby, waitForAuthPersistence } from './repositories/firebaseRepository'
 import { type ModeManifest } from './modes/modeRegistry'
 import { resolveLegacyParticipantRoomMode, resolveParticipantRoomMode } from './modes/participantRouting'
 import { downloadWishPng, printWish } from './lib/export'
@@ -214,10 +214,12 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
   const [name, setName] = useState('')
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
+  const [retryAnswer, setRetryAnswer] = useState<ResponseValue | null>(null)
   const [reportReady, setReportReady] = useState(false)
   const [showReport, setShowReport] = useState(false)
   const [authReady, setAuthReady] = useState(!firebaseReady)
   const [authUid, setAuthUid] = useState('')
+  const answerRequestRef = useRef(false)
   let activeQuestions: Question[] = []
   let moduleError = ''
   try {
@@ -278,16 +280,17 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
     finally { setSaving(false) }
   }
   const answer = async (value: ResponseValue) => {
-    if (!participant || !session || saving) return
+    if (!participant || !session || saving || answerRequestRef.current) return
     if (isQuiz && value === 'SKIP') return setNotice('В этой викторине пропуск вопроса недоступен.')
     if (session.phase !== 'live') return setNotice(session.phase === 'closed' ? 'Сессия завершена ведущим. Ответы больше не принимаются.' : `Ответы пока не принимаются. Дождитесь запуска ${modeManifest.title.toLocaleLowerCase('ru-RU')}.`)
     const question = activeQuestions[participant.currentQuestionIndex]
     if (!activeQuestions.length || !question) return setNotice('Не удалось определить текущий вопрос. Обновите страницу или обратитесь к ведущему.')
     const nextIndex = participant.currentQuestionIndex + 1
-    setNotice(''); setSaving(true)
+    answerRequestRef.current = true
+    setRetryAnswer(null); setNotice(''); setSaving(true)
     try {
       const next = firebaseReady
-        ? await saveAnswer(room, participant, question.id, value, nextIndex, activeQuestions.length)
+        ? await saveAnswer(room, participant, question.id, value, nextIndex, activeQuestions.length, mode)
         : { ...participant, answers: { ...participant.answers, [question.id]: value }, currentQuestionIndex: nextIndex, status: nextIndex >= activeQuestions.length ? 'finished' as const : 'answering' as const, ...(nextIndex >= activeQuestions.length ? { completedAt: Date.now() } : {}) }
       if (!firebaseReady) {
         const demo = { ...session, participants: { ...session.participants, [participant.id]: next } }
@@ -300,8 +303,9 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
       setParticipant(next)
     } catch (error) {
       console.error('participant answer rejected', { room, participantId: participant.id, questionId: question.id, error })
-      setNotice(error instanceof Error ? `Ответ не сохранён: ${error.message}. Подключитесь к комнате заново.` : 'Ответ не сохранён. Пожалуйста, подключитесь к комнате заново.')
-    } finally { setSaving(false) }
+      setRetryAnswer(error instanceof ParticipantAnswerError && !error.retryable ? null : value)
+      setNotice(error instanceof Error ? error.message : 'Не удалось отправить ответ. Проверьте соединение и повторите попытку.')
+    } finally { answerRequestRef.current = false; setSaving(false) }
   }
   const openReport = async () => { if (!participant) return; try { if (firebaseReady) await markPersonalViewed(room, participant.id); else if (session) { const next = { ...participant, personalViewedAt: Date.now() }; const demo = { ...session, participants: { ...session.participants, [participant.id]: next } }; setDemo(demo); setSession(demo); setParticipant(next) } } finally { setShowReport(true) } }
 
@@ -323,7 +327,7 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
   const question = activeQuestions[participant.currentQuestionIndex]
   if (!question) return <Shell screen="waiting-screen"><p className="flow-label">ВОПРОС НЕДОСТУПЕН</p><h1>Не удалось открыть текущий вопрос</h1><p>Обновите страницу. Если проблема останется, обратитесь к ведущему.</p>{notice && <p className="flow-error">{notice}</p>}</Shell>
   const ModeParticipantScreen = modeManifest.participantScreen
-  return <Shell screen="question-screen"><ModeParticipantScreen question={question} currentIndex={participant.currentQuestionIndex} total={activeQuestions.length} packTitle={session.packSnapshot?.title} saving={saving} notice={notice || syncError} onAnswer={value => void answer(value)} /></Shell>
+  return <Shell screen="question-screen"><ModeParticipantScreen question={question} currentIndex={participant.currentQuestionIndex} total={activeQuestions.length} packTitle={session.packSnapshot?.title} saving={saving} notice={notice} selectedAnswer={retryAnswer} retryable={Boolean(retryAnswer)} onAnswer={value => void answer(value)} onRetry={retryAnswer ? () => void answer(retryAnswer) : undefined} />{syncError && <p className="flow-sync-note" role="status">{syncError}</p>}</Shell>
 }
 
 export function MobileParticipantFlow({ room }: { room: string }) {

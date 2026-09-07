@@ -2,6 +2,7 @@ const { initializeApp, getApps } = require('firebase-admin/app')
 const { getDatabase } = require('firebase-admin/database')
 const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const { setGlobalOptions } = require('firebase-functions/v2')
+const { existingQuizAnswer } = require('./quizAnswerPolicy')
 
 if (!getApps().length) {
   initializeApp({
@@ -181,24 +182,28 @@ exports.submitQuizAnswer = onCall(async request => {
   const { roomId, questionId, answer } = request.data || {}
   if (!uid) throw new HttpsError('unauthenticated', 'Требуется безопасное подключение участника.')
   if (!roomId || !questionId || !['A', 'B', 'C', 'D'].includes(answer)) throw new HttpsError('invalid-argument', 'Некорректный ответ.')
-  const [roomSnap, participantSnap, publicQuestionsSnap, privateQuestionsSnap] = await Promise.all([
+  const [roomSnap, publicQuestionsSnap, privateQuestionsSnap] = await Promise.all([
     db.ref(`sessions/${roomId}`).once('value'),
-    db.ref(`sessions/${roomId}/participants/${uid}`).once('value'),
     db.ref(`roomParticipantQuestions/${roomId}`).once('value'),
     db.ref(`roomPrivateQuestions/${roomId}`).once('value'),
   ])
   const room = roomSnap.val()
-  const participant = participantSnap.val()
+  const participant = room?.participants?.[uid]
   const publicSet = publicQuestionsSnap.val()
   const privateSet = privateQuestionsSnap.val()
   if (!room || room.mode !== 'quiz' || room.phase !== 'live') throw new HttpsError('failed-precondition', 'Викторина не принимает ответы.')
   if (Date.now() - Number(room.lastActivityAt || room.createdAt || 0) >= 10 * 60 * 1000) throw new HttpsError('failed-precondition', 'Время активности комнаты истекло.')
-  if (!participant || participant.id !== uid || participant.status === 'finished') throw new HttpsError('permission-denied', 'Участник не принадлежит этой комнате.')
+  if (!participant || participant.id !== uid) throw new HttpsError('permission-denied', 'Участник не принадлежит этой комнате.')
   const publicQuestion = byQuestionId(publicSet?.questions, questionId)
   const privateQuestion = byQuestionId(privateSet?.questions, questionId)
   if (!publicQuestion || !privateQuestion?.correctAnswer) throw new HttpsError('failed-precondition', 'Вопрос недоступен.')
-  if (participant.answers && Object.prototype.hasOwnProperty.call(participant.answers, questionId)) throw new HttpsError('already-exists', 'На этот вопрос уже был дан ответ.')
   const allPublic = Object.values(asObject(publicSet?.questions))
+  const previous = existingQuizAnswer(participant, questionId, answer)
+  if (previous.kind === 'replayed') return { ...previous, questionId, answer }
+  if (previous.kind === 'conflict') throw new HttpsError('already-exists', 'На этот вопрос уже был дан другой ответ.')
+  if (participant.status === 'finished') throw new HttpsError('failed-precondition', 'Викторина уже завершена для этого участника.')
+  const expectedQuestion = allPublic[Number(participant.currentQuestionIndex || 0)]
+  if (!expectedQuestion || expectedQuestion.id !== questionId) throw new HttpsError('failed-precondition', 'Вопрос уже изменился. Дождитесь синхронизации.')
   const nextIndex = Number(participant.currentQuestionIndex || 0) + 1
   const finished = nextIndex >= allPublic.length
   const nextAnswers = { ...(participant.answers || {}), [questionId]: answer }
@@ -219,5 +224,5 @@ exports.submitQuizAnswer = onCall(async request => {
     }
   }
   await db.ref().update(patch)
-  return { nextIndex, status: finished ? 'finished' : 'answering' }
+  return { questionId, answer, nextIndex, status: finished ? 'finished' : 'answering', replayed: false }
 })

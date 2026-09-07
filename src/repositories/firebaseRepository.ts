@@ -24,6 +24,7 @@ export {
   logoutLeader,
   markPersonalViewed,
   platformProductDefaults,
+  ParticipantAnswerError,
   quizGameTypeId,
   registerLeader,
   saveAnswer,

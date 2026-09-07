@@ -1213,11 +1213,111 @@ export const saveQuestionBank = async () => { throw new Error('questionBank is d
 /** @deprecated Legacy questionBank is intentionally no longer read by the host UI. */
 export const subscribeQuestionBank = (_callback: (value: Question[] | null) => void) => () => undefined
 
-export const saveAnswer = async (roomId: string, participant: Participant, questionId: string, answer: ResponseValue, nextIndex: number, totalQuestions = 16) => {
+export class ParticipantAnswerError extends Error {
+  readonly retryable: boolean
+
+  constructor(message: string, retryable = true) {
+    super(message)
+    this.name = 'ParticipantAnswerError'
+    this.retryable = retryable
+  }
+}
+
+const savedAnswer = (participant: Participant | null, questionId: string, answer: ResponseValue) => {
+  return participant && participant.answers?.[questionId] === answer ? participant : null
+}
+
+const readSavedAnswer = async (roomId: string, participantId: string, questionId: string, answer: ResponseValue) => {
+  const services = requireFirebase()
+  try {
+    const snapshot = await get(ref(services.db, roomParticipantPath(roomId, participantId)))
+    return savedAnswer(snapshot.val() as Participant | null, questionId, answer)
+  } catch (error) {
+    console.warn('could not reconcile a participant answer after an uncertain request', { roomId, participantId, questionId, error })
+    return null
+  }
+}
+
+const localConfirmedParticipant = (participant: Participant, questionId: string, answer: ResponseValue, nextIndex: number, status: Participant['status']) => ({
+  ...participant,
+  answers: { ...participant.answers, [questionId]: answer },
+  currentQuestionIndex: nextIndex,
+  status,
+  ...(status === 'finished' ? { completedAt: participant.completedAt || Date.now() } : {}),
+})
+
+const answerFailure = (reason: unknown) => {
+  const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code) : ''
+  if (code.includes('failed-precondition')) return new ParticipantAnswerError('Этот вопрос уже недоступен. Дождитесь обновления экрана.', false)
+  if (code.includes('permission-denied') || code.includes('unauthenticated')) return new ParticipantAnswerError('Не удалось подтвердить право на этот ответ. Обновите страницу и повторите попытку.', false)
+  if (code.includes('already-exists')) return new ParticipantAnswerError('Для этого вопроса уже сохранён другой ответ. Обновите страницу, чтобы продолжить.', false)
+  return new ParticipantAnswerError('Не удалось отправить ответ. Проверьте соединение и повторите попытку.')
+}
+
+const saveQuizAnswer = async (roomId: string, participant: Participant, questionId: string, answer: Exclude<ResponseValue, 'SKIP'>) => {
+  if (!functions) throw new ParticipantAnswerError('Проверка викторины временно недоступна.')
+  try {
+    // A callable result is sent only after its multi-location write commits.
+    // Do not follow it with another client-side get(): that extra read can be
+    // stale or fail after a successful write and used to create a false error.
+    const result = await httpsCallable(functions, 'submitQuizAnswer')({ roomId, questionId, answer })
+    const data = result.data as { questionId?: string; answer?: Exclude<ResponseValue, 'SKIP'>; nextIndex?: number; status?: Participant['status'] }
+    const resolvedNextIndex = Number(data.nextIndex)
+    const resolvedStatus = data.status === 'finished' ? 'finished' : data.status === 'answering' ? 'answering' : null
+    if (!Number.isInteger(resolvedNextIndex) || resolvedNextIndex < participant.currentQuestionIndex + 1 || !resolvedStatus || (data.questionId && data.questionId !== questionId) || (data.answer && data.answer !== answer)) {
+      throw new ParticipantAnswerError('Сервер не подтвердил сохранение ответа.')
+    }
+    return localConfirmedParticipant(participant, questionId, answer, resolvedNextIndex, resolvedStatus)
+  } catch (reason) {
+    // A network timeout or a delayed callable response is ambiguous. The
+    // participant may already have an answer, so reconcile before offering a
+    // retry. This is also what makes a repeated tap idempotent.
+    const persisted = await readSavedAnswer(roomId, participant.id, questionId, answer)
+    if (persisted) return persisted
+    console.error('quiz answer was not confirmed', { roomId, participantId: participant.id, questionId, reason })
+    throw reason instanceof ParticipantAnswerError ? reason : answerFailure(reason)
+  }
+}
+
+const saveDiagnosticAnswer = async (roomId: string, participant: Participant, questionId: string, answer: ResponseValue, nextIndex: number, totalQuestions: number) => {
+  const services = requireFirebase()
+  const finished = nextIndex >= totalQuestions
+  const next = localConfirmedParticipant(participant, questionId, answer, nextIndex, finished ? 'finished' : 'answering')
+  try {
+    // The Rules acknowledge this atomic write. Reading the room first added
+    // two round trips to every answer without strengthening server authority.
+    await update(ref(services.db), {
+      [`sessions/${roomId}/participants/${participant.id}/answers/${questionId}`]: answer,
+      [`sessions/${roomId}/participants/${participant.id}/currentQuestionIndex`]: next.currentQuestionIndex,
+      [`sessions/${roomId}/participants/${participant.id}/status`]: next.status,
+      ...(next.completedAt ? { [`sessions/${roomId}/participants/${participant.id}/completedAt`]: next.completedAt } : {}),
+      [`sessions/${roomId}/lastActivityAt`]: Date.now(),
+    })
+  } catch (reason) {
+    const persisted = await readSavedAnswer(roomId, participant.id, questionId, answer)
+    if (persisted) return persisted
+    console.error('diagnostic answer was not confirmed', { roomId, participantId: participant.id, questionId, reason })
+    throw answerFailure(reason)
+  }
+  // Analytics is deliberately non-blocking: it must never delay the last
+  // question or turn a confirmed answer into an error.
+  if (finished) void recordParticipantEvent(roomId, participant.id, 'participant_finished')
+  return next
+}
+
+export const saveAnswer = async (roomId: string, participant: Participant, questionId: string, answer: ResponseValue, nextIndex: number, totalQuestions = 16, knownMode?: Exclude<RoomMode, 'wheel'>) => {
   const services = requireFirebase()
   await authPersistence
   const currentUser = services.auth.currentUser
   if (!currentUser || currentUser.uid !== participant.id) throw new Error('Participant identity does not match the current Firebase user.')
+  if (knownMode === 'quiz') {
+    if (answer === 'SKIP') throw new ParticipantAnswerError('В викторине нельзя пропустить вопрос.', false)
+    return saveQuizAnswer(roomId, participant, questionId, answer)
+  }
+  if (knownMode === 'diagnostic') return saveDiagnosticAnswer(roomId, participant, questionId, answer, nextIndex, totalQuestions)
+
+  // Compatibility path for the retired participant component. Active flows
+  // pass their manifest mode and therefore avoid this preflight read.
   const [publicSnapshot, participantSnapshot] = await Promise.all([
     get(ref(services.db, publicRoomPath(roomId))),
     get(ref(services.db, roomParticipantPath(roomId, participant.id))),
@@ -1229,37 +1329,10 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
   if (!storedParticipant) throw new Error('Участник не найден в комнате. Подключитесь заново.')
   if (storedParticipant.id !== currentUser.uid) throw new Error('Participant record does not belong to the current Firebase user.')
   if (publicRoom.mode === 'quiz') {
-    if (answer === 'SKIP') throw new Error('В викторине нельзя пропустить вопрос.')
-    if (!functions) throw new Error('Проверка викторины временно недоступна.')
-    try {
-      const result = await httpsCallable(functions, 'submitQuizAnswer')({ roomId, questionId, answer })
-      const data = result.data as { nextIndex?: number; status?: Participant['status'] }
-      const refreshed = await get(ref(services.db, roomParticipantPath(roomId, participant.id)))
-      const next = refreshed.val() as Participant | null
-      if (!next || next.currentQuestionIndex !== data.nextIndex) throw new Error('Ответ не был подтверждён сервером.')
-      return next
-    } catch (error) {
-      console.error('quiz answer rejected by trusted handler', { roomId, participantId: participant.id, questionId, error })
-      throw new Error('Ответ не сохранён. Проверьте подключение к викторине и попробуйте ещё раз.')
-    }
+    if (answer === 'SKIP') throw new ParticipantAnswerError('В викторине нельзя пропустить вопрос.', false)
+    return saveQuizAnswer(roomId, storedParticipant, questionId, answer)
   }
-  const finished = nextIndex >= totalQuestions
-  const next: Participant = {
-    ...storedParticipant,
-    answers: { ...storedParticipant.answers, [questionId]: answer }, currentQuestionIndex: nextIndex,
-    status: finished ? 'finished' : 'answering', ...(finished ? { completedAt: Date.now() } : {})
-  }
-  // Write the owned leaves directly. The Rules grant a participant access only
-  // to their own answer/status fields, never the participant collection.
-  await update(ref(services.db), {
-    [`sessions/${roomId}/participants/${participant.id}/answers/${questionId}`]: answer,
-    [`sessions/${roomId}/participants/${participant.id}/currentQuestionIndex`]: next.currentQuestionIndex,
-    [`sessions/${roomId}/participants/${participant.id}/status`]: next.status,
-    ...(next.completedAt ? { [`sessions/${roomId}/participants/${participant.id}/completedAt`]: next.completedAt } : {}),
-    [`sessions/${roomId}/lastActivityAt`]: Date.now(),
-  })
-  if (finished) await recordParticipantEvent(roomId, participant.id, 'participant_finished')
-  return next
+  return saveDiagnosticAnswer(roomId, storedParticipant, questionId, answer, nextIndex, totalQuestions)
 }
 
 const recordParticipantEvent = async (roomId: string, participantId: string, type: Extract<SessionEventType, 'participant_joined' | 'participant_finished' | 'report_viewed'>) => {

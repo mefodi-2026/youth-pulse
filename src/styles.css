@@ -1430,7 +1430,30 @@
 
 @media (max-width:480px) {
   [data-participant-mode="diagnostic"] .mobile-flow { padding:0; }
-  [data-participant-mode="diagnostic"] .phone-screen { min-height:100svh; border:0; border-radius:0; }
-  [data-participant-mode="diagnostic"] .question-screen { padding:26px 20px 18px; }
-  [data-participant-mode="diagnostic"] .answer-options button { min-height:54px; }
+[data-participant-mode="diagnostic"] .phone-screen { min-height:100svh; border:0; border-radius:0; }
+[data-participant-mode="diagnostic"] .question-screen { padding:26px 20px 18px; }
+[data-participant-mode="diagnostic"] .answer-options button { min-height:54px; }
 }
+
+/* Answer submission is deliberately distinct from a later subscription
+   warning: a selected retry stays visible without claiming a saved answer
+   failed, and the message always has its own layout space. */
+.mobile-wrap .question-screen .option.is-pending,
+.mobile-wrap .question-screen .mobile-action.is-pending {
+  border-color:rgba(49,207,141,.78);
+  background:rgba(23,84,65,.96);
+  box-shadow:0 0 0 1px rgba(49,207,141,.18), inset 0 1px 0 rgba(255,255,255,.04);
+}
+.answer-error { display:grid; justify-items:center; gap:8px; margin-top:14px; }
+.answer-error .flow-error { margin:0; }
+.answer-retry {
+  min-height:36px;
+  padding:0 14px;
+  border:1px solid rgba(49,207,141,.32);
+  border-radius:999px;
+  color:#eaf8ee;
+  background:rgba(17,71,53,.72);
+  font:700 12px/1 Inter,Arial,sans-serif;
+}
+.answer-retry:hover:not(:disabled) { border-color:rgba(49,207,141,.62); background:rgba(23,84,65,.95); }
+.flow-sync-note { margin:12px 0 0; color:#a9bcb2; font-size:11px; line-height:1.4; text-align:center; }
