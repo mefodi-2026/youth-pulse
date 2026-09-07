@@ -25,7 +25,7 @@ export function Icon({ children, label }: { children: ReactNode; label?: string 
 }
 
 export type AppIconName =
-  | 'arrow-right' | 'plus' | 'eye' | 'edit' | 'trash'
+  | 'arrow-right' | 'plus' | 'eye' | 'edit' | 'trash' | 'flag'
   | 'dashboard' | 'room' | 'history' | 'diagnostic' | 'quiz' | 'wheel'
   | 'settings' | 'profile' | 'rules'
 
@@ -35,6 +35,7 @@ const iconPaths: Record<AppIconName, ReactNode> = {
   eye: <><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></>,
   edit: <><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z" /><path d="m13.5 6.5 4 4" /></>,
   trash: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /><path d="M10 11v5" /><path d="M14 11v5" /></>,
+  flag: <><path d="M5 21V4" /><path d="M5 5c3.2-2 6.5 2 10 0 1.5-.9 2.8-.9 4 0v9c-1.2-.9-2.5-.9-4 0-3.5 2-6.8-2-10 0" /></>,
   dashboard: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
   room: <><path d="M4 20V5a1 1 0 0 1 1-1h10v16" /><path d="M15 9h4a1 1 0 0 1 1 1v10" /><path d="M8 8h3M8 12h3M8 16h3" /><path d="M2 20h20" /></>,
   history: <><path d="M4 5v5h5" /><path d="M5.4 14.7A7 7 0 1 0 5 10" /><path d="M12 8v4l2.8 1.8" /></>,

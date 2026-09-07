@@ -28,6 +28,7 @@ import { AppIcon, type AppIconName, Button, LoadingState, PageHeader, StatusBadg
 import { QuestionPackPreview } from './components/QuestionPackPreview'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
+const publicAsset = (fileName: string) => `${import.meta.env.BASE_URL}assets/${fileName}`
 
 const createFeedbackUrl = (formUrl: string, session: Session | null) => {
   if (!formUrl.trim() || !session) return ''
@@ -237,37 +238,51 @@ function AccountPage({ profile }: { profile: LeaderProfile }) {
 function HomePanel({ name, questionCount, onChooseMode, activeSession, onResume, onCloseActive, notice }: { name: string; questionCount: number; onChooseMode: (mode: RoomMode) => void; activeSession: Session | null; onResume: () => void; onCloseActive: () => void; notice?: string }) {
   const modes = productionModes.map(mode => ({ ...mode, mode: mode.mode as RoomMode }))
   const expired = isSessionExpired(activeSession)
-  const modeIcons: Record<RoomMode, AppIconName> = { diagnostic: 'diagnostic', quiz: 'quiz', wheel: 'wheel' }
+  const modeArtwork: Record<RoomMode, string> = {
+    diagnostic: publicAsset('mode-diagnostic-checklist.png'),
+    quiz: publicAsset('mode-bible-book.png'),
+    wheel: publicAsset('mode-fortune-wheel.png'),
+  }
   const modeDescription = (mode: RoomMode, description: string) => mode === diagnosticMode
     ? `${questionCount || '—'} вопросов · ${Object.keys(categories).length} тем · личные и общие результаты`
     : description
-  return <div className="home-dashboard">
+  return <div className="home-vibe" aria-label={`Главная страница ведущего ${name}`}>
     {notice && <p className="connection-warning">{notice}</p>}
-    {activeSession && <Glass className="home-active-room"><p className="eyebrow">НЕЗАВЕРШЁННАЯ КОМНАТА · {getRoomModeTitle(activeSession).toUpperCase()}</p><h3>{activeSession.roomTitle || activeSession.roomId}</h3><p>Последняя активность: {new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(activeSession.lastActivityAt || activeSession.createdAt))} · {expired ? 'срок активности истёк' : getRoomStatusText(activeSession)}</p><div className="control-actions">{!expired && <Button onClick={onResume}>Вернуться в комнату</Button>}<Button secondary onClick={onCloseActive}>Завершить старую комнату</Button></div>{expired && <small>Просроченную комнату нельзя продолжить. Её можно завершить, а затем открыть результаты и экспорт в истории.</small>}</Glass>}
-    <section className="home-dashboard-welcome" aria-labelledby="home-welcome-title">
-      <p className="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</p>
-      <h1 id="home-welcome-title">Рады видеть, <span>{name}</span></h1>
-      <p>Проводите «Проверь себя», викторины и интерактивные встречи — бережно, понятно и без лишней подготовки.</p>
+    {activeSession && <Glass className="home-vibe-active-room"><p className="eyebrow">НЕЗАВЕРШЁННАЯ КОМНАТА · {getRoomModeTitle(activeSession).toUpperCase()}</p><h3>{activeSession.roomTitle || activeSession.roomId}</h3><p>Последняя активность: {new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(activeSession.lastActivityAt || activeSession.createdAt))} · {expired ? 'срок активности истёк' : getRoomStatusText(activeSession)}</p><div className="control-actions">{!expired && <Button onClick={onResume}>Вернуться в комнату</Button>}<Button secondary onClick={onCloseActive}>Завершить старую комнату</Button></div>{expired && <small>Просроченную комнату нельзя продолжить. Её можно завершить, а затем открыть результаты и экспорт в истории.</small>}</Glass>}
+    <section className="home-vibe-hero" aria-labelledby="home-vibe-title">
+      <div>
+        <p className="home-vibe-kicker">РАДЫ ПРИВЕТСТВОВАТЬ ВАС<br />НА НАШЕЙ ПЛАТФОРМЕ</p>
+        <h1 id="home-vibe-title">Меньше подготовки — <span>больше вайба.</span></h1>
+        <p className="home-vibe-lead">«Молодёжный Вайб» собирает в одном месте готовые игры, викторины и активности для организации молодёжных вечеров. Выбирайте формат, запускайте — и создавайте атмосферу, в которую хочется возвращаться.</p>
+      </div>
+      <p className="home-vibe-handwriting" aria-hidden="true">Больше,<br />чем встречи</p>
     </section>
-    <section className="home-mode-section" aria-labelledby="home-modes-title">
-      <div className="home-section-heading"><p className="eyebrow" id="home-modes-title">ВЫБЕРИТЕ РЕЖИМ</p><p>Откройте нужный формат и подготовьте новую встречу.</p></div>
-      <div className="home-mode-grid">
-        {modes.map(mode => <article className="home-mode-card" key={mode.mode}>
-          <div className="home-mode-card-copy">
-            <span className="home-mode-icon"><AppIcon name={modeIcons[mode.mode]} size={26} /></span>
-            <div><h2>{mode.title}</h2><p>{modeDescription(mode.mode, mode.description)}</p></div>
-          </div>
-          <Button className="home-mode-action" onClick={() => onChooseMode(mode.mode)}>{mode.setupScreen ? 'Открыть режим' : 'Создать комнату'}</Button>
+    <section className="home-vibe-beta" aria-label="О тестовой версии">
+      <span className="home-vibe-beta-icon"><AppIcon name="flag" size={30} /></span>
+      <div><h2>Тестовая версия</h2><p>Вместе с молодёжью и лидерами мы хотим понять, какие форматы действительно нужны, и сделать платформу настоящим помощником в организации молодёжных вечеров.</p></div>
+      <span className="home-vibe-beta-note" aria-hidden="true">Развиваем<br />вместе</span>
+    </section>
+    <section className="home-vibe-modes" aria-labelledby="home-modes-title">
+      <p className="home-vibe-section-label" id="home-modes-title">ВЫБЕРИТЕ РЕЖИМ</p>
+      <div className="home-vibe-mode-grid">
+        {modes.map(mode => <article className="home-vibe-mode-card" key={mode.mode}>
+          <img className={`home-vibe-mode-art home-vibe-mode-art-${mode.mode}`} src={modeArtwork[mode.mode]} alt="" />
+          <div className="home-vibe-mode-copy"><h2>{mode.title}</h2><p>{modeDescription(mode.mode, mode.description)}</p></div>
+          <Button className="home-vibe-mode-action" onClick={() => onChooseMode(mode.mode)}><span>{mode.setupScreen ? 'Открыть режим' : 'Создать комнату'}</span><AppIcon name="arrow-right" size={18} /></Button>
         </article>)}
       </div>
     </section>
-    <section className="home-start-guide" aria-labelledby="home-guide-title">
-      <p className="eyebrow" id="home-guide-title">КАК НАЧАТЬ</p>
-      <div>
-        <article><b>1</b><span><h2>Выберите режим и создайте комнату</h2><p>Настройте встречу и нужный набор вопросов.</p></span></article>
-        <article><b>2</b><span><h2>Подключите участников</h2><p>Покажите QR-код или ссылку; при ручном колесе подключение не нужно.</p></span></article>
-        <article><b>3</b><span><h2>Запустите</h2><p>Начните игру, когда всё готово.</p></span></article>
-        <article><b>4</b><span><h2>Посмотрите результаты</h2><p>Откройте итоги и экспорт.</p></span></article>
+    <section className="home-vibe-guide" aria-labelledby="home-guide-title">
+      <p className="home-vibe-section-label" id="home-guide-title">КАК НАЧАТЬ</p>
+      <div className="home-vibe-step-grid">
+        {[
+          ['1', 'Выберите формат', 'Выберите игру или викторину для вашего вечера.'],
+          ['2', 'Подключите участников', 'Покажите QR-код или отправьте ссылку.'],
+          ['3', 'Запускайте', 'Проводите игру во время встречи.'],
+          ['4', 'Смотрите результаты', 'Откройте итоги и экспортируйте при необходимости.'],
+        ].map(([number, title, description], index) => <div className="home-vibe-step-wrap" key={number}>
+          <article className="home-vibe-step"><b>{number}</b><span><h2>{title}</h2><p>{description}</p></span></article>{index < 3 && <AppIcon name="arrow-right" size={24} />}
+        </div>)}
       </div>
     </section>
   </div>
@@ -331,7 +346,7 @@ function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, s
   const visualMode = session?.gameTypeId || session?.mode || (tab === 'roomSetup' ? readRoomSetupMode() : modeRegistry[tab as RoomMode] ? tab : '')
   const activeRoom = Boolean(room && session && session.phase !== 'closed')
   return <main data-host-tab={tab} data-room-mode={visualMode} className={`host-shell host-tab-${tab} ${menuOpen ? 'is-menu-open' : 'is-menu-collapsed'} ${resultsMode ? 'results-mode' : ''}`}>
-    {!resultsMode && <><button type="button" className="host-menu-toggle" aria-label="Открыть меню" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><i /><i /><i /></button><div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />{menuOpen && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand"><span>✦</span><b>Атмосфера</b><small>панель ведущего</small></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}><AppIcon name={icon} size={18} />{label}</button>)}</nav>{activeRoom && <div className="menu-room"><small>ТЕКУЩАЯ КОМНАТА</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside></>}
+    {!resultsMode && <><button type="button" className="host-menu-toggle" aria-label="Открыть меню" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><i /><i /><i /></button><div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />{menuOpen && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand brand-vibe"><img src={publicAsset('youth-vibe-logo-white.png')} alt="Молодёжный Вайб — создаём атмосферу вместе" /></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}><AppIcon name={icon} size={18} />{label}</button>)}</nav>{activeRoom && <div className="menu-room"><small>ТЕКУЩАЯ КОМНАТА</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside></>}
     <section className="host-content">{canReturnToRoom && <button type="button" className="return-to-room" onClick={() => selectTab('currentRoom')}>← Вернуться к текущей комнате</button>}{children}</section>
   </main>
 }
