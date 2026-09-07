@@ -346,14 +346,21 @@ function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, s
   const visualMode = session?.gameTypeId || session?.mode || (tab === 'roomSetup' ? readRoomSetupMode() : modeRegistry[tab as RoomMode] ? tab : '')
   const activeRoom = Boolean(room && session && session.phase !== 'closed')
   useEffect(() => {
-    if (!menuOpen || window.innerWidth >= 980) return
     const previousOverflow = document.body.style.overflow
+    let locked = false
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false) }
-    document.body.style.overflow = 'hidden'
+    const syncScrollLock = () => {
+      const shouldLock = menuOpen && window.innerWidth < 980
+      if (shouldLock && !locked) { document.body.style.overflow = 'hidden'; locked = true }
+      if (!shouldLock && locked) { document.body.style.overflow = previousOverflow; locked = false }
+    }
+    syncScrollLock()
     window.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('resize', syncScrollLock)
     return () => {
-      document.body.style.overflow = previousOverflow
+      if (locked) document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('resize', syncScrollLock)
     }
   }, [menuOpen, setMenuOpen])
   return <main data-host-tab={tab} data-room-mode={visualMode} className={`host-shell host-tab-${tab} ${menuOpen ? 'is-menu-open' : 'is-menu-collapsed'} ${resultsMode ? 'results-mode' : ''}`}>
