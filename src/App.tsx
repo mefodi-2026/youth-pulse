@@ -412,11 +412,12 @@ type KnownHostTab = 'main' | 'roomSetup' | 'currentRoom' | 'rooms' | 'diagnostic
 // without letting TypeScript erase their compatibility branches as unreachable.
 type HostTab = KnownHostTab | (string & {})
 type HostMenuItem = [HostTab, string, AppIconName]
-type RoomViewTab = 'overview' | 'participants' | 'results' | 'export'
+type RoomViewTab = 'overview' | 'participants' | 'progress' | 'results' | 'export'
+type RoomJourneyStage = 'participants' | 'progress' | 'results'
 type CanonicalHostTab = Exclude<HostTab, 'overview' | 'results' | 'questions' | 'export'>
 const hostTabs: HostTab[] = ['main', 'roomSetup', 'currentRoom', 'rooms', ...productionModes.map(mode => mode.id as HostTab), 'settings', 'profile', 'rules', 'overview', 'results', 'questions', 'export']
 const legacyTabRedirect: Record<'overview' | 'results' | 'questions' | 'export', { tab: CanonicalHostTab; roomView?: RoomViewTab }> = {
-  overview: { tab: 'currentRoom', roomView: 'overview' },
+  overview: { tab: 'currentRoom', roomView: 'participants' },
   results: { tab: 'currentRoom', roomView: 'results' },
   questions: { tab: 'diagnostic' },
   export: { tab: 'currentRoom', roomView: 'export' },
@@ -432,7 +433,11 @@ const readHostTab = (): HostTab | undefined => {
 }
 const readRoomView = (): RoomViewTab | undefined => {
   const value = new URLSearchParams(window.location.search).get('view')
-  return value === 'overview' || value === 'participants' || value === 'results' || value === 'export' ? value : undefined
+  return value === 'overview' || value === 'participants' || value === 'progress' || value === 'results' || value === 'export' ? value : undefined
+}
+const getRoomJourneyStage = (session?: Pick<Session, 'phase'> | null): RoomJourneyStage => {
+  if (session?.phase === 'resultsIntro' || session?.phase === 'resultsReal') return 'results'
+  return session?.phase === 'lobby' || !session ? 'participants' : 'progress'
 }
 const readRoomSetupMode = (): RoomMode | undefined => {
   const value = new URLSearchParams(window.location.search).get('mode')
@@ -501,7 +506,6 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const [closeRequest, setCloseRequest] = useState<{ createMode?: RoomMode } | null>(null)
   const tabKey = `atmosphere-host-tab-${leader.uid}`
   const initialRoute = normalizeHostTab(initialTab)
-  const initialRouteHandled = useRef(false)
   // Keep the legacy values in the state type while normalizeHostTab() keeps
   // URLs canonical. It lets old bookmarked tabs remain safely redirectable.
   const [tab, setTab] = useState<HostTab>('main')
@@ -556,9 +560,9 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   }), [archiveEntries, historyFilters])
   const navigate = (next: HostTab, targetRoom = room, requestedRoomView?: RoomViewTab, requestedMode?: RoomMode) => {
     const normalized = normalizeHostTab(next)
-    const nextView = requestedRoomView || normalized.roomView || (normalized.tab === 'currentRoom' ? 'overview' : undefined)
+    const nextView = requestedRoomView || normalized.roomView
     setTab(normalized.tab)
-    if (nextView) setRoomView(nextView)
+    setRoomView(nextView || 'overview')
     localStorage.setItem(tabKey, normalized.tab)
     if (nextView === 'results') { setResultRoom(targetRoom); setMenuOpen(false) }
     const params = new URLSearchParams({ tab: normalized.tab })
@@ -570,21 +574,13 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
 
   // The URL is the source of truth for navigation. This prevents an old
   // localStorage value (for example, "profile") from becoming the default
-  // after a fresh login or a browser reload.
+  // and keeps saved current-room links recoverable after a reload.
   useEffect(() => {
-    if (!initialRouteHandled.current) {
-      initialRouteHandled.current = true
-      setTab('main')
-      setRoomView('overview')
-      setResultRoom('')
-      if (currentPath().endsWith('/results') || initialTab !== 'main' || window.location.search) replace('/host?tab=main')
-      return
-    }
     const normalized = normalizeHostTab(initialTab)
-    const requestedView = readRoomView() || normalized.roomView || (normalized.tab === 'currentRoom' ? 'overview' : undefined)
+    const requestedView = readRoomView() || normalized.roomView
     const requestedMode = normalized.tab === 'roomSetup' ? readRoomSetupMode() : undefined
     setTab(normalized.tab)
-    if (requestedView) setRoomView(requestedView)
+    setRoomView(requestedView || 'overview')
     if (requestedMode) setRoomDetails(previous => ({ ...previous, mode: requestedMode }))
     if (requestedView === 'results' && initialRoom) setResultRoom(initialRoom)
     const params = new URLSearchParams({ tab: normalized.tab })
@@ -601,12 +597,16 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
 
   useEffect(() => () => { if (copyResetTimer.current) window.clearTimeout(copyResetTimer.current) }, [])
 
-  // The room phase is the source of truth after a reload or an old bookmarked
-  // view. Results must never reopen underneath the host navigation shell.
+  // Saved tab URLs may contain the former room subviews. They must never
+  // unlock a future step or change a room phase: the subscribed session is
+  // the sole authority for the visible stage.
   useEffect(() => {
-    if (tab !== 'currentRoom' || !session || (session.phase !== 'resultsIntro' && session.phase !== 'resultsReal') || roomView === 'results') return
-    navigate('currentRoom', room, 'results')
-  }, [room, roomView, session?.phase, tab])
+    if (tab !== 'currentRoom' || !session || session.mode === 'wheel') return
+    const stage = getRoomJourneyStage(session)
+    const asksForDifferentStage = (roomView === 'participants' || roomView === 'progress' || roomView === 'results') && roomView !== stage
+    const asksForActiveExport = roomView === 'export' && session.phase !== 'closed'
+    if (asksForDifferentStage || asksForActiveExport) navigate('currentRoom', room)
+  }, [room, roomView, session?.mode, session?.phase, tab])
 
   // A closed room is kept in Firebase and its archive, but it must never be
   // restored as the active room for the leader after a reload.
@@ -839,7 +839,11 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     }
   }
   const start = async () => {
-    await changePhase('live')
+    if (busy) return
+    setBusy(true)
+    try {
+      if (await changePhase('live')) navigate('currentRoom', room)
+    } finally { setBusy(false) }
   }
   const copyJoinLink = async () => {
     if (!joinUrl) return
@@ -856,11 +860,14 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     }
   }
   const showResults = async () => {
-    if (!session) return
-    if (!await changePhase('resultsIntro')) return
-    setResultRoom(room)
-    navigate('results', room)
-    window.setTimeout(() => { void changePhase('resultsReal') }, 20000)
+    if (!session || !allFinished || busy) return
+    setBusy(true)
+    try {
+      if (!await changePhase('resultsIntro')) return
+      setResultRoom(room)
+      navigate('currentRoom', room)
+      window.setTimeout(() => { void changePhase('resultsReal') }, 20000)
+    } finally { setBusy(false) }
   }
   const closeRoom = async (options: { returnToMain?: boolean; inactivity?: boolean } = {}) => {
     if (!session || session.phase === 'closed') return false
@@ -1046,26 +1053,11 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     <Glass className="room-create-shell"><div className="room-create-layout">{roomPilotDetailsControl}{packSelectionControl}</div><div className="room-create-actions"><div className="control-actions"><Button disabled={busy || systemPacksState === 'loading' || (firebaseReady && (!activeSetupValid || !activeSetupPack || activeSetupPack.questions.length === 0))} onClick={() => void create()}>{busy ? 'Создаём…' : 'Создать комнату'}</Button><Button secondary disabled={busy} onClick={() => navigate(session && session.phase !== 'closed' ? 'currentRoom' : 'overview')}>Отмена</Button></div>{createError && <p className="connection-warning" role="alert">{createError}</p>}{actionError && <p className="connection-warning" role="alert">{actionError}</p>}</div></Glass>
   </HostLayout>
   const feedbackUrl = createFeedbackUrl(feedbackFormUrl, session)
-  const currentRoomTabs = session ? <RoomTabs active={roomView} session={session} onChange={view => navigate('currentRoom', room, view)} /> : null
 
-  // Phase 1–3: all leader-facing room work lives behind the one canonical
-  // "currentRoom" destination. Legacy tabs are normalised before this point.
-  if (tab === 'currentRoom' && roomView === 'results') {
-    const viewedSession = resultRoom === room ? session : archives[resultRoom] || session
-    if (viewedSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={viewedSession.roomId} session={viewedSession} participants={Object.keys(viewedSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode>
-      <Results room={viewedSession.roomId} sessionOverride={viewedSession} embedded actions={viewedSession.phase === 'closed' ? <Button onClick={() => openRoomSetup(viewedSession.mode)}>Создать новую комнату</Button> : <><Button onClick={() => requestCloseCurrentRoom(viewedSession.mode)}>Создать новую комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить и вернуться в главное меню</Button></>} />
-      {closeRequest && <Modal open title="Завершить комнату?" className={viewedSession.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'} onClose={() => setCloseRequest(null)}><p>Участники больше не смогут отправлять данные. История, результаты и архив останутся сохранены.</p><div className="app-modal-actions"><Button onClick={() => void confirmCloseCurrentRoom()}>Подтвердить завершение</Button><Button secondary onClick={() => setCloseRequest(null)}>Отмена</Button></div></Modal>}
-    </HostLayout>
-    return <HostLayout menu={menu} tab={tab} onTab={navigate} room={lastClosedRoom} session={null} participants={0} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
-      <header className="host-header"><div><p className="eyebrow">РЕЗУЛЬТАТЫ</p><h1>Нет выбранной комнаты</h1></div></header>
-      <Glass className="empty-state"><p>Откройте завершённую комнату из истории, чтобы увидеть результаты.</p><Button onClick={() => navigate('rooms')}>Открыть историю комнат</Button></Glass>
-    </HostLayout>
-  }
-
-  if (tab === 'currentRoom' && roomView === 'export') {
+  if (tab === 'currentRoom' && roomView === 'export' && session?.phase === 'closed') {
     const exportRoom = session || (lastClosedRoom ? archives[lastClosedRoom] : null)
     return <HostLayout menu={menu} tab={tab} onTab={navigate} room={exportRoom?.roomId || lastClosedRoom} session={exportRoom || null} participants={Object.keys(exportRoom?.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
-      <header className="host-header"><div><p className="eyebrow">ВЫГРУЗКА ДАННЫХ</p><h1>Экспорт комнаты</h1></div></header>{currentRoomTabs}
+      <header className="host-header"><div><p className="eyebrow">ВЫГРУЗКА ДАННЫХ</p><h1>Экспорт комнаты</h1></div></header>
       {exportRoom ? <Glass className="export-panel"><p className="eyebrow">{getRoomModeTitle(exportRoom).toUpperCase()}</p><h2>{exportRoom.roomTitle || exportRoom.displayCode || exportRoom.roomId}</h2><p>CSV содержит данные лидера, параметры комнаты, статус участников и ответы. Личные ответы не выводятся на общем экране.</p><Button onClick={() => exportCsv(exportRoom, leader)}>Скачать CSV</Button></Glass> : <Glass className="empty-state"><h3>Выберите комнату для экспорта</h3><p>Завершённые комнаты доступны в истории.</p><Button onClick={() => navigate('rooms')}>Открыть историю комнат</Button></Glass>}
     </HostLayout>
   }
@@ -1085,16 +1077,22 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     if (ModeHostScreen) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={Object.keys(session.wheel?.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
       <ModeHostScreen session={session} joinUrl={joinUrl} onClose={session.mode === 'wheel' ? closeWheelRoom : closeRoom} onPlayAgain={session.mode === 'wheel' ? startWheelAgain : undefined} onExitToMain={session.mode === 'wheel' ? exitWheelToMain : undefined} />
     </HostLayout>
+    const roomStage = getRoomJourneyStage(session)
+    if (roomStage === 'results') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={session.roomId} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode>
+      <div className="results-room-stage"><RoomJourneyIndicator stage={roomStage} /></div>
+      <Results room={session.roomId} sessionOverride={session} embedded actions={<><Button disabled={busy} onClick={() => requestCloseCurrentRoom(session.mode)}>Создать новую комнату</Button><Button secondary disabled={busy} onClick={() => requestCloseCurrentRoom()}>Завершить и вернуться в главное меню</Button></>} />
+      {closeRequest && <Modal open title="Завершить комнату?" className={session.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'} onClose={() => setCloseRequest(null)}><p>Участники больше не смогут отправлять данные. История, результаты и архив останутся сохранены.</p><div className="app-modal-actions"><Button onClick={() => void confirmCloseCurrentRoom()}>Подтвердить завершение</Button><Button secondary onClick={() => setCloseRequest(null)}>Отмена</Button></div></Modal>}
+    </HostLayout>
     return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
       <header className="host-header"><div><p className="eyebrow">ТЕКУЩАЯ КОМНАТА · {getRoomModeTitle(session).toUpperCase()}</p><h1>{session.phase === 'lobby' ? 'Подключение участников' : 'Участники выполняют задания'}</h1><p className="room-header-title">{session.roomTitle || session.displayCode || room}</p></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО'}</span></header>
-      {currentRoomTabs}
+      <RoomJourneyIndicator stage={roomStage} />
       {session.phase === 'lobby' ? <section className="room-journey room-connection-flow">
         <Glass className="room-connection-qr"><p className="eyebrow">ПОДКЛЮЧЕНИЕ</p>{qr ? <img src={qr} alt="QR-код для подключения к комнате" className="qr" /> : <p>Генерируем QR-код…</p>}<code>{joinUrl}</code><Button secondary className="room-copy-button" onClick={() => void copyJoinLink()}>{copyState === 'copied' ? '✓ Ссылка скопирована' : 'Скопировать ссылку'}</Button>{warning && <p className="connection-warning">{warning}</p>}{copyState === 'error' && <p className="connection-warning" role="alert">Не удалось скопировать ссылку. Скопируйте адрес из поля вручную.</p>}</Glass>
-        <Glass className="room-connection-participants"><div className="participants-panel-header"><div><p className="eyebrow">УЧАСТНИКИ · {participants.length}</p><h2>{participants.length ? 'Уже подключились' : 'Ждём первых участников'}</h2><p>После одного нажатия «Продолжить» участник автоматически перейдёт в ожидание ведущего.</p></div><span>{session.displayCode || room}</span></div>{participants.length ? <div className="participant-rows">{participants.sort((a, b) => a.joinedAt - b.joinedAt).map(person => <div key={person.id}><b>{person.nickname}</b><span>{person.status === 'finished' ? 'Завершил(а)' : person.status === 'answering' ? 'Отвечает' : 'Ожидает'}</span></div>)}</div> : <p className="participants-empty">Покажите QR-код или отправьте ссылку. Запуск станет доступен после первого подключения.</p>}<div className="room-journey-actions"><Button disabled={!participants.length} onClick={() => void start()}>Запустить {getRoomModeTitle(session).toLocaleLowerCase('ru-RU')}</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить сессию</Button></div>{actionError && <p className="connection-warning" role="alert">{actionError}</p>}</Glass>
+        <Glass className="room-connection-participants"><div className="participants-panel-header"><div><p className="eyebrow">УЧАСТНИКИ · {participants.length}</p><h2>{participants.length ? 'Уже подключились' : 'Ждём первых участников'}</h2><p>После одного нажатия «Продолжить» участник автоматически перейдёт в ожидание ведущего.</p></div><span>{session.displayCode || room}</span></div>{participants.length ? <div className="participant-rows">{participants.sort((a, b) => a.joinedAt - b.joinedAt).map(person => <div key={person.id}><b>{person.nickname}</b><span>{person.status === 'finished' ? 'Завершил(а)' : person.status === 'answering' ? 'Отвечает' : 'Ожидает'}</span></div>)}</div> : <p className="participants-empty">Покажите QR-код или отправьте ссылку. Запуск станет доступен после первого подключения.</p>}<div className="room-journey-actions"><Button disabled={busy || !participants.length} onClick={() => void start()}>{busy ? 'Запускаем…' : `Запустить ${getRoomModeTitle(session).toLocaleLowerCase('ru-RU')}`}</Button><Button secondary disabled={busy} onClick={() => requestCloseCurrentRoom()}>Завершить сессию</Button></div>{!participants.length && <p className="room-action-hint">Запуск станет доступен после первого подключения. Количество из настроек не ограничивает запуск.</p>}{actionError && <p className="connection-warning" role="alert">{actionError}</p>}</Glass>
       </section> : <section className="room-journey room-progress-flow">
         <div className="metrics"><Metric label="Подключились" value={participants.length} note={`из ${participants.length} текущих участников`} /><Metric label="Сейчас проходят" value={answering} note="в своём темпе" /><Metric label="Завершили" value={finished} note={`из ${participants.length || '—'} участников`} /></div>
         <Glass className="room-progress-board"><div><p className="eyebrow">ОБЩИЙ ПРОГРЕСС</p><h2>Участники выполняют задания</h2><p>{session.mode === 'quiz' ? 'Каждый проходит викторину в своём темпе. На общем экране виден только ход игры.' : 'Каждый отвечает в своём темпе. На общем экране виден только общий прогресс.'}</p><div className="room-completion-bar" aria-label={`Завершили ${finished} из ${participants.length || 0} участников`}><i style={{ width: `${participants.length ? Math.round(finished / participants.length * 100) : 0}%` }} /></div><b className="room-completion-caption">Завершили {finished} из {participants.length || 0}</b></div><div className="room-completion-ring"><b>{participants.length ? Math.round(finished / participants.length * 100) : 0}%</b><span>завершение<br />комнаты</span></div></Glass>
-        <Glass className={`room-results-ready ${allFinished ? 'is-ready' : ''}`}><div><p className="eyebrow">ИТОГИ</p><h2>{allFinished ? 'Все участники завершили' : 'Итоги пока закрыты'}</h2><p>{allFinished ? 'Ведущий может синхронно открыть общий результат на экране проектора.' : `Ждём завершения: ${finished} из ${participants.length || 0}.`}</p></div><div className="room-journey-actions"><Button secondary onClick={() => window.open(hostUrl(`/stage?room=${room}`), 'atmosphere-stage')}>Открыть экран прогресса</Button><Button disabled={!allFinished} onClick={() => void showResults()}>{session.mode === 'quiz' ? 'Показать победителей' : 'Показать результаты'}</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить сессию</Button></div></Glass>{actionError && <p className="connection-warning" role="alert">{actionError}</p>}
+        <Glass className={`room-results-ready ${allFinished ? 'is-ready' : ''}`}><div><p className="eyebrow">ИТОГИ</p><h2>{allFinished ? 'Все участники завершили' : 'Итоги пока закрыты'}</h2><p>{allFinished ? 'Ведущий может синхронно открыть общий результат в этой вкладке.' : `Завершили ${finished} из ${participants.length || 0}.`}</p></div><div className="room-journey-actions"><Button disabled={busy || !allFinished} onClick={() => void showResults()}>{busy ? 'Открываем…' : session.mode === 'quiz' ? 'Показать победителей' : 'Показать результаты'}</Button><Button secondary disabled={busy} onClick={() => requestCloseCurrentRoom()}>Завершить сессию</Button></div>{!allFinished && <p className="room-action-hint">Завершили {finished} из {participants.length || 0}. Результаты откроются, когда закончит каждый подключившийся участник.</p>}</Glass>{actionError && <p className="connection-warning" role="alert">{actionError}</p>}
       </section>}
       {closeRequest && <Modal open title="Завершить комнату?" className={session.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'} onClose={() => setCloseRequest(null)}><p>Участники больше не смогут отправлять данные. История, результаты и архив останутся сохранены.</p><div className="app-modal-actions"><Button onClick={() => void confirmCloseCurrentRoom()}>Подтвердить завершение</Button><Button secondary onClick={() => setCloseRequest(null)}>Отмена</Button></div></Modal>}
     </HostLayout>
@@ -1273,9 +1271,10 @@ function Results({ room, sessionOverride, embedded = false, actions }: { room: s
   return <main className={`results ${showReal ? 'reveal' : 'intro'}`}><p className="eyebrow">ОБЩИЙ РЕЗУЛЬТАТ · {showReal ? 'РЕАЛЬНЫЕ ДАННЫЕ' : `ИДЕАЛЬНЫЙ ОРИЕНТИР · ${countdown} СЕК.`}</p><h1>{showReal ? 'Наша общая картина' : 'Какими мы можем быть вместе'}</h1>{!showReal && <div className="result-loader"><i /><span>Через несколько секунд увидим реальную картину группы</span></div>}<Glass className="result-board"><div className="big-score"><b>{Math.round(Object.values(shown).reduce((a, b) => a + b, 0) / Object.keys(categories).length)}%</b><span>общий ориентир</span></div><div className="result-bars">{Object.entries(shown).map(([id, value]) => <div key={id}><span>{categories[id as keyof typeof categories]}</span><b>{value}%</b><i><em style={{ width: `${value}%` }} /></i></div>)}</div></Glass><p className="closing">Любовь и единство начинаются не с других, а лично с каждого из нас.</p><small className="privacy">Показаны только агрегированные результаты — без имён и личных ответов.</small></main>
 }
 
-function RoomTabs({ active, session, onChange }: { active: RoomViewTab; session: Pick<Session, 'mode' | 'gameTypeId'>; onChange: (tab: RoomViewTab) => void }) {
-  const items: Array<[RoomViewTab, string]> = [['overview', 'Обзор'], ['participants', 'Участники и QR'], ['results', getRoomResultsLabel(session)], ['export', 'Экспорт']]
-  return <nav className="room-tabs" aria-label="Разделы текущей комнаты">{items.map(([id, label]) => <button type="button" className={active === id ? 'selected' : ''} onClick={() => onChange(id)} key={id}>{label}</button>)}</nav>
+function RoomJourneyIndicator({ stage }: { stage: RoomJourneyStage }) {
+  const activeIndex = ['participants', 'progress', 'results'].indexOf(stage)
+  const items: Array<[RoomJourneyStage, string]> = [['participants', 'Участники и QR'], ['progress', 'Прогресс'], ['results', 'Результаты']]
+  return <ol className="room-stage-indicator" aria-label={`Этап комнаты: ${items[activeIndex][1]}`}>{items.map(([id, label], index) => <li key={id} className={index < activeIndex ? 'is-complete' : index === activeIndex ? 'is-current' : ''}><span>{index < activeIndex ? '✓' : index + 1}</span><b>{label}</b></li>)}</ol>
 }
 
 type QuizResultRow = { person: Participant; correct: number; total: number; percentage: number }

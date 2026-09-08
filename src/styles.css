@@ -508,9 +508,6 @@
 @keyframes quiz-podium-enter { to { opacity:1; transform:translateY(0) scale(1); } }
 .history-filters>p { margin:0 0 12px; }
 .history-filters>div { display:grid; grid-template-columns:minmax(180px,1.4fr) minmax(150px,.7fr) minmax(130px,.55fr) minmax(130px,.55fr); gap:10px; }
-.room-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:-4px 0 22px; }
-.room-tabs button { min-height:38px; padding:0 15px; border:1px solid var(--line); border-radius:999px; color:var(--muted); background:rgba(6,41,31,.52); font:700 12px/1 inherit; cursor:pointer; transition:.2s ease; }
-.room-tabs button:hover,.room-tabs button.selected { color:#051b13; border-color:var(--mint); background:var(--mint); }
 .mode-intro { max-width:900px; display:grid; gap:10px; padding:28px; }
 .mode-intro h2 { margin:0; font-size:clamp(1.8rem,3vw,2.6rem); }
 .mode-intro p:not(.eyebrow) { max-width:660px; margin:0; color:var(--muted); line-height:1.55; }
@@ -622,8 +619,6 @@
   .quiz-podium-body strong { font-size:clamp(60px,18vw,104px); }
   .quiz-winners-podium.count-1 { grid-template-columns:1fr; padding-right:20%; padding-left:20%; }.quiz-winners-podium.count-1 .place-1 { grid-column:1; }
   .quiz-winners-podium.count-2 { grid-template-columns:repeat(2,minmax(0,1fr)); padding-right:10%; padding-left:10%; }.quiz-winners-podium.count-2 .place-1 { order:2; }.quiz-winners-podium.count-2 .place-2 { order:1; }
-  .room-tabs { margin-bottom:18px; overflow:auto; flex-wrap:nowrap; padding-bottom:3px; }
-  .room-tabs button { flex:0 0 auto; }
   .question-row { flex-direction:column; }
   .question-row>div:last-child { width:100%; }
   .question-row .button { flex:1; }
@@ -1135,10 +1130,6 @@
   .host-shell[data-host-tab="rooms"] .room-row p:not(.eyebrow) { color:var(--workspace-text-muted); font-size:15px; line-height:1.48; }
   .host-shell[data-host-tab="rooms"] .archive-actions { display:grid; grid-template-columns:1fr; width:100%; }
   .host-shell[data-host-tab="rooms"] .archive-actions .button { width:100%; }
-  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .room-tabs { flex-wrap:nowrap; margin:0 -18px 20px; padding:0 18px 4px; overflow:auto; scrollbar-width:none; }
-  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .room-tabs::-webkit-scrollbar { display:none; }
-  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .room-tabs button { flex:0 0 auto; min-height:42px; border-color:var(--workspace-border); color:var(--workspace-text-muted); background:rgba(3,18,14,.42); font-size:15px; }
-  .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .room-tabs button.selected { color:#042016; border-color:var(--workspace-accent); background:var(--workspace-accent); }
   .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .metrics { grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
   .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .metric { min-height:116px; padding:15px; border-color:var(--workspace-border); border-radius:17px; background:linear-gradient(160deg,var(--workspace-surface-raised),var(--workspace-surface)); }
   .host-shell[data-host-tab="currentRoom"]:not([data-room-mode="quiz"]) .metric strong { color:var(--workspace-accent); font-size:32px; }
@@ -1379,6 +1370,18 @@
 /* One room journey shared by «Проверь себя» and the Bible quiz.  The phase
    decides the content; legacy room tabs only choose a URL, never a second
    subscription or a competing layout. */
+.room-stage-indicator { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; width:min(100%,760px); margin:0 0 22px; padding:0; list-style:none; }
+.room-stage-indicator li { display:flex; align-items:center; gap:10px; min-width:0; color:var(--muted); font-size:13px; }
+.room-stage-indicator li::after { content:''; order:3; flex:1 1 18px; height:1px; margin-left:2px; background:var(--line); }
+.room-stage-indicator li:last-child::after { display:none; }
+.room-stage-indicator span { display:grid; flex:0 0 30px; place-items:center; width:30px; height:30px; border:1px solid var(--line); border-radius:50%; color:var(--muted); background:rgba(3,28,21,.54); font-size:12px; font-weight:900; }
+.room-stage-indicator b { min-width:0; overflow-wrap:anywhere; font-size:inherit; }
+.room-stage-indicator .is-complete,.room-stage-indicator .is-current { color:var(--text); }
+.room-stage-indicator .is-complete span { color:#04150f; border-color:var(--mint); background:var(--mint); }
+.room-stage-indicator .is-complete::after { background:var(--mint); }
+.room-stage-indicator .is-current span { color:#04150f; border-color:var(--mint); background:linear-gradient(180deg,#4be4a6,var(--mint)); box-shadow:0 0 0 4px rgba(50,206,139,.11); }
+.results-room-stage { width:min(920px,100%); margin:0 auto; padding:20px clamp(18px,5vw,72px) 0; }
+.results-room-stage .room-stage-indicator { margin-bottom:0; }
 .room-journey { display:grid; gap:18px; max-width:1180px; }
 .room-connection-flow { grid-template-columns:minmax(270px,360px) minmax(0,1fr); align-items:stretch; }
 .room-connection-qr,.room-connection-participants,.room-progress-board,.room-results-ready { padding:clamp(22px,3vw,32px); }
@@ -1395,6 +1398,7 @@
 .room-connection-participants .participant-rows b { min-width:0; overflow-wrap:anywhere; }
 .room-connection-participants .participant-rows span { flex:0 0 auto; color:var(--muted); font-size:13px; }
 .room-journey-actions { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.room-action-hint { margin:0; color:var(--muted); font-size:13px; line-height:1.45; }
 .room-progress-flow { max-width:1120px; }
 .room-progress-flow .metrics { grid-template-columns:repeat(3,minmax(0,1fr)); }
 .room-progress-board { display:grid; grid-template-columns:minmax(0,1fr) 168px; gap:28px; align-items:center; }
@@ -1416,6 +1420,11 @@
   .room-results-ready { align-items:flex-start; flex-direction:column; }
 }
 @media (max-width:620px) {
+  .room-stage-indicator { gap:6px; margin-bottom:18px; }
+  .room-stage-indicator li { gap:6px; font-size:11px; }
+  .room-stage-indicator span { flex-basis:26px; width:26px; height:26px; font-size:11px; }
+  .room-stage-indicator li::after { min-width:8px; margin-left:0; }
+  .results-room-stage { padding:12px 16px 0; }
   .room-connection-qr,.room-connection-participants,.room-progress-board,.room-results-ready { padding:20px; }
   .room-copy-button,.room-journey-actions .button { width:100%; }
   .room-progress-board { grid-template-columns:1fr; }
