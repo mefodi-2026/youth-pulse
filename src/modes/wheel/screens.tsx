@@ -40,7 +40,7 @@ const phaseInstructions = {
   completed: 'Все доступные пары использованы.',
 } as const
 
-const colors = ['#0a5f46', '#0d7555', '#118461', '#0b6c4f', '#14956e', '#07513d', '#177e5d', '#0a6b50']
+const colors = ['#1eb6dc', '#ff9f2d', '#ffe000', '#e947cf', '#f52355', '#9b6bd8', '#5e55ee', '#0aa9e5', '#19cf82', '#ff9f28', '#e850cb', '#06b5e7']
 const point = (radius: number, degrees: number) => { const radians = degrees * Math.PI / 180; return { x: 200 + radius * Math.cos(radians), y: 200 + radius * Math.sin(radians) } }
 const sectorPath = (index: number, total: number) => {
   const start = -90 + index * 360 / total; const end = -90 + (index + 1) * 360 / total
