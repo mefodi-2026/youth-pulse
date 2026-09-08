@@ -345,7 +345,7 @@ function HomePanel({ name, questionCount, onChooseMode, onOpenFeedback, activeSe
     ? `${questionCount || '—'} вопросов · ${Object.keys(categories).length} тем · личные и общие результаты`
     : description
   return <div className="home-vibe" aria-label={`Главная страница ведущего ${name}`}>
-    {notice && <p className="connection-warning">{notice}</p>}
+    {notice && <p className="connection-warning home-vibe-notice" role="status">{notice}</p>}
     {activeSession && <Glass className="home-vibe-active-room"><p className="eyebrow">НЕЗАВЕРШЁННАЯ КОМНАТА · {getRoomModeTitle(activeSession).toUpperCase()}</p><h3>{activeSession.roomTitle || activeSession.roomId}</h3><p>Последняя активность: {new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(activeSession.lastActivityAt || activeSession.createdAt))} · {expired ? 'срок активности истёк' : getRoomStatusText(activeSession)}</p><div className="control-actions">{!expired && <Button onClick={onResume}>Вернуться в комнату</Button>}<Button secondary onClick={onCloseActive}>Завершить старую комнату</Button></div>{expired && <small>Просроченную комнату нельзя продолжить. Её можно завершить, а затем открыть результаты и экспорт в истории.</small>}</Glass>}
     <section className="home-vibe-hero" aria-labelledby="home-vibe-title">
       <div>
