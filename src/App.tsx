@@ -27,6 +27,7 @@ import { Modal } from './components/Modal'
 import { AppIcon, type AppIconName, Button, LoadingState, PageHeader, StatusBadge, Surface as Glass } from './components/DesignSystem'
 import { QuestionPackPreview } from './components/QuestionPackPreview'
 import { feedbackFormUrl } from './lib/feedback'
+import { homeAssets, preloadHomeAssets } from './lib/homeAssets'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
 const publicAsset = (fileName: string) => `${import.meta.env.BASE_URL}assets/${fileName}`
@@ -58,7 +59,7 @@ function App() {
   if (path.endsWith('/account')) return <LeaderRoute allowInactive>{profile => <AccountPage profile={profile} />}</LeaderRoute>
   if (path.endsWith('/host') || path.endsWith('/results')) {
     const requestedTab = readHostTab()
-    return <LeaderRoute>{profile => <Host leader={profile} initialTab={path.endsWith('/results') ? 'results' : requestedTab} initialRoom={queryRoom()} />}</LeaderRoute>
+    return <LeaderRoute preloadHome={path.endsWith('/host') && requestedTab === 'main'}>{profile => <Host leader={profile} initialTab={path.endsWith('/results') ? 'results' : requestedTab} initialRoom={queryRoom()} />}</LeaderRoute>
   }
   if (path.endsWith('/join')) return <MobileParticipantFlow room={queryRoom()} />
   if (path.endsWith('/stage')) return <StageDashboard room={queryRoom()} />
@@ -147,12 +148,29 @@ function useLeaderProfile() {
   return { userUid, profile, loading, error }
 }
 
-function LeaderRoute({ children, allowInactive = false }: { children: (profile: LeaderProfile) => React.ReactNode; allowInactive?: boolean }) {
+function useHomeAssetsReady(enabled: boolean) {
+  const [ready, setReady] = useState(!enabled)
+  useEffect(() => {
+    if (!enabled) {
+      setReady(true)
+      return
+    }
+    let active = true
+    setReady(false)
+    void preloadHomeAssets().then(() => { if (active) setReady(true) })
+    return () => { active = false }
+  }, [enabled])
+  return ready
+}
+
+function LeaderRoute({ children, allowInactive = false, preloadHome = false }: { children: (profile: LeaderProfile) => React.ReactNode; allowInactive?: boolean; preloadHome?: boolean }) {
   const leader = useLeaderProfile()
+  const homeAssetsReady = useHomeAssetsReady(preloadHome)
   if (leader.loading) return <AccountLoadingScreen />
   if (!leader.userUid) return <AuthRedirect to="/login" />
   if (!leader.profile) return <main className="auth-page"><Glass className="auth-card"><p className="eyebrow">АККАУНТ НЕ ГОТОВ</p><h1>Профиль ведущего не найден</h1><p>{leader.error || 'Завершите регистрацию или обратитесь к администратору.'}</p><Button onClick={() => void logoutLeader().then(() => go('/login'))}>Выйти</Button></Glass></main>
   if (!allowInactive && leader.profile.status !== 'active') return <AuthRedirect to="/account" />
+  if (preloadHome && !homeAssetsReady) return <AccountLoadingScreen />
   return <>{children(leader.profile)}</>
 }
 
@@ -292,9 +310,9 @@ function HomePanel({ name, questionCount, onChooseMode, onOpenFeedback, activeSe
   const modes = productionModes.map(mode => ({ ...mode, mode: mode.mode as RoomMode }))
   const expired = isSessionExpired(activeSession)
   const modeArtwork: Record<RoomMode, string> = {
-    diagnostic: publicAsset('mode-diagnostic-checklist.png'),
-    quiz: publicAsset('mode-bible-book.png'),
-    wheel: publicAsset('mode-fortune-wheel.png'),
+    diagnostic: homeAssets.diagnostic,
+    quiz: homeAssets.quiz,
+    wheel: homeAssets.wheel,
   }
   const modeDescription = (mode: RoomMode, description: string) => mode === diagnosticMode
     ? `${questionCount || '—'} вопросов · ${Object.keys(categories).length} тем · личные и общие результаты`
@@ -319,7 +337,8 @@ function HomePanel({ name, questionCount, onChooseMode, onOpenFeedback, activeSe
       <p className="home-vibe-section-label" id="home-modes-title">ВЫБЕРИТЕ РЕЖИМ</p>
       <div className="home-vibe-mode-grid">
         {modes.map(mode => <article className="home-vibe-mode-card" key={mode.mode}>
-          <img className={`home-vibe-mode-art home-vibe-mode-art-${mode.mode}`} src={modeArtwork[mode.mode]} alt="" />
+          <span className={`home-vibe-mode-art-placeholder home-vibe-mode-art-placeholder-${mode.mode}`} aria-hidden="true" />
+          <img className={`home-vibe-mode-art home-vibe-mode-art-${mode.mode}`} src={modeArtwork[mode.mode]} alt="" loading="eager" fetchPriority="high" decoding="async" onError={event => event.currentTarget.classList.add('is-unavailable')} />
           <div className="home-vibe-mode-copy"><h2>{mode.title}</h2><p>{modeDescription(mode.mode, mode.description)}</p></div>
           <Button className="home-vibe-mode-action" onClick={() => onChooseMode(mode.mode)}><span>{mode.setupScreen ? 'Открыть режим' : 'Создать комнату'}</span><AppIcon name="arrow-right" size={18} /></Button>
         </article>)}
@@ -329,12 +348,13 @@ function HomePanel({ name, questionCount, onChooseMode, onOpenFeedback, activeSe
       <p className="home-vibe-section-label" id="home-guide-title">КАК НАЧАТЬ</p>
       <div className="home-vibe-step-grid">
         {[
-          ['1', 'Выберите формат', 'Выберите игру или викторину для вашего вечера.'],
-          ['2', 'Подключите участников', 'Покажите QR-код или отправьте ссылку.'],
-          ['3', 'Запускайте', 'Проводите игру во время встречи.'],
-          ['4', 'Смотрите результаты', 'Откройте итоги и экспортируйте при необходимости.'],
-        ].map(([number, title, description], index) => <div className="home-vibe-step-wrap" key={number}>
-          <article className="home-vibe-step"><b>{number}</b><span><h2>{title}</h2><p>{description}</p></span></article>{index < 3 && <AppIcon name="arrow-right" size={24} />}
+          { number: '1', title: 'Выберите формат', description: 'Выберите игру или викторину для вашего вечера.' },
+          { number: '2', title: 'Подключите участников', description: 'Покажите QR-код или отправьте ссылку.' },
+          { number: '3', title: 'Запускайте', description: 'Проводите игру во время встречи.' },
+          { number: '4', title: 'Смотрите результаты', description: 'Откройте итоги и экспортируйте при необходимости.' },
+          { number: '5', title: 'Поделитесь впечатлениями', description: 'Пройдите опрос и помогите сделать платформу лучше.', feedback: true },
+        ].map((step, index, steps) => <div className="home-vibe-step-wrap" key={step.number}>
+          <article className={`home-vibe-step ${step.feedback ? 'is-feedback' : ''}`}><b>{step.number}</b><span><h2>{step.title}</h2><p>{step.description}</p>{step.feedback && <Button secondary className="home-vibe-feedback-action" onClick={onOpenFeedback}>Пройти опрос <AppIcon name="arrow-right" size={14} /></Button>}</span></article>{index < steps.length - 1 && <AppIcon name="arrow-right" size={24} />}
         </div>)}
       </div>
     </section>
@@ -434,7 +454,7 @@ function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, s
     }
   }, [isMenuVisible, setMenuOpen])
   return <main data-host-tab={tab} data-room-mode={visualMode} className={`host-shell host-tab-${tab} ${isMenuVisible ? 'is-menu-open' : 'is-menu-collapsed'} ${resultsMode ? 'results-mode' : ''}`}>
-    {!resultsMode && <>{!pinnedMainNavigation && <button type="button" className="host-menu-toggle" aria-label={isMenuVisible ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={isMenuVisible} onClick={() => setMenuOpen(!isMenuVisible)}><i /><i /><i /></button>}{!pinnedMainNavigation && <div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />}{isMenuVisible && !pinnedMainNavigation && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand brand-vibe"><img src={publicAsset('youth-vibe-logo-white.png')} alt="Молодёжный Вайб — создаём атмосферу вместе" /></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}><AppIcon name={icon} size={18} />{label}</button>)}</nav>{activeRoom && <div className="menu-room"><small>ТЕКУЩАЯ КОМНАТА</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside></>}
+    {!resultsMode && <>{!pinnedMainNavigation && <button type="button" className="host-menu-toggle" aria-label={isMenuVisible ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={isMenuVisible} onClick={() => setMenuOpen(!isMenuVisible)}><i /><i /><i /></button>}{!pinnedMainNavigation && <div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />}{isMenuVisible && !pinnedMainNavigation && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand brand-vibe"><img src={homeAssets.logo} alt="Молодёжный Вайб — создаём атмосферу вместе" /></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}><AppIcon name={icon} size={18} />{label}</button>)}</nav>{activeRoom && <div className="menu-room"><small>ТЕКУЩАЯ КОМНАТА</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside></>}
     <section className="host-content">{canReturnToRoom && <button type="button" className="return-to-room" onClick={() => selectTab('currentRoom')}>← Вернуться к текущей комнате</button>}{children}</section>
   </main>
 }

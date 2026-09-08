@@ -1587,7 +1587,7 @@
 .home-vibe-mode-card .home-vibe-mode-action .app-icon { position:absolute; right:19px; }
 .home-vibe-mode-card .home-vibe-mode-action:hover:not(:disabled) { background:linear-gradient(180deg,#6af5c3,#32e3a1); transform:translateY(-1px); }
 .home-vibe-guide { padding-top:12px; border-top:1px solid rgba(114,211,168,.22); }
-.home-vibe-step-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.home-vibe-step-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
 .home-vibe-step-wrap { min-width:0; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; }
 .home-vibe-step-wrap:last-child { display:block; }
 .home-vibe-step-wrap>.app-icon { color:#38e7a7; }
@@ -1595,11 +1595,20 @@
 .home-vibe-step>b { color:#27e6a2; font-size:38px; line-height:.9; letter-spacing:-.08em; }
 .home-vibe-step h2 { margin:2px 0 0; color:var(--home-text); font-size:14px; line-height:1.22; }
 .home-vibe-step p { margin:5px 0 0; color:#c0d0c7; font-size:12px; line-height:1.34; }
+.home-vibe-step.is-feedback { border-color:rgba(68,232,171,.56); background:linear-gradient(145deg,rgba(10,76,55,.74),rgba(3,35,25,.7)); box-shadow:inset 0 0 0 1px rgba(45,217,154,.08); }
+.home-vibe-feedback-action { display:inline-flex; align-items:center; gap:6px; min-height:30px!important; margin-top:8px; padding:0 10px!important; border-color:rgba(99,239,183,.4)!important; color:#e9fff2!important; font-size:11px!important; white-space:nowrap; }
+.home-vibe-mode-art-placeholder { position:absolute; z-index:0; top:16px; right:8%; width:34%; height:120px; border:1px solid rgba(80,226,169,.22); border-radius:32px; background:radial-gradient(circle at 65% 35%,rgba(63,235,174,.24),transparent 28%),linear-gradient(145deg,rgba(25,113,81,.34),rgba(3,47,35,.08)); transform:rotate(-7deg); pointer-events:none; }
+.home-vibe-mode-art.is-unavailable { opacity:0; }
 .home-vibe-active-room { width:min(100%,980px); margin:0 auto; }
 
 @media (min-width:981px) {
   .host-shell[data-host-tab="main"] .host-content { width:100%; max-width:1520px; min-height:100svh; padding:clamp(18px,2.2vh,30px) clamp(34px,5vw,76px); }
   .home-vibe { min-height:calc(100svh - clamp(36px,4.4vh,60px)); align-content:center; }
+}
+@media (min-width:981px) and (max-width:1180px) {
+  .home-vibe-step-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .home-vibe-step-wrap { display:block; }
+  .home-vibe-step-wrap>.app-icon { display:none; }
 }
 @media (max-width:980px) {
   .host-shell[data-host-tab="main"] .host-content { padding:82px 18px 42px; }
