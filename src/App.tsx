@@ -27,7 +27,7 @@ import { Modal } from './components/Modal'
 import { AppIcon, type AppIconName, Button, LoadingState, PageHeader, StatusBadge, Surface as Glass } from './components/DesignSystem'
 import { QuestionPackPreview } from './components/QuestionPackPreview'
 import { feedbackFormUrl } from './lib/feedback'
-import { homeAssets, preloadHomeAssets } from './lib/homeAssets'
+import { getHomeAssetsStatus, homeAssets, primeHomeAssets, retryHomeAssets, subscribeHomeAssets, type HomeAssetsStatus } from './lib/homeAssets'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
 const publicAsset = (fileName: string) => `${import.meta.env.BASE_URL}assets/${fileName}`
@@ -51,15 +51,24 @@ const phaseText = (phase: SessionPhase) => ({ lobby: 'Сбор участник�
 
 function App() {
   const path = useRoute()
+  const isAppEntry = path === getAppBasePath() || path === '/'
+  const isHostRoute = path.endsWith('/host') || path.endsWith('/results')
+  const requestedTab = isHostRoute ? readHostTab() : null
+  const hostTab = requestedTab || 'main'
+
+  // Begin image fetching during the access check, rather than after HomePanel
+  // mounts. The module-level loader is idempotent and is never called for a
+  // participant, stage, or public feedback route.
+  if (isAppEntry || (path.endsWith('/host') && hostTab === 'main')) void primeHomeAssets()
+
   if (path.endsWith('/feedback')) return <FeedbackPage />
   if (path.endsWith('/owner')) return <OwnerAdmin />
   if (path.endsWith('/owner-login')) return <AuthPage mode="owner-login" />
   if (path.endsWith('/login')) return <AuthPage mode="login" />
   if (path.endsWith('/register')) return <AuthPage mode="register" />
   if (path.endsWith('/account')) return <LeaderRoute allowInactive>{profile => <AccountPage profile={profile} />}</LeaderRoute>
-  if (path.endsWith('/host') || path.endsWith('/results')) {
-    const requestedTab = readHostTab()
-    return <LeaderRoute preloadHome={path.endsWith('/host') && requestedTab === 'main'}>{profile => <Host leader={profile} initialTab={path.endsWith('/results') ? 'results' : requestedTab} initialRoom={queryRoom()} />}</LeaderRoute>
+  if (isHostRoute) {
+    return <LeaderRoute waitForHomeAssets={path.endsWith('/host') && hostTab === 'main'}>{profile => <Host leader={profile} initialTab={path.endsWith('/results') ? 'results' : hostTab} initialRoom={queryRoom()} />}</LeaderRoute>
   }
   if (path.endsWith('/join')) return <MobileParticipantFlow room={queryRoom()} />
   if (path.endsWith('/stage')) return <StageDashboard room={queryRoom()} />
@@ -108,8 +117,9 @@ function AuthRedirect({ to }: { to: string }) {
 /** This screen is shown before the host shell exists.  It deliberately has no
  * room status or product-mode content, so access checks cannot flash an old
  * section while Firebase restores the leader session. */
-function AccountLoadingScreen() {
-  return <main className="account-loading-screen" role="status" aria-live="polite" aria-busy="true">
+function AccountLoadingScreen({ assetIssue, onRetry }: { assetIssue?: string; onRetry?: () => void }) {
+  const waitingForAssets = Boolean(assetIssue)
+  return <main className="account-loading-screen" role="status" aria-live="polite" aria-busy={!waitingForAssets}>
     <div className="account-loading-mark" aria-hidden="true">
       <svg className="account-loading-arcs" viewBox="0 0 160 160" fill="none">
         <circle className="account-loading-arc account-loading-arc-a" cx="80" cy="80" r="66" pathLength="100" />
@@ -119,9 +129,10 @@ function AccountLoadingScreen() {
       <span className="account-loading-logo"><AppIcon name="diagnostic" size={30} /></span>
     </div>
     <div className="account-loading-copy">
-      <p className="eyebrow">ПРОВЕРКА ДОСТУПА</p>
-      <h1>Подключаем аккаунт…</h1>
-  <p>Проверяем вход и доступ к вашей панели.</p>
+      <p className="eyebrow">{waitingForAssets ? 'ПОДГОТОВКА ГЛАВНОЙ' : 'ПРОВЕРКА ДОСТУПА'}</p>
+      <h1>{waitingForAssets ? 'Не удалось подготовить изображения' : 'Подключаем аккаунт…'}</h1>
+      <p>{assetIssue || 'Проверяем вход и доступ к вашей панели.'}</p>
+      {assetIssue && onRetry && <Button className="account-loading-retry" onClick={onRetry}>Повторить</Button>}
     </div>
   </main>
 }
@@ -148,29 +159,45 @@ function useLeaderProfile() {
   return { userUid, profile, loading, error }
 }
 
-function useHomeAssetsReady(enabled: boolean) {
-  const [ready, setReady] = useState(!enabled)
+const homeAssetWaitLimitMs = 15_000
+
+function useHomeAssetGate(enabled: boolean) {
+  const [assetStatus, setAssetStatus] = useState<HomeAssetsStatus>(() => getHomeAssetsStatus())
+  const [timedOut, setTimedOut] = useState(false)
   useEffect(() => {
-    if (!enabled) {
-      setReady(true)
+    if (!enabled) return
+    setAssetStatus(getHomeAssetsStatus())
+    return subscribeHomeAssets(() => setAssetStatus(getHomeAssetsStatus()))
+  }, [enabled])
+  useEffect(() => {
+    if (!enabled || assetStatus !== 'loading') {
+      if (timedOut) setTimedOut(false)
       return
     }
-    let active = true
-    setReady(false)
-    void preloadHomeAssets().then(() => { if (active) setReady(true) })
-    return () => { active = false }
-  }, [enabled])
-  return ready
+    const timer = window.setTimeout(() => setTimedOut(true), homeAssetWaitLimitMs)
+    return () => window.clearTimeout(timer)
+  }, [assetStatus, enabled, timedOut])
+  const issue = assetStatus === 'failed'
+    ? 'Не удалось загрузить часть изображений главной. Проверьте подключение и повторите попытку.'
+    : timedOut
+      ? 'Изображения главной загружаются слишком долго. Проверьте подключение и повторите попытку.'
+      : ''
+  return {
+    waiting: enabled && assetStatus !== 'ready' && !issue,
+    issue,
+    retry: () => { setTimedOut(false); void retryHomeAssets() },
+  }
 }
 
-function LeaderRoute({ children, allowInactive = false, preloadHome = false }: { children: (profile: LeaderProfile) => React.ReactNode; allowInactive?: boolean; preloadHome?: boolean }) {
+function LeaderRoute({ children, allowInactive = false, waitForHomeAssets = false }: { children: (profile: LeaderProfile) => React.ReactNode; allowInactive?: boolean; waitForHomeAssets?: boolean }) {
   const leader = useLeaderProfile()
-  const homeAssetsReady = useHomeAssetsReady(preloadHome)
+  const homeAssets = useHomeAssetGate(waitForHomeAssets)
   if (leader.loading) return <AccountLoadingScreen />
   if (!leader.userUid) return <AuthRedirect to="/login" />
   if (!leader.profile) return <main className="auth-page"><Glass className="auth-card"><p className="eyebrow">АККАУНТ НЕ ГОТОВ</p><h1>Профиль ведущего не найден</h1><p>{leader.error || 'Завершите регистрацию или обратитесь к администратору.'}</p><Button onClick={() => void logoutLeader().then(() => go('/login'))}>Выйти</Button></Glass></main>
   if (!allowInactive && leader.profile.status !== 'active') return <AuthRedirect to="/account" />
-  if (preloadHome && !homeAssetsReady) return <AccountLoadingScreen />
+  if (waitForHomeAssets && homeAssets.issue) return <AccountLoadingScreen assetIssue={homeAssets.issue} onRetry={homeAssets.retry} />
+  if (waitForHomeAssets && homeAssets.waiting) return <AccountLoadingScreen />
   return <>{children(leader.profile)}</>
 }
 
@@ -337,8 +364,7 @@ function HomePanel({ name, questionCount, onChooseMode, onOpenFeedback, activeSe
       <p className="home-vibe-section-label" id="home-modes-title">ВЫБЕРИТЕ РЕЖИМ</p>
       <div className="home-vibe-mode-grid">
         {modes.map(mode => <article className="home-vibe-mode-card" key={mode.mode}>
-          <span className={`home-vibe-mode-art-placeholder home-vibe-mode-art-placeholder-${mode.mode}`} aria-hidden="true" />
-          <img className={`home-vibe-mode-art home-vibe-mode-art-${mode.mode}`} src={modeArtwork[mode.mode]} alt="" loading="eager" fetchPriority="high" decoding="async" onError={event => event.currentTarget.classList.add('is-unavailable')} />
+          <img className={`home-vibe-mode-art home-vibe-mode-art-${mode.mode}`} src={modeArtwork[mode.mode]} alt="" loading="eager" fetchPriority="high" decoding="sync" />
           <div className="home-vibe-mode-copy"><h2>{mode.title}</h2><p>{modeDescription(mode.mode, mode.description)}</p></div>
           <Button className="home-vibe-mode-action" onClick={() => onChooseMode(mode.mode)}><span>{mode.setupScreen ? 'Открыть режим' : 'Создать комнату'}</span><AppIcon name="arrow-right" size={18} /></Button>
         </article>)}
