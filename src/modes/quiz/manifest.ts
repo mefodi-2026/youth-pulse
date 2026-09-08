@@ -21,7 +21,7 @@ export const quizManifest: ModeManifest = {
       : systemPacks[selection.selectedPackId] || null,
     validateSelection: ({ selection, workspacePacks }) => {
       if (selection.templateSource !== 'workspace' || !workspacePacks[selection.selectedPackId]) {
-        throw new Error('Сначала добавьте выбранный набор викторины в свой workspace, затем выберите его для комнаты.')
+        throw new Error('Сначала добавьте выбранный набор викторины в библиотеку, затем выберите его для комнаты.')
       }
     },
   },

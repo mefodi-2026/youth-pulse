@@ -82,7 +82,7 @@ export function WheelSetupScreen({ onBack, leaderUid, workspaceId, defaultTitle,
   const [title, setTitle] = useState(defaultTitle || 'Колесо фортуны')
   const [busy, setBusy] = useState(false); const [error, setError] = useState('')
   const create = async () => {
-    if (!leaderUid || !workspaceId || !onCreated || busy) return setError('Не удалось определить аккаунт и workspace ведущего.')
+    if (!leaderUid || !workspaceId || !onCreated || busy) return setError('Не удалось определить аккаунт ведущего. Обновите страницу и попробуйте ещё раз.')
     setBusy(true); setError('')
     try { onCreated(await createWheelRoom({ leaderUid, workspaceId, title, config: { inputMode, drawOrder } })) }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось создать комнату.') }
@@ -213,6 +213,7 @@ function WheelList({ title, items, onDelete, onClear }: { title: string; items: 
 function WheelJoinPanel({ joinUrl, entries }: { joinUrl: string; entries: Record<string, WheelParticipantEntry> }) {
   const [qr, setQr] = useState('')
   const [copyError, setCopyError] = useState('')
+  const [copied, setCopied] = useState(false)
   useEffect(() => {
     let active = true
     if (!joinUrl) { setQr(''); return () => { active = false } }
@@ -223,13 +224,17 @@ function WheelJoinPanel({ joinUrl, entries }: { joinUrl: string; entries: Record
     return () => { active = false }
   }, [joinUrl])
   const copy = async () => {
-    setCopyError('')
-    try { await navigator.clipboard.writeText(joinUrl) }
+    setCopyError(''); setCopied(false)
+    try {
+      await navigator.clipboard.writeText(joinUrl)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2400)
+    }
     catch (reason) { setCopyError(reason instanceof Error ? reason.message : 'Не удалось скопировать ссылку.') }
   }
   return <section className="glass wheel-join">
     <div className="wheel-join-copy"><p className="eyebrow">ПОДКЛЮЧЕНИЕ УЧАСТНИКОВ</p><h2>Отсканируйте QR-код</h2><p>QR-код, ссылка и кнопка используют одну и ту же комнату.</p>{qr ? <img className="wheel-join-qr" src={qr} alt="QR-код для подключения к текущей игре" /> : <p>Генерируем QR-код…</p>}</div>
-    <div className="wheel-join-link"><code>{joinUrl}</code><button type="button" className="button secondary" onClick={() => void copy()}>Скопировать ссылку</button>{copyError && <p className="connection-warning">{copyError}</p>}<div className="wheel-entry-summary">{Object.values(entries).map(item => <span key={item.participantId}>{item.displayName}</span>)}</div></div>
+    <div className="wheel-join-link"><code>{joinUrl}</code><button type="button" className="button secondary" onClick={() => void copy()}>{copied ? '✓ Ссылка скопирована' : 'Скопировать ссылку'}</button>{copyError && <p className="connection-warning">{copyError}</p>}<div className="wheel-entry-summary">{Object.values(entries).map(item => <span key={item.participantId}>{item.displayName}</span>)}</div></div>
   </section>
 }
 

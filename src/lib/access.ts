@@ -23,7 +23,7 @@ const allowedBillingStatuses = new Set(['free', 'pilot', 'manual_paid'])
 export const canUseProduct = (productId: ProductId, input: ProductAccessInput): AccessDecision => {
   const now = input.now ?? Date.now()
   if (input.profile?.status !== 'active') return { allowed: false, reason: 'Аккаунт ведущего не активен.' }
-  if (!input.workspace) return { allowed: false, reason: 'Рабочее пространство не найдено.' }
+  if (!input.workspace) return { allowed: false, reason: 'Молодёжная команда не найдена.' }
 
   const billingStatus = input.workspace.billingStatus
   // Workspaces created before the access layer may already have an explicit
@@ -48,7 +48,7 @@ export const canUseProduct = (productId: ProductId, input: ProductAccessInput): 
   }
 
   if (!legacyWorkspace && !implicitQuizPilot) {
-    if (!input.workspaceProduct?.enabled) return { allowed: false, reason: 'Этот продукт не подключён для рабочего пространства.' }
+    if (!input.workspaceProduct?.enabled) return { allowed: false, reason: 'Этот режим не подключён для вашей молодёжной команды.' }
     if (input.workspaceProduct.planId !== workspacePlanId) return { allowed: false, reason: 'Данные доступа продукта требуют проверки.' }
     if (input.workspaceProduct.expiresAt > 0 && input.workspaceProduct.expiresAt <= now) {
       return { allowed: false, reason: 'Срок доступа к продукту завершён.' }
@@ -59,7 +59,7 @@ export const canUseProduct = (productId: ProductId, input: ProductAccessInput): 
   // product record is created, its operational status becomes authoritative.
   const status = input.product?.status ?? 'enabled'
   if (status === 'disabled' || status === 'maintenance') return { allowed: false, reason: input.product?.maintenanceMessage || 'Создание новых комнат временно недоступно.' }
-  if (status === 'testing' && !input.isPlatformOwner && !input.workspaceProduct?.testing) return { allowed: false, reason: 'Продукт доступен только для тестовых рабочих пространств.' }
+  if (status === 'testing' && !input.isPlatformOwner && !input.workspaceProduct?.testing) return { allowed: false, reason: 'Режим пока доступен только для тестовых молодёжек.' }
   return { allowed: true }
 }
 

@@ -59,7 +59,7 @@ export function OwnerProducts({ products, workspaces, workspaceProducts, saving,
 
   return <>
     <header className="owner-header"><div><p className="eyebrow">ГЛОБАЛЬНАЯ ДОСТУПНОСТЬ</p><h1>Продукты</h1></div></header>
-    <section className="owner-products-note glass"><h2>Управление запуском, а не деплоем</h2><p>Настройки здесь публикуются в Firebase только после кнопки «Сохранить и опубликовать». Черновик остаётся в форме владельца. Разработка кода по-прежнему проверяется в Preview-версии, а затем отдельно публикуется в Production.</p></section>
+    <section className="owner-products-note glass"><h2>Управление доступностью режимов</h2><p>Изменения вступят в силу только после кнопки «Сохранить и опубликовать». Пока форма открыта, изменения видны только владельцу.</p></section>
     <div className="owner-product-list">
       {catalog.map(product => <section className="glass owner-product-card" key={product.productId}>
         <div><p className={`owner-status product-${product.status}`}>{statusLabels[product.status]}</p><h2>{product.name}</h2><p>{product.description}</p><small>Тип: {product.type} · опубликованная версия: v{product.version || 1}</small></div>
@@ -71,11 +71,11 @@ export function OwnerProducts({ products, workspaces, workspaceProducts, saving,
       <div className="product-fields">
         <label>Название<input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
         <label>Тип<select value={draft.type} onChange={event => setDraft({ ...draft, type: event.target.value as ProductConfig['type'] })}><option value="diagnostic">Проверь себя</option><option value="quiz">Викторина</option><option value="game">Игра</option></select></label>
-        <label>Статус<select value={draft.status} onChange={event => setDraft({ ...draft, status: event.target.value as ProductStatus })}><option value="enabled">enabled — доступен</option><option value="maintenance">maintenance — техработы</option><option value="testing">testing — только owner и тестовые workspace</option><option value="disabled">disabled — без новых запусков</option></select></label>
+        <label>Статус<select value={draft.status} onChange={event => setDraft({ ...draft, status: event.target.value as ProductStatus })}><option value="enabled">Доступен</option><option value="maintenance">Технические работы</option><option value="testing">Только для тестовых молодёжек</option><option value="disabled">Без новых запусков</option></select></label>
         <label className="product-field-wide">Описание<textarea value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></label>
         <label className="product-field-wide">Сообщение для лидера при недоступности<textarea placeholder="Например: Режим «Проверь себя» обновляется, вернитесь позже." value={draft.maintenanceMessage || ''} onChange={event => setDraft({ ...draft, maintenanceMessage: event.target.value })} /></label>
       </div>
-      <div className="product-access-head"><div><p className="eyebrow">ДОСТУП WORKSPACE</p><p>В режиме <code>testing</code> продукт получают только отмеченные тестовые workspace и владелец платформы.</p></div></div>
+      <div className="product-access-head"><div><p className="eyebrow">ДОСТУП МОЛОДЁЖЕК</p><p>В режиме тестирования продукт доступен только отмеченным молодёжкам и владельцу платформы.</p></div></div>
       <div className="product-access-list">{Object.values(workspaces).map(workspace => {
         const access = accessDrafts[workspace.id]
         if (!access) return null

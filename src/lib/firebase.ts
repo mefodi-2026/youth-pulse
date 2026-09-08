@@ -313,7 +313,7 @@ export const resolveRoomTemplate = async (workspaceId: string | undefined, selec
   const effectiveSelection = selection
   if (!effectiveSelection.selectedPackId) throw new Error('Выберите набор вопросов перед созданием комнаты.')
   if (mode === 'quiz' && effectiveSelection.templateSource !== 'workspace') {
-    throw new Error('Для викторины сначала добавьте опубликованный набор в свой workspace.')
+    throw new Error('Для викторины сначала добавьте опубликованный набор в библиотеку.')
   }
   const path = effectiveSelection.templateSource === 'workspace' && workspaceId
     ? (mode === 'quiz'
@@ -330,7 +330,7 @@ export const resolveRoomTemplate = async (workspaceId: string | undefined, selec
 }
 
 const requireFirebase = () => {
-  if (!auth || !db) throw new Error('Firebase не настроен')
+  if (!auth || !db) throw new Error('Подключение к сервису пока недоступно.')
   return { auth, db }
 }
 
@@ -411,7 +411,7 @@ export const registerLeader = async (input: RegisterLeaderInput) => {
   try {
     const status = await inviteStatus(cleanInviteCode)
     const workspaceId = push(ref(services.db, 'workspaces')).key
-    if (!workspaceId) throw new Error('Не удалось создать рабочее пространство')
+    if (!workspaceId) throw new Error('Не удалось создать профиль молодёжной команды.')
     const profile: LeaderProfile = {
       uid: user.uid,
       fullName: input.fullName.trim(),
@@ -589,17 +589,17 @@ export type QuizPackCopyResult = {
 const quizCopyError = (error: unknown) => {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
   if (code.includes('unauthenticated')) return new Error('Сеанс ведущего истёк. Войдите снова и повторите добавление набора.')
-  if (code.includes('permission')) return new Error('Firebase отклонил добавление: этот workspace не принадлежит текущему активному ведущему.')
+  if (code.includes('permission')) return new Error('Не удалось добавить набор: он недоступен для текущего ведущего.')
   if (code.includes('failed-precondition')) return new Error('Опубликованный набор викторины недоступен или неполный.')
   return error instanceof Error && error.message
-    ? new Error(`Не удалось добавить набор в workspace: ${error.message}`)
-    : new Error('Не удалось добавить набор в workspace. Повторите попытку.')
+    ? new Error(`Не удалось добавить набор в библиотеку: ${error.message}`)
+    : new Error('Не удалось добавить набор в библиотеку. Повторите попытку.')
 }
 
 const quizRoomError = (error: unknown) => {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
   if (code.includes('unauthenticated')) return new Error('Сеанс ведущего истёк. Войдите снова и повторите создание викторины.')
-  if (code.includes('permission')) return new Error('Firebase отклонил создание викторины: workspace не принадлежит текущему активному ведущему.')
+  if (code.includes('permission')) return new Error('Не удалось создать викторину: нет доступа к выбранному набору.')
   if (code.includes('already-exists')) return new Error('Комната с этим кодом уже создана. Обновите страницу, чтобы открыть её.')
   if (code.includes('failed-precondition')) return new Error('Выбранный набор викторины недоступен, не опубликован или не содержит серверных ключей ответов.')
   return error instanceof Error && error.message
@@ -612,7 +612,7 @@ export const copyQuizPackToWorkspace = async (workspaceId: string, sourcePackId:
   const services = requireFirebase()
   await authPersistence
   const user = services.auth.currentUser
-  if (!user || user.isAnonymous) throw new Error('Войдите как ведущий, чтобы добавить набор в workspace.')
+  if (!user || user.isAnonymous) throw new Error('Войдите как ведущий, чтобы добавить набор в библиотеку.')
   const [profileSnapshot, workspaceSnapshot, existingSnapshot] = await Promise.all([
     get(ref(services.db, `users/${user.uid}`)),
     get(ref(services.db, `workspaces/${workspaceId}`)),
@@ -620,7 +620,7 @@ export const copyQuizPackToWorkspace = async (workspaceId: string, sourcePackId:
   ])
   const profile = profileSnapshot.val() as LeaderProfile | null
   const workspace = workspaceSnapshot.val() as Workspace | null
-  if (!profile || profile.workspaceId !== workspaceId || workspace?.ownerUid !== user.uid) throw new Error('Этот workspace не принадлежит текущему ведущему.')
+  if (!profile || profile.workspaceId !== workspaceId || workspace?.ownerUid !== user.uid) throw new Error('Эта библиотека недоступна для текущего ведущего.')
   const existing = existingSnapshot.exists()
     ? normalizeContentPack(existingSnapshot.val(), [], { packId: sourcePackId, workspaceId, templateOrigin: 'workspace', mode: 'quiz' })
     : null
@@ -756,7 +756,7 @@ export const saveWorkspaceProductAsOwner = async (workspaceId: string, productId
     get(ref(services.db, `workspaceProducts/${workspaceId}/${productId}`)),
   ])
   const workspace = workspaceSnapshot.val() as Workspace | null
-  if (!workspace) throw new Error('Рабочее пространство не найдено.')
+  if (!workspace) throw new Error('Молодёжная команда не найдена.')
   const current = currentSnapshot.val() as WorkspaceProduct | null
   const now = Date.now()
   const next: WorkspaceProduct = {
@@ -1005,16 +1005,16 @@ export const createSessionRecord = (roomId: string, hostUid: string, questionSet
 }
 
 export const createSession = async (roomId: string, hostUid: string, questionSet?: Question[], workspaceId?: string, templateSelection: TemplateSelection = defaultDiagnosticTemplateSelection, roomTitle?: string, pilotDetails?: Partial<RoomPilotDetails>, scoringTemplateId: ScoringTemplateId = 'standard-v1') => {
-  if (!db) throw new Error('Firebase не настроен')
+  if (!db) throw new Error('Подключение к сервису пока недоступно.')
   const services = requireFirebase()
   await authPersistence
   const currentUser = services.auth.currentUser
   if (!currentUser || currentUser.isAnonymous || currentUser.uid !== hostUid) throw new Error('Сеанс ведущего не подтверждён. Войдите в аккаунт ещё раз и повторите создание комнаты.')
-  if (!workspaceId) throw new Error('Для создания комнаты нужно рабочее пространство.')
+  if (!workspaceId) throw new Error('Для создания комнаты нужна молодёжная команда.')
   const mode = pilotDetails?.mode || 'diagnostic'
   const effectiveSelection = templateSelection
   if (mode === 'quiz' && effectiveSelection.templateSource !== 'workspace') {
-    throw new Error('Для викторины сначала добавьте опубликованный набор в свой workspace.')
+    throw new Error('Для викторины сначала добавьте опубликованный набор в библиотеку.')
   }
   await assertRoomCreationAccess(hostUid, workspaceId, mode === 'quiz' ? quizProductId : diagnosticProductId)
   if (mode === 'quiz') {
@@ -1049,8 +1049,8 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
     const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code) : ''
     console.error('room creation was rejected by Firebase', { roomId, workspaceId, hostUid, packId: session.packId, code, reason })
     throw new Error(code === 'PERMISSION_DENIED' || /permission_denied/i.test(String(reason))
-      ? 'Firebase отклонил создание комнаты. Проверьте опубликованные Rules, статус аккаунта и доступ к продукту.'
-      : `Не удалось сохранить комнату в Firebase${code ? ` (${code})` : ''}.`)
+      ? 'Не удалось создать комнату: проверьте статус аккаунта и доступ к выбранному режиму.'
+      : 'Не удалось сохранить комнату. Проверьте соединение и повторите попытку.')
   }
   return session
 }
@@ -1063,7 +1063,7 @@ export const createSession = async (roomId: string, hostUid: string, questionSet
 export const ensureParticipantRoomData = async (roomId: string, knownSession?: Session) => {
   const services = requireFirebase()
   const session = knownSession || (await assertCurrentUserIsRoomHost(roomId)).session
-  if (session.roomId !== roomId) throw new Error('Идентификатор комнаты не совпадает с данными сессии.')
+  if (session.roomId !== roomId) throw new Error('Данные комнаты не совпали. Обновите страницу и попробуйте снова.')
   const [publicSnapshot, participantQuestionsSnapshot] = await Promise.all([
     get(ref(services.db, publicRoomPath(roomId))),
     get(ref(services.db, participantQuestionsPath(roomId))),
@@ -1098,7 +1098,7 @@ const participantJoinFailure = (reason: unknown) => {
   if (code.includes('resource-exhausted')) return new ParticipantJoinError('Комната уже заполнена. Попросите ведущего создать новую.', false)
   if (code.includes('invalid-argument')) return new ParticipantJoinError('Введите никнейм от 2 до 20 символов.', false)
   if (code.includes('permission-denied') || code.includes('unauthenticated')) {
-    return new ParticipantJoinError('Firebase не подтвердил доступ для регистрации участника. Данные комнаты не изменены. Попробуйте ещё раз после восстановления соединения.', false)
+    return new ParticipantJoinError('Не удалось подтвердить доступ для регистрации участника. Данные комнаты не изменены. Попробуйте ещё раз после восстановления соединения.', false)
   }
   if (code.includes('network') || code.includes('unavailable') || code.includes('disconnected')) {
     return new ParticipantJoinError('Связь с комнатой прервалась до подтверждения регистрации. Проверьте интернет и повторите попытку.')
@@ -1109,8 +1109,8 @@ const participantJoinFailure = (reason: unknown) => {
 export const joinSession = async (roomId: string, participant: Participant): Promise<Participant> => {
   const services = requireFirebase()
   await authPersistence
-  if (!services.auth.currentUser) throw new Error('Firebase user is not ready.')
-  if (services.auth.currentUser.uid !== participant.id) throw new Error('Participant identity does not match the current Firebase user.')
+  if (!services.auth.currentUser) throw new Error('Подключение участника ещё не готово. Повторите попытку через несколько секунд.')
+  if (services.auth.currentUser.uid !== participant.id) throw new Error('Не удалось подтвердить подключение участника. Откройте ссылку в отдельном браузере или режиме инкогнито.')
   if (!services.auth.currentUser.isAnonymous) throw new Error('Откройте ссылку участника в отдельном браузере или в режиме инкогнито.')
   const [publicRoomSnapshot, participantSnapshot] = await Promise.all([
     get(ref(services.db, publicRoomPath(roomId))),
@@ -1241,7 +1241,7 @@ export const saveWorkspacePack = async (_workspaceId: string, _questionSet: Ques
 
 export const saveSessionQuestions = async (roomId: string, questionSet: Question[]) => {
   void roomId; void questionSet
-  throw new Error('Снимок вопросов комнаты неизменяем после создания. Измените набор и создайте новую комнату.')
+  throw new Error('Набор вопросов комнаты нельзя менять после создания. Выберите другой набор и создайте новую комнату.')
 }
 
 /** @deprecated Legacy questionBank is intentionally no longer read by the host UI. */
@@ -1345,7 +1345,7 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
   const services = requireFirebase()
   await authPersistence
   const currentUser = services.auth.currentUser
-  if (!currentUser || currentUser.uid !== participant.id) throw new Error('Participant identity does not match the current Firebase user.')
+  if (!currentUser || currentUser.uid !== participant.id) throw new Error('Не удалось подтвердить подключение участника. Откройте ссылку в отдельном браузере или режиме инкогнито.')
   if (knownMode === 'quiz') {
     if (answer === 'SKIP') throw new ParticipantAnswerError('В викторине нельзя пропустить вопрос.', false)
     return saveQuizAnswer(roomId, participant, questionId, answer)
@@ -1363,7 +1363,7 @@ export const saveAnswer = async (roomId: string, participant: Participant, quest
   if (publicRoom.phase !== 'live') throw new Error(publicRoom.phase === 'closed' ? 'Сессия завершена ведущим. Ответы больше не принимаются.' : 'Режим ещё не запущен.')
   const storedParticipant = participantSnapshot.val() as Participant | null
   if (!storedParticipant) throw new Error('Участник не найден в комнате. Подключитесь заново.')
-  if (storedParticipant.id !== currentUser.uid) throw new Error('Participant record does not belong to the current Firebase user.')
+  if (storedParticipant.id !== currentUser.uid) throw new Error('Не удалось подтвердить подключение участника. Откройте ссылку в отдельном браузере или режиме инкогнито.')
   if (publicRoom.mode === 'quiz') {
     if (answer === 'SKIP') throw new ParticipantAnswerError('В викторине нельзя пропустить вопрос.', false)
     return saveQuizAnswer(roomId, storedParticipant, questionId, answer)
@@ -1391,7 +1391,7 @@ const recordParticipantEvent = async (roomId: string, participantId: string, typ
 export const markPersonalViewed = async (roomId: string, participantId: string) => {
   const services = requireFirebase()
   await authPersistence
-  if (!services.auth.currentUser || services.auth.currentUser.uid !== participantId) throw new Error('Participant identity does not match the current Firebase user.')
+  if (!services.auth.currentUser || services.auth.currentUser.uid !== participantId) throw new Error('Не удалось подтвердить подключение участника. Откройте ссылку в отдельном браузере или режиме инкогнито.')
   await set(ref(services.db, `sessions/${roomId}/participants/${participantId}/personalViewedAt`), Date.now())
   await recordParticipantEvent(roomId, participantId, 'report_viewed')
 }

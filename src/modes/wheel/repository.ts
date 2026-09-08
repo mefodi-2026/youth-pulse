@@ -19,7 +19,7 @@ import {
 } from './engine'
 
 const runtime = () => {
-  if (!firebaseReady || !firebaseDb || !firebaseAuth) throw new Error('Firebase не настроен для Колеса фортуны.')
+  if (!firebaseReady || !firebaseDb || !firebaseAuth) throw new Error('Подключение к сервису для «Колеса фортуны» пока недоступно.')
   return { db: firebaseDb, auth: firebaseAuth }
 }
 
@@ -49,7 +49,7 @@ export async function createWheelRoom(input: { leaderUid: string; workspaceId: s
     get(ref(db, `workspaces/${input.workspaceId}`)),
   ])
   if (profile.child('status').val() !== 'active' || profile.child('workspaceId').val() !== input.workspaceId || workspace.child('ownerUid').val() !== input.leaderUid) {
-    throw new Error('Рабочее пространство не активно или не принадлежит текущему ведущему.')
+    throw new Error('Молодёжная команда не активна или недоступна для текущего ведущего.')
   }
 
   const roomId = makeRoomId()
@@ -253,7 +253,7 @@ async function runWheelWrite<T>(operation: string, path: string, write: () => Pr
     const code = typeof reason === 'object' && reason !== null && 'code' in reason ? String(reason.code) : ''
     console.error('[wheel] Firebase write rejected', { operation, path, code, reason })
     if (code === 'PERMISSION_DENIED' || code === 'permission-denied') {
-      throw new Error(`Firebase отклонил действие «${operation}» по пути ${path}. Проверьте, что вы вошли как ведущий этой комнаты.`)
+      throw new Error(`Не удалось выполнить действие «${operation}». Проверьте, что вы вошли как ведущий этой комнаты.`)
     }
     throw reason
   }
