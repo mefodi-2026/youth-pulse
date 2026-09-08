@@ -1646,7 +1646,7 @@
 .feedback-page-orb-a { top:-260px; right:-150px; width:560px; height:560px; background:radial-gradient(circle,rgba(42,226,160,.14),transparent 66%); }
 .feedback-page-orb-b { bottom:-300px; left:-220px; width:580px; height:580px; background:radial-gradient(circle,rgba(11,119,81,.16),transparent 68%); }
 .feedback-layout { position:relative; z-index:1; width:min(1120px,100%); margin-inline:auto; }
-.feedback-brand { position:absolute; z-index:2; top:20px; left:max(22px,calc((100% - 1120px)/2)); width:110px; margin:0; }
+.feedback-brand { position:absolute; z-index:2; top:10px; left:max(22px,calc((100% - 1120px)/2)); width:140px; margin:0; }
 .feedback-brand button { display:block; width:100%; padding:0; border:0; background:transparent; cursor:pointer; }
 .feedback-brand img { display:block; width:100%; height:auto; filter:drop-shadow(0 8px 18px rgba(0,0,0,.24)); }
 .feedback-layout { display:grid; grid-template-columns:minmax(0,1.16fr) minmax(320px,.84fr); align-items:center; gap:clamp(34px,7vw,96px); min-height:calc(100svh - clamp(88px,11vw,138px)); padding:clamp(20px,5vh,58px) 0; }
@@ -1669,7 +1669,7 @@
 .feedback-qr-panel small { max-width:325px; color:#b8cec0; font-size:13px; line-height:1.45; }
 @media (max-width:760px) {
   .feedback-page { padding:22px 18px 34px; overflow:visible; }
-  .feedback-brand { top:18px; left:18px; width:118px; }
+  .feedback-brand { top:14px; left:18px; width:126px; }
   .feedback-layout { grid-template-columns:1fr; align-items:start; gap:28px; min-height:0; padding:32px 0 0; }
   .feedback-copy h1 { font-size:clamp(2.35rem,11vw,3.8rem); }
   .feedback-copy>p:not(.eyebrow) { font-size:16px; }
