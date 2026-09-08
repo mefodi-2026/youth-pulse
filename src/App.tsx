@@ -341,16 +341,33 @@ const readRoomSetupMode = (): RoomMode | undefined => {
 }
 
 function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, setMenuOpen, children, resultsMode = false }: { menu: HostMenuItem[]; tab: HostTab; onTab: (tab: HostTab) => void; room: string; session: Session | null; participants: number; menuOpen: boolean; setMenuOpen: (value: boolean) => void; children: React.ReactNode; resultsMode?: boolean }) {
-  const selectTab = (next: HostTab) => { onTab(next); if (next === 'results' || window.innerWidth < 980) setMenuOpen(false) }
+  const [desktopNavigation, setDesktopNavigation] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 981)
+  const pinnedMainNavigation = !resultsMode && tab === 'main' && desktopNavigation
+  const isMenuVisible = pinnedMainNavigation || menuOpen
+  const selectTab = (next: HostTab) => {
+    onTab(next)
+    if (next === 'main' && window.innerWidth >= 981) setMenuOpen(true)
+    else if (next === 'results' || window.innerWidth < 981) setMenuOpen(false)
+  }
   const canReturnToRoom = Boolean(room && session && session.phase !== 'closed' && tab !== 'overview' && tab !== 'currentRoom')
   const visualMode = session?.gameTypeId || session?.mode || (tab === 'roomSetup' ? readRoomSetupMode() : modeRegistry[tab as RoomMode] ? tab : '')
   const activeRoom = Boolean(room && session && session.phase !== 'closed')
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 981px)')
+    const syncNavigationMode = () => setDesktopNavigation(media.matches)
+    syncNavigationMode()
+    media.addEventListener('change', syncNavigationMode)
+    return () => media.removeEventListener('change', syncNavigationMode)
+  }, [])
+  useEffect(() => {
+    if (pinnedMainNavigation && !menuOpen) setMenuOpen(true)
+  }, [menuOpen, pinnedMainNavigation, setMenuOpen])
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
     let locked = false
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false) }
     const syncScrollLock = () => {
-      const shouldLock = menuOpen && window.innerWidth < 980
+      const shouldLock = isMenuVisible && window.innerWidth < 981
       if (shouldLock && !locked) { document.body.style.overflow = 'hidden'; locked = true }
       if (!shouldLock && locked) { document.body.style.overflow = previousOverflow; locked = false }
     }
@@ -362,9 +379,9 @@ function HostLayout({ menu, tab, onTab, room, session, participants, menuOpen, s
       window.removeEventListener('keydown', closeOnEscape)
       window.removeEventListener('resize', syncScrollLock)
     }
-  }, [menuOpen, setMenuOpen])
-  return <main data-host-tab={tab} data-room-mode={visualMode} className={`host-shell host-tab-${tab} ${menuOpen ? 'is-menu-open' : 'is-menu-collapsed'} ${resultsMode ? 'results-mode' : ''}`}>
-    {!resultsMode && <><button type="button" className="host-menu-toggle" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><i /><i /><i /></button><div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />{menuOpen && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand brand-vibe"><img src={publicAsset('youth-vibe-logo-white.png')} alt="Молодёжный Вайб — создаём атмосферу вместе" /></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}><AppIcon name={icon} size={18} />{label}</button>)}</nav>{activeRoom && <div className="menu-room"><small>ТЕКУЩАЯ КОМНАТА</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside></>}
+  }, [isMenuVisible, setMenuOpen])
+  return <main data-host-tab={tab} data-room-mode={visualMode} className={`host-shell host-tab-${tab} ${isMenuVisible ? 'is-menu-open' : 'is-menu-collapsed'} ${resultsMode ? 'results-mode' : ''}`}>
+    {!resultsMode && <>{!pinnedMainNavigation && <button type="button" className="host-menu-toggle" aria-label={isMenuVisible ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={isMenuVisible} onClick={() => setMenuOpen(!isMenuVisible)}><i /><i /><i /></button>}{!pinnedMainNavigation && <div className="host-edge-trigger" onMouseEnter={() => setMenuOpen(true)} />}{isMenuVisible && !pinnedMainNavigation && <button type="button" aria-label="Закрыть меню" className="host-menu-backdrop" onClick={() => setMenuOpen(false)} />}<aside className="host-menu"><div className="brand brand-vibe"><img src={publicAsset('youth-vibe-logo-white.png')} alt="Молодёжный Вайб — создаём атмосферу вместе" /></div><nav>{menu.map(([id, label, icon]) => <button key={id} className={tab === id ? 'selected' : ''} onClick={() => selectTab(id)}><AppIcon name={icon} size={18} />{label}</button>)}</nav>{activeRoom && <div className="menu-room"><small>ТЕКУЩАЯ КОМНАТА</small><b>{session?.roomTitle || room}</b><span>Код {session?.displayCode || room} · {participants} участников</span></div>}</aside></>}
     <section className="host-content">{canReturnToRoom && <button type="button" className="return-to-room" onClick={() => selectTab('currentRoom')}>← Вернуться к текущей комнате</button>}{children}</section>
   </main>
 }

@@ -271,8 +271,17 @@
 
   /* Host shell: keep the existing route tree, tighten the desktop frame. */
   .host-shell {
-    grid-template-columns: 264px minmax(0, 1fr);
+    --host-navigation-width: 260px;
+    grid-template-columns: 0 minmax(0, 1fr);
     background: var(--ds-background);
+  }
+
+  .host-shell.is-menu-open {
+    grid-template-columns: var(--host-navigation-width) minmax(0, 1fr);
+  }
+
+  .host-shell.is-menu-collapsed {
+    grid-template-columns: 0 minmax(0, 1fr);
   }
 
   .host-menu {
