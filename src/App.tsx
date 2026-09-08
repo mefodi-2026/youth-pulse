@@ -26,6 +26,7 @@ import { isSessionExpired } from './core/sessionLifecycle'
 import { Modal } from './components/Modal'
 import { AppIcon, type AppIconName, Button, LoadingState, PageHeader, StatusBadge, Surface as Glass } from './components/DesignSystem'
 import { QuestionPackPreview } from './components/QuestionPackPreview'
+import { feedbackFormUrl } from './lib/feedback'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
 const publicAsset = (fileName: string) => `${import.meta.env.BASE_URL}assets/${fileName}`
@@ -49,6 +50,7 @@ const phaseText = (phase: SessionPhase) => ({ lobby: 'Сбор участник�
 
 function App() {
   const path = useRoute()
+  if (path.endsWith('/feedback')) return <FeedbackPage />
   if (path.endsWith('/owner')) return <OwnerAdmin />
   if (path.endsWith('/owner-login')) return <AuthPage mode="owner-login" />
   if (path.endsWith('/login')) return <AuthPage mode="login" />
@@ -235,7 +237,58 @@ function AccountPage({ profile }: { profile: LeaderProfile }) {
   return <main className="auth-page"><Glass className="auth-card account-card"><p className="eyebrow">АККАУНТ ВЕДУЩЕГО</p><h1>{profile.fullName}</h1><p className={`account-status ${profile.status}`}>{labels[profile.status]}</p><dl><div><dt>Молодёжка</dt><dd>{workspace?.name || profile.workspaceId}</dd></div>{workspace?.city && <div><dt>Город</dt><dd>{workspace.city}</dd></div>}<div><dt>Email</dt><dd>{profile.email}</dd></div><div><dt>Телефон</dt><dd>{profile.phone}</dd></div></dl>{profile.status === 'pending' && <p>Заявка сохранена. Доступ к панели появится после активации или по действующей ссылке-приглашению.</p>}{profile.status === 'paused' && <p>Доступ к панели временно приостановлен.</p>}{profile.status === 'revoked' && <p>Доступ к панели отозван. Обратитесь к администратору.</p>}{profile.status === 'active' && <Button onClick={() => go('/host')}>Открыть панель ведущего</Button>}<Button secondary onClick={() => void logoutLeader().then(() => go('/login'))}>Выйти</Button></Glass></main>
 }
 
-function HomePanel({ name, questionCount, onChooseMode, activeSession, onResume, onCloseActive, notice }: { name: string; questionCount: number; onChooseMode: (mode: RoomMode) => void; activeSession: Session | null; onResume: () => void; onCloseActive: () => void; notice?: string }) {
+function FeedbackPage() {
+  const [qr, setQr] = useState('')
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'manual'>('idle')
+  const resetTimer = useRef<number | null>(null)
+
+  useEffect(() => {
+    void QRCode.toDataURL(feedbackFormUrl, {
+      margin: 1,
+      width: 360,
+      color: { dark: '#03120e', light: '#ffffff' },
+    }).then(setQr).catch(() => setQr(''))
+  }, [])
+
+  useEffect(() => () => {
+    if (resetTimer.current) window.clearTimeout(resetTimer.current)
+  }, [])
+
+  const copyFeedbackLink = async () => {
+    if (resetTimer.current) window.clearTimeout(resetTimer.current)
+    try {
+      await navigator.clipboard.writeText(feedbackFormUrl)
+      setCopyState('copied')
+      resetTimer.current = window.setTimeout(() => setCopyState('idle'), 2600)
+    } catch {
+      setCopyState('manual')
+    }
+  }
+
+  return <main className="feedback-page">
+    <div className="feedback-page-orb feedback-page-orb-a" />
+    <div className="feedback-page-orb feedback-page-orb-b" />
+    <header className="feedback-brand"><button type="button" aria-label="На главную" onClick={() => go('/host?tab=main')}><img src={publicAsset('youth-vibe-logo-white.png')} alt="Молодёжный Вайб" /></button></header>
+    <section className="feedback-layout" aria-labelledby="feedback-title">
+      <div className="feedback-copy">
+        <p className="eyebrow">ОБРАТНАЯ СВЯЗЬ</p>
+        <h1 id="feedback-title">Помогите сделать платформу лучше</h1>
+        <p>Мы хотим развивать «Молодёжный Вайб» с учётом того, что действительно нужно молодёжи и лидерам. Если вы уже попробовали платформу как участник или ведущий, поделитесь впечатлениями. Расскажите честно, что было удобно, что вызвало трудности и что вы хотели бы добавить.</p>
+        <div className="feedback-actions"><Button onClick={() => window.open(feedbackFormUrl, '_blank', 'noopener,noreferrer')}>Открыть опрос <AppIcon name="arrow-right" size={18} /></Button><Button secondary className="feedback-copy-button" onClick={() => void copyFeedbackLink()}>{copyState === 'copied' ? '✓ Ссылка скопирована' : 'Скопировать ссылку'}</Button></div>
+        {copyState === 'manual' && <p className="feedback-copy-error" role="alert">Браузер не разрешил копирование. Выделите ссылку ниже и скопируйте её вручную.</p>}
+        <code className="feedback-url">{feedbackFormUrl}</code>
+        <button type="button" className="feedback-home-link" onClick={() => go('/host?tab=main')}>← На главную</button>
+      </div>
+      <aside className="feedback-qr-panel">
+        <div className="feedback-qr-surface">{qr ? <img src={qr} alt="QR-код для открытия опроса" /> : <span aria-live="polite">Готовим QR-код…</span>}</div>
+        <p>Отсканируйте камерой телефона, чтобы открыть опрос.</p>
+        <small>Ведущий может показать QR-код на общем экране или отправить ссылку участникам.</small>
+      </aside>
+    </section>
+  </main>
+}
+
+function HomePanel({ name, questionCount, onChooseMode, onOpenFeedback, activeSession, onResume, onCloseActive, notice }: { name: string; questionCount: number; onChooseMode: (mode: RoomMode) => void; onOpenFeedback: () => void; activeSession: Session | null; onResume: () => void; onCloseActive: () => void; notice?: string }) {
   const modes = productionModes.map(mode => ({ ...mode, mode: mode.mode as RoomMode }))
   const expired = isSessionExpired(activeSession)
   const modeArtwork: Record<RoomMode, string> = {
@@ -259,8 +312,8 @@ function HomePanel({ name, questionCount, onChooseMode, activeSession, onResume,
     </section>
     <section className="home-vibe-beta" aria-label="О тестовой версии">
       <span className="home-vibe-beta-icon"><AppIcon name="flag" size={30} /></span>
-      <div><h2>Тестовая версия</h2><p>Вместе с молодёжью и лидерами мы хотим понять, какие форматы действительно нужны, и сделать платформу настоящим помощником в организации молодёжных вечеров.</p></div>
-      <span className="home-vibe-beta-note" aria-hidden="true">Развиваем<br />вместе</span>
+      <div><h2>Тестовая версия</h2><p>Развиваем платформу вместе с молодёжью и лидерами. Пройдите опрос: расскажите, что понравилось, что стоит улучшить и каких форматов вам не хватает.</p></div>
+      <Button secondary className="home-vibe-beta-action" onClick={onOpenFeedback}>Пройти опрос</Button>
     </section>
     <section className="home-vibe-modes" aria-labelledby="home-modes-title">
       <p className="home-vibe-section-label" id="home-modes-title">ВЫБЕРИТЕ РЕЖИМ</p>
@@ -848,7 +901,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     navigate('results', archived.roomId)
   }
   const resultSession = resolveResultSession(resultRoom, room, session, archives)
-  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><HomePanel name={leader.fullName} questionCount={systemDiagnosticPack?.questions.length || questionBank.length} onChooseMode={openRoomSetup} activeSession={session?.phase === 'closed' ? null : session} onResume={resumeCurrentRoom} onCloseActive={() => requestCloseCurrentRoom()} notice={expiringSoon ? 'Сессия скоро завершится из-за отсутствия активности. Выполните действие в комнате, чтобы продолжить.' : actionError} />{roomConflictMode && session && <Modal open title="Незавершённая комната" className={session.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'} onClose={() => setRoomConflictMode(null)}><p>Её данные не будут смешаны с новой игрой. Перед созданием новой старая комната будет корректно завершена и сохранена в архиве.</p><div className="app-modal-actions"><Button onClick={() => { setRoomConflictMode(null); resumeCurrentRoom() }}>Вернуться в комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить старую комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom(roomConflictMode)}>Завершить и создать новую</Button></div></Modal>}{closeRequest && <Modal open title="Завершить комнату?" className={session?.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'} onClose={() => setCloseRequest(null)}><p>Участники больше не смогут отправлять данные. История, результаты и архив останутся сохранены.</p><div className="app-modal-actions"><Button onClick={() => void confirmCloseCurrentRoom()}>Подтвердить завершение</Button><Button secondary onClick={() => setCloseRequest(null)}>Отмена</Button></div></Modal>}{expiringSoon && <Modal open title="Сессия скоро завершится" className={session?.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'}><p>Через несколько минут она завершится из-за отсутствия реальных действий. Вернитесь в комнату и выполните действие, либо завершите её сейчас.</p><div className="app-modal-actions"><Button onClick={resumeCurrentRoom}>Вернуться в комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить сейчас</Button></div></Modal>}</HostLayout>
+  if (tab === 'main') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><HomePanel name={leader.fullName} questionCount={systemDiagnosticPack?.questions.length || questionBank.length} onChooseMode={openRoomSetup} onOpenFeedback={() => window.open(hostUrl('/feedback'), '_blank', 'noopener,noreferrer')} activeSession={session?.phase === 'closed' ? null : session} onResume={resumeCurrentRoom} onCloseActive={() => requestCloseCurrentRoom()} notice={expiringSoon ? 'Сессия скоро завершится из-за отсутствия активности. Выполните действие в комнате, чтобы продолжить.' : actionError} />{roomConflictMode && session && <Modal open title="Незавершённая комната" className={session.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'} onClose={() => setRoomConflictMode(null)}><p>Её данные не будут смешаны с новой игрой. Перед созданием новой старая комната будет корректно завершена и сохранена в архиве.</p><div className="app-modal-actions"><Button onClick={() => { setRoomConflictMode(null); resumeCurrentRoom() }}>Вернуться в комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить старую комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom(roomConflictMode)}>Завершить и создать новую</Button></div></Modal>}{closeRequest && <Modal open title="Завершить комнату?" className={session?.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'} onClose={() => setCloseRequest(null)}><p>Участники больше не смогут отправлять данные. История, результаты и архив останутся сохранены.</p><div className="app-modal-actions"><Button onClick={() => void confirmCloseCurrentRoom()}>Подтвердить завершение</Button><Button secondary onClick={() => setCloseRequest(null)}>Отмена</Button></div></Modal>}{expiringSoon && <Modal open title="Сессия скоро завершится" className={session?.mode === 'quiz' ? 'quiz-modal' : 'workspace-modal'}><p>Через несколько минут она завершится из-за отсутствия реальных действий. Вернитесь в комнату и выполните действие, либо завершите её сейчас.</p><div className="app-modal-actions"><Button onClick={resumeCurrentRoom}>Вернуться в комнату</Button><Button secondary onClick={() => requestCloseCurrentRoom()}>Завершить сейчас</Button></div></Modal>}</HostLayout>
   if (tab === 'rules') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ПОДСКАЗКИ ДЛЯ ВЕДУЩЕГО</p><h1>Правила</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><RulesPanel onStart={() => navigate('currentRoom')} /></HostLayout>
   if (tab === 'profile') return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={session} participants={participants.length} menuOpen={menuOpen} setMenuOpen={setMenuOpen}><header className="host-header"><div><p className="eyebrow">ВАШ АККАУНТ</p><h1>Профиль</h1></div><span className={`status ${firebaseReady ? '' : 'demo'}`}>{firebaseReady ? 'ЭФИР АКТИВЕН' : 'ДЕМО-РЕЖИМ'}</span></header><ProfilePanel profile={leader} /></HostLayout>
   if (tab === 'results' && resultRoom && resultSession) return <HostLayout menu={menu} tab={tab} onTab={navigate} room={room} session={resultSession} participants={Object.keys(resultSession.participants || {}).length} menuOpen={menuOpen} setMenuOpen={setMenuOpen} resultsMode><header className="host-header host-results-header"><div><p className="eyebrow">РЕЗУЛЬТАТЫ · {resultRoom}</p><h1>Общая картина</h1></div><span className="status">СОХРАНЕНО</span></header><Results room={resultRoom} sessionOverride={resultSession} embedded /></HostLayout>
