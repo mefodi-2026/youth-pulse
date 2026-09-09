@@ -93,6 +93,11 @@ exports.getOwnerAdminDashboard = onCall(async request => {
   const to = requestedTo > 0 ? Math.min(requestedTo, now) : now
   const from = requestedFrom > 0 ? Math.min(requestedFrom, to) : to - 30 * 24 * 60 * 60 * 1000
   const search = String(input.search || '').trim().toLocaleLowerCase('ru-RU').slice(0, 120)
+  const selectedMode = ['diagnostic', 'quiz', 'wheel'].includes(input.mode) ? input.mode : ''
+  const selectedHost = typeof input.hostUid === 'string' ? input.hostUid : ''
+  const selectedRoomStatus = ['active', 'inactive', 'completed', 'unknown'].includes(input.roomStatus) ? input.roomStatus : ''
+  const selectedRoomMetric = ['created', 'started', 'completed', 'active', 'inactive'].includes(input.roomMetric) ? input.roomMetric : ''
+  const selectedUserMetric = ['new', 'blocked', 'activeHosts'].includes(input.userMetric) ? input.userMetric : ''
   const pageSize = Math.max(10, Math.min(100, Math.floor(Number(input.pageSize) || 30)))
   const [usersSnap, workspacesSnap, sessionsSnap, archivesSnap, productsSnap, accessSnap, packsSnap, feedbackSnap, auditSnap] = await Promise.all([
     db.ref('users').once('value'), db.ref('workspaces').once('value'), db.ref('sessions').once('value'),
@@ -113,29 +118,51 @@ exports.getOwnerAdminDashboard = onCall(async request => {
   const eventHistoryAvailable = roomEvents.length > 0
   const registrations = Object.values(users).filter(user => inPeriod(asTimestamp(user?.createdAt)))
   const registeredByDay = {}
+  const createdRoomsByDay = {}
   const startedByDay = {}
+  const completedRoomsByDay = {}
   const joinsByDay = {}
   const finishedByDay = {}
   registrations.forEach(user => { const day = ownerDay(asTimestamp(user.createdAt)); registeredByDay[day] = (registeredByDay[day] || 0) + 1 })
+  rooms.filter(room => inPeriod(room.createdAt)).forEach(room => { const day = ownerDay(room.createdAt); createdRoomsByDay[day] = (createdRoomsByDay[day] || 0) + 1 })
   rooms.filter(room => room.startedAt && inPeriod(room.startedAt)).forEach(room => { const day = ownerDay(room.startedAt); startedByDay[day] = (startedByDay[day] || 0) + 1 })
+  rooms.filter(room => room.endedAt && inPeriod(room.endedAt)).forEach(room => { const day = ownerDay(room.endedAt); completedRoomsByDay[day] = (completedRoomsByDay[day] || 0) + 1 })
   joinedEvents.forEach(event => { const day = ownerDay(event.createdAt); joinsByDay[day] = (joinsByDay[day] || 0) + 1 })
   finishedEvents.forEach(event => { const day = ownerDay(event.createdAt); finishedByDay[day] = (finishedByDay[day] || 0) + 1 })
-  const days = [...new Set([...Object.keys(registeredByDay), ...Object.keys(startedByDay), ...Object.keys(joinsByDay), ...Object.keys(finishedByDay)])].sort()
+  const days = [...new Set([...Object.keys(registeredByDay), ...Object.keys(createdRoomsByDay), ...Object.keys(startedByDay), ...Object.keys(completedRoomsByDay), ...Object.keys(joinsByDay), ...Object.keys(finishedByDay)])].sort()
   // Both an open lobby and a live game can be active now. An old room is only
   // labelled inactive; no write is made and its game lifecycle is preserved.
   const activeNow = liveRooms.filter(room => room.operationalStatus === 'active')
   const inactiveUnfinished = liveRooms.filter(room => room.operationalStatus === 'inactive')
-  const modeUsage = ['diagnostic', 'quiz', 'wheel'].map(mode => ({ mode, value: rooms.filter(room => room.mode === mode && inPeriod(room.createdAt)).length }))
+  const startedRooms = rooms.filter(room => room.startedAt && inPeriod(room.startedAt))
+  const completedRooms = rooms.filter(room => room.endedAt && inPeriod(room.endedAt))
+  const activeHostIds = new Set(startedRooms.map(room => room.hostUid))
+  const modeAnalytics = ['diagnostic', 'quiz', 'wheel'].map(mode => {
+    const all = rooms.filter(room => room.mode === mode)
+    const started = all.filter(room => room.startedAt && inPeriod(room.startedAt))
+    const completed = all.filter(room => room.endedAt && inPeriod(room.endedAt))
+    const joined = all.flatMap(room => room.events).filter(event => event.type === 'participant_joined' && inPeriod(event.createdAt))
+    const finished = all.flatMap(room => room.events).filter(event => event.type === 'participant_finished' && inPeriod(event.createdAt))
+    const knownEvents = all.some(room => room.events.length > 0)
+    const dayMap = {}
+    started.forEach(room => { const day = ownerDay(room.startedAt); dayMap[day] = (dayMap[day] || 0) + 1 })
+    return { mode, created: all.filter(room => inPeriod(room.createdAt)).length, started: started.length, completed: completed.length, activeNow: all.filter(room => room.operationalStatus === 'active').length, inactiveUnfinished: all.filter(room => room.operationalStatus === 'inactive').length, leaders: new Set(started.map(room => room.hostUid)).size, participations: knownEvents ? joined.length : null, completedRuns: knownEvents ? finished.length : null, dailyStarts: Object.entries(dayMap).sort(([a], [b]) => a.localeCompare(b)).map(([day, value]) => ({ day, value })) }
+  })
   const userRows = Object.values(users).filter(user => user?.uid).map(user => {
     const ownRooms = rooms.filter(room => room.hostUid === user.uid)
     return {
       uid: user.uid, fullName: user.fullName || 'Без имени', email: user.email || null, status: user.status || 'pending',
       workspaceId: user.workspaceId || '', createdAt: asTimestamp(user.createdAt), lastActiveAt: asTimestamp(user.lastActiveAt) || null,
-      createdRooms: ownRooms.length, completedRooms: ownRooms.filter(room => room.phase === 'closed').length,
+      createdRooms: ownRooms.length, completedRooms: ownRooms.filter(room => room.operationalStatus === 'completed').length,
       roomParticipations: ownRooms.reduce((sum, room) => sum + room.participantCount, 0),
     }
-  }).filter(user => !search || [user.fullName, user.email || '', user.uid].join(' ').toLocaleLowerCase('ru-RU').includes(search)).sort((a, b) => b.createdAt - a.createdAt).slice(0, pageSize)
-  const roomRows = rooms.filter(room => !search || [room.roomTitle, room.displayCode, room.hostUid].join(' ').toLocaleLowerCase('ru-RU').includes(search)).sort((a, b) => b.createdAt - a.createdAt).slice(0, pageSize)
+  }).filter(user => !search || [user.fullName, user.email || '', user.uid].join(' ').toLocaleLowerCase('ru-RU').includes(search))
+    .filter(user => !selectedUserMetric || (selectedUserMetric === 'new' && inPeriod(user.createdAt)) || (selectedUserMetric === 'blocked' && ['paused', 'revoked'].includes(user.status)) || (selectedUserMetric === 'activeHosts' && activeHostIds.has(user.uid)))
+    .sort((a, b) => b.createdAt - a.createdAt).slice(0, pageSize)
+  const roomRows = rooms.filter(room => !search || [room.roomTitle, room.displayCode, room.hostUid].join(' ').toLocaleLowerCase('ru-RU').includes(search))
+    .filter(room => !selectedMode || room.mode === selectedMode).filter(room => !selectedHost || room.hostUid === selectedHost).filter(room => !selectedRoomStatus || room.operationalStatus === selectedRoomStatus)
+    .filter(room => !selectedRoomMetric || (selectedRoomMetric === 'created' && inPeriod(room.createdAt)) || (selectedRoomMetric === 'started' && room.startedAt && inPeriod(room.startedAt)) || (selectedRoomMetric === 'completed' && room.endedAt && inPeriod(room.endedAt)) || (selectedRoomMetric === 'active' && room.operationalStatus === 'active') || (selectedRoomMetric === 'inactive' && room.operationalStatus === 'inactive'))
+    .sort((a, b) => b.createdAt - a.createdAt).slice(0, pageSize)
   const administrativeAudit = Object.values(asObject(auditSnap.val())).filter(item => item?.id).map(item => ({ ...item, createdAt: asTimestamp(item.createdAt) }))
   const activity = [
     ...registrations.map(user => ({ id: `registration:${user.uid}`, type: 'registration', actorUid: user.uid, targetId: user.uid, createdAt: asTimestamp(user.createdAt) })),
@@ -146,15 +173,17 @@ exports.getOwnerAdminDashboard = onCall(async request => {
     generatedAt: now, timezone: 'Asia/Almaty',
     metrics: {
       totalAccounts: Object.keys(users).length, newRegistrations: registrations.length,
-      activeHosts: new Set(rooms.filter(room => room.startedAt && inPeriod(room.startedAt)).map(room => room.hostUid)).size,
+      leaders: Object.keys(users).length, blockedAccounts: Object.values(users).filter(user => ['paused', 'revoked'].includes(user?.status)).length,
+      activeHosts: activeHostIds.size,
       roomsCreated: rooms.filter(room => inPeriod(room.createdAt)).length,
-      roomsStarted: rooms.filter(room => room.startedAt && inPeriod(room.startedAt)).length,
-      roomsCompleted: rooms.filter(room => room.endedAt && inPeriod(room.endedAt)).length,
+      roomsStarted: startedRooms.length,
+      roomsCompleted: completedRooms.length,
       roomsActiveNow: activeNow.length, inactiveUnfinished: inactiveUnfinished.length,
       participantConnections: eventHistoryAvailable ? joinedEvents.length : null,
       completedRuns: eventHistoryAvailable ? finishedEvents.length : null,
     },
-    charts: { daily: days.map(day => ({ day, registrations: registeredByDay[day] || 0, starts: startedByDay[day] || 0, joins: eventHistoryAvailable ? joinsByDay[day] || 0 : null, completions: eventHistoryAvailable ? finishedByDay[day] || 0 : null })), modeUsage },
+    charts: { daily: days.map(day => ({ day, registrations: registeredByDay[day] || 0, roomCreated: createdRoomsByDay[day] || 0, starts: startedByDay[day] || 0, roomCompleted: completedRoomsByDay[day] || 0, joins: eventHistoryAvailable ? joinsByDay[day] || 0 : null, completions: eventHistoryAvailable ? finishedByDay[day] || 0 : null })), modeUsage: modeAnalytics.map(item => ({ mode: item.mode, value: item.started })) },
+    modeAnalytics,
     users: userRows, rooms: roomRows, activity,
     workspaces, products: asObject(productsSnap.val()), workspaceProducts: asObject(accessSnap.val()), packs: asObject(packsSnap.val()), feedback: asObject(feedbackSnap.val()),
   }

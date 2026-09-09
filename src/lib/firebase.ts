@@ -823,8 +823,9 @@ export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
 export type OwnerDashboard = {
   generatedAt: number
   timezone: string
-  metrics: { totalAccounts: number; newRegistrations: number; activeHosts: number; roomsCreated: number; roomsStarted: number; roomsCompleted: number; roomsActiveNow: number; inactiveUnfinished: number; participantConnections: number | null; completedRuns: number | null }
-  charts: { daily: Array<{ day: string; registrations: number; starts: number; joins: number | null; completions: number | null }>; modeUsage: Array<{ mode: string; value: number }> }
+  metrics: { totalAccounts: number; newRegistrations: number; leaders: number; blockedAccounts: number; activeHosts: number; roomsCreated: number; roomsStarted: number; roomsCompleted: number; roomsActiveNow: number; inactiveUnfinished: number; participantConnections: number | null; completedRuns: number | null }
+  charts: { daily: Array<{ day: string; registrations: number; roomCreated: number; starts: number; roomCompleted: number; joins: number | null; completions: number | null }>; modeUsage: Array<{ mode: string; value: number }> }
+  modeAnalytics: Array<{ mode: string; created: number; started: number; completed: number; activeNow: number; inactiveUnfinished: number; leaders: number; participations: number | null; completedRuns: number | null; dailyStarts: Array<{ day: string; value: number }> }>
   users: Array<{ uid: string; fullName: string; email: string | null; status: UserStatus; workspaceId: string; createdAt: number; lastActiveAt: number | null; createdRooms: number; completedRooms: number; roomParticipations: number }>
   rooms: Array<{ roomId: string; roomTitle: string; displayCode: string; hostUid: string; workspaceId: string; mode: RoomMode; phase: SessionPhase; operationalStatus: 'active' | 'inactive' | 'completed' | 'unknown'; createdAt: number; startedAt: number | null; endedAt: number | null; lastActivityAt: number | null; participantCount: number; completedCount: number }>
   activity: Array<{ id: string; type: string; actorUid?: string | null; targetId?: string; targetName?: string; reason?: string; createdAt: number }>
@@ -838,12 +839,12 @@ export type OwnerDashboard = {
 /** Fetches a compact, server-authenticated owner projection. No owner screen
  * subscribes to raw database roots, which avoids permission leaks and prevents
  * room answers from being downloaded for administration. */
-export const getOwnerAdminDashboard = async (range: { from: number; to: number }, search = ''): Promise<OwnerDashboard> => {
+export const getOwnerAdminDashboard = async (range: { from: number; to: number }, filters: { search?: string; mode?: string; hostUid?: string; roomStatus?: string; roomMetric?: string; userMetric?: string } = {}): Promise<OwnerDashboard> => {
   const services = requireFirebase()
   await authPersistence
   if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
   if (!functions) throw new Error('Служба административной сводки недоступна.')
-  const response = await httpsCallable(functions, 'getOwnerAdminDashboard')({ ...range, search, pageSize: 50 })
+  const response = await httpsCallable(functions, 'getOwnerAdminDashboard')({ ...range, ...filters, pageSize: 50 })
   return response.data as OwnerDashboard
 }
 
