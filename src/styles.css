@@ -1807,6 +1807,12 @@ html[data-platform-theme="light"] :is(.stage-ring,.score-circle) { color:var(--t
 html[data-platform-theme="light"] :is(.stage-results-button,.stage-retry) { color:#fff; border-color:transparent; background:#087c4d; }
 html[data-platform-theme="light"] .stage-results-button:disabled { color:#74887e; border-color:var(--line); background:#e5efe9; }
 html[data-platform-theme="light"] .home-vibe-mode-card { border-color:var(--home-border); background:radial-gradient(230px 170px at 100% 0,rgba(7,138,85,.12),transparent 72%),linear-gradient(145deg,#fff,#f2faf5); box-shadow:inset 0 1px 0 #fff,0 13px 28px rgba(9,62,42,.11); }
+html[data-platform-theme="light"] .host-shell[data-host-tab="main"] { --home-ink:#edf6f0; --home-surface:#fff; --home-border:rgba(7,121,74,.22); --home-text:#092d21; --home-muted:#49665b; --home-accent:#078a55; }
+html[data-platform-theme="light"] .host-shell[data-host-tab="main"] .host-menu :is(nav button,nav button:hover,nav button.selected) { color:#163d2f; }
+html[data-platform-theme="light"] .host-shell[data-host-tab="main"] .brand-vibe { padding:9px 10px; border-radius:14px; background:#087c4d; box-shadow:0 8px 18px rgba(9,62,42,.12); }
+html[data-platform-theme="light"] .home-vibe :is(.home-vibe-hero h1,.home-vibe-mode-copy h2,.home-vibe-step h2,.home-vibe-active-room h3) { color:var(--home-text); }
+html[data-platform-theme="light"] .home-vibe :is(.home-vibe-lead,.home-vibe-kicker,.home-vibe-section-label) { color:var(--home-muted); }
+html[data-platform-theme="light"] .home-vibe :is(.home-vibe-hero h1 span,.home-vibe-handwriting) { color:#078a55; }
 html[data-platform-theme="light"] :is(.home-vibe-mode-copy p,.home-vibe-step p,.home-vibe-beta p) { color:var(--home-muted); }
 html[data-platform-theme="light"] .home-vibe-beta { border-color:rgba(7,138,85,.30); background:linear-gradient(105deg,#f5fcf7,#e8f7ed); box-shadow:inset 0 1px 0 #fff,0 14px 34px rgba(9,62,42,.09); }
 html[data-platform-theme="light"] .home-vibe-beta-icon { color:#087c4d; background:linear-gradient(145deg,#d4f3e0,#edf9f1); box-shadow:inset 0 1px 0 #fff,0 8px 16px rgba(9,62,42,.10); }
