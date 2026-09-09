@@ -1,140 +1,92 @@
 import { useEffect, useMemo, useState } from 'react'
-import { isPlatformOwner, logoutLeader, publishSafePackCatalogueAsOwner, saveGlobalPackAsOwner, setLeaderStatusAsOwner, subscribeAuthUser, subscribePlatformArchives, subscribePlatformFeedback, subscribePlatformGlobalPacks, subscribePlatformLeaders, subscribePlatformProducts, subscribePlatformSessions, subscribePlatformWorkspaceProducts, subscribePlatformWorkspaces } from './repositories/firebaseRepository'
-import type { ContentPack, FeedbackItem, LeaderProfile, ProductConfig, Session, SessionArchive, UserStatus, Workspace, WorkspaceProduct } from './types'
+import type { ComponentProps, ReactNode } from 'react'
+import { changeLeaderAccess, getOwnerAdminDashboard, isPlatformOwner, logoutLeader, publishSafePackCatalogueAsOwner, subscribeAuthUser, type OwnerDashboard } from './repositories/firebaseRepository'
+import type { UserStatus } from './types'
 import { OwnerProducts } from './OwnerProducts'
 import { Button, Surface } from './components/DesignSystem'
-import { QuestionPackPreview } from './components/QuestionPackPreview'
 
-type OwnerTab = 'overview' | 'leaders' | 'products' | 'packs' | 'sessions' | 'feedback'
+type Tab = 'overview' | 'users' | 'rooms' | 'activity' | 'library' | 'feedback'
+type Range = 'today' | '7d' | '30d' | 'custom'
+const timezone = 'Asia/Almaty'
+const status: Record<UserStatus, string> = { pending: 'Ожидает', active: 'Активен', paused: 'Заблокирован', revoked: 'Отозван' }
+const phase: Record<string, string> = { lobby: 'Сбор', live: 'Идёт', personal: 'Личные результаты', resultsIntro: 'Итоги', resultsReal: 'Итоги', closed: 'Завершена' }
+const mode: Record<string, string> = { diagnostic: 'Проверь себя', quiz: 'Викторина', wheel: 'Колесо фортуны' }
+const roomState: Record<string, string> = { active: 'Активна сейчас', inactive: 'Неактивна / незавершена', completed: 'Завершена', unknown: 'Статус не определён' }
+const ButtonX = ({ children, secondary, danger, ...props }: ComponentProps<typeof Button>) => <Button className="owner-button" secondary={secondary} danger={danger} {...props}>{children}</Button>
+const Card = ({ children, className = '' }: { children: ReactNode; className?: string }) => <Surface className={`owner-card ${className}`}>{children}</Surface>
+const date = (value?: number | null) => value ? new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short', timeZone: timezone }).format(new Date(value)) : 'Нет данных'
+const count = (value?: number | null) => value == null ? '—' : new Intl.NumberFormat('ru-RU').format(value)
+const inputDate = (value: number) => new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value))
+const dayStart = (value: string) => Date.parse(`${value}T00:00:00+05:00`)
+const label = (value: string) => ({ registration: 'Регистрация', room_created: 'Создана комната', room_started: 'Запущена комната', room_closed: 'Завершена комната', access_changed: 'Изменён доступ' }[value] || value)
 
-const formatDate = (value?: number) => value ? new Date(value).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
-const validValues = <T,>(value: Record<string, T>) => Object.values(value || {}).filter(isRecord) as T[]
-const byNewest = <T extends { createdAt?: number }>(a: T, b: T) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
-const archiveByNewest = (a: SessionArchive, b: SessionArchive) => (Number(b.archivedAt) || 0) - (Number(a.archivedAt) || 0)
-const calendarDate = (value: unknown) => {
-  const date = new Date(Number(value))
-  return Number.isNaN(date.valueOf()) ? '' : date.toISOString().slice(0, 10)
+function Bars({ rows, fields }: { rows: OwnerDashboard['charts']['daily']; fields: Array<'registrations' | 'starts' | 'joins' | 'completions'> }) {
+  const top = Math.max(1, ...rows.flatMap(row => fields.map(field => Number(row[field]) || 0)))
+  if (!rows.length) return <p className="owner-empty-copy">За период нет зафиксированных событий.</p>
+  return <div className="owner-chart">{rows.slice(-20).map(row => <div className="owner-chart-day" key={row.day}><div className="owner-chart-bars">{fields.map(field => <i className={`chart-${field}`} key={field} style={{ height: `${Math.max(3, (Number(row[field]) || 0) / top * 100)}%` }} />)}</div><small>{row.day.slice(5)}</small></div>)}</div>
 }
-const statusLabel: Record<UserStatus, string> = { pending: 'Ожидает', active: 'Активен', paused: 'Приостановлен', revoked: 'Отозван' }
-
-const OwnerButton = ({ children, secondary, danger, disabled, onClick }: { children: React.ReactNode; secondary?: boolean; danger?: boolean; disabled?: boolean; onClick?: () => void }) => <Button type="button" className="owner-button" secondary={secondary} danger={danger} disabled={disabled} onClick={onClick}>{children}</Button>
-const OwnerCard = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => <Surface className={`owner-card ${className}`}>{children}</Surface>
 
 export function OwnerAdmin() {
-  const [authState, setAuthState] = useState<'checking' | 'owner' | 'denied' | 'error'>('checking')
-  const [authError, setAuthError] = useState('')
-  const [dataState, setDataState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
-  const [tab, setTab] = useState<OwnerTab>('overview')
-  const [leaders, setLeaders] = useState<Record<string, LeaderProfile>>({})
-  const [workspaces, setWorkspaces] = useState<Record<string, Workspace>>({})
-  const [sessions, setSessions] = useState<Record<string, Session>>({})
-  const [archives, setArchives] = useState<Record<string, SessionArchive>>({})
-  const [packs, setPacks] = useState<Record<string, ContentPack>>({})
-  const [products, setProducts] = useState<Record<string, ProductConfig>>({})
-  const [workspaceProducts, setWorkspaceProducts] = useState<Record<string, Record<string, WorkspaceProduct>>>({})
-  const [feedback, setFeedback] = useState<Record<string, FeedbackItem>>({})
-  const [selectedLeaderId, setSelectedLeaderId] = useState('')
+  const [auth, setAuth] = useState<'checking' | 'owner' | 'denied' | 'error'>('checking')
+  const [data, setData] = useState<OwnerDashboard | null>(null)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [packNotice, setPackNotice] = useState('')
+  const [notice, setNotice] = useState('')
+  const [tab, setTab] = useState<Tab>('overview')
+  const [range, setRange] = useState<Range>('30d')
+  const [custom, setCustom] = useState({ from: inputDate(Date.now() - 29 * 86400000), to: inputDate(Date.now()) })
+  const [query, setQuery] = useState('')
+  const [appliedQuery, setAppliedQuery] = useState('')
+  const [selectedId, setSelectedId] = useState('')
+  const [roomStateFilter, setRoomStateFilter] = useState('')
+  const [confirm, setConfirm] = useState<{ uid: string; next: UserStatus } | null>(null)
+  const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
-  const [sessionFilter, setSessionFilter] = useState({ leader: '', workspace: '', status: '', date: '' })
-
+  const period = useMemo(() => {
+    const to = Date.now()
+    if (range === 'today') return { from: dayStart(inputDate(to)), to }
+    if (range === '7d') return { from: to - 6 * 86400000, to }
+    if (range === 'custom') return { from: dayStart(custom.from), to: dayStart(custom.to) + 86399999 }
+    return { from: to - 29 * 86400000, to }
+  }, [range, custom])
+  const load = async () => {
+    setLoading(true); setError('')
+    try { setData(await getOwnerAdminDashboard(period, appliedQuery)) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Не удалось загрузить административные данные.') } finally { setLoading(false) }
+  }
   useEffect(() => {
-    let alive = true
+    let active = true
     const stop = subscribeAuthUser(user => {
-      if (!user || user.isAnonymous) { if (alive) { setAuthError(''); setAuthState('denied') }; return }
-      if (alive) { setAuthError(''); setAuthState('checking') }
-      void isPlatformOwner().then(owner => { if (alive) setAuthState(owner ? 'owner' : 'denied') }).catch(reason => {
-        if (!alive) return
-        setAuthError(reason instanceof Error ? reason.message : 'Не удалось проверить доступ владельца.')
-        setAuthState('error')
-      })
+      if (!user || user.isAnonymous) { if (active) setAuth('denied'); return }
+      void isPlatformOwner().then(owner => { if (active) setAuth(owner ? 'owner' : 'denied') }).catch(cause => { if (active) { setAuth('error'); setError(cause instanceof Error ? cause.message : 'Не удалось проверить роль владельца.') } })
     })
-    return () => { alive = false; stop() }
+    return () => { active = false; stop() }
   }, [])
-
-  useEffect(() => {
-    if (authState !== 'owner') return
-    let alive = true
-    let completedSubscriptions = 0
-    setDataState('loading')
-    const onData = <T,>(setter: (value: T) => void) => (value: T) => {
-      if (!alive) return
-      setter(value)
-      completedSubscriptions += 1
-      if (completedSubscriptions >= 8) setDataState('ready')
-    }
-    const onError = (reason: Error) => {
-      if (!alive) return
-      setError(reason.message || 'Не удалось загрузить часть данных панели владельца.')
-      setDataState('error')
-    }
-    const stops = [
-      subscribePlatformLeaders(onData(setLeaders), onError),
-      subscribePlatformWorkspaces(onData(setWorkspaces), onError),
-      subscribePlatformSessions(onData(setSessions), onError),
-      subscribePlatformArchives(onData(setArchives), onError),
-      subscribePlatformGlobalPacks(onData(setPacks), onError),
-      subscribePlatformFeedback(onData(setFeedback), onError),
-      subscribePlatformProducts(onData(setProducts), onError),
-      subscribePlatformWorkspaceProducts(onData(setWorkspaceProducts), onError),
-    ]
-    return () => { alive = false; stops.forEach(stop => stop()) }
-  }, [authState])
-
-  const leaderList = useMemo(() => validValues(leaders).sort(byNewest), [leaders])
-  const sessionList = useMemo(() => validValues(sessions).filter(session => typeof session.roomId === 'string').sort(byNewest), [sessions])
-  const archiveList = useMemo(() => validValues(archives).filter(archive => typeof archive.roomId === 'string').sort(archiveByNewest), [archives])
-  const feedbackList = useMemo(() => validValues(feedback).filter(item => typeof item.id === 'string').sort(byNewest), [feedback])
-  const selectedLeader = leaders[selectedLeaderId] || null
-  const selectedWorkspace = selectedLeader ? workspaces[selectedLeader.workspaceId] : null
-  const selectedSessions = selectedLeader ? sessionList.filter(item => item.hostUid === selectedLeader.uid) : []
-  const selectedParticipants = selectedSessions.reduce((total, item) => total + Object.keys(item.participants || {}).length, 0)
-  const selectedFeedback = selectedLeader ? feedbackList.filter(item => item.uid === selectedLeader.uid || item.workspaceId === selectedLeader.workspaceId) : []
-  const activeRooms = sessionList.filter(item => item.phase !== 'closed').length
-
-  const performLeaderAction = async (uid: string, status: UserStatus) => {
+  useEffect(() => { if (auth === 'owner') void load() }, [auth, period.from, period.to, appliedQuery])
+  const selected = data?.users.find(user => user.uid === selectedId) || null
+  const filteredRooms = data?.rooms.filter(room => !roomStateFilter || room.operationalStatus === roomStateFilter) || []
+  const applyAccess = async () => {
+    if (!confirm || !selected) return
     setSaving(true); setError('')
-    try { await setLeaderStatusAsOwner(uid, status) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось изменить статус лидера.') } finally { setSaving(false) }
+    try { await changeLeaderAccess(confirm.uid, confirm.next, reason); setNotice(`Доступ «${selected.fullName}» изменён: ${status[confirm.next]}.`); setConfirm(null); setReason(''); await load() } catch (cause) { setError(cause instanceof Error ? cause.message : 'Не удалось изменить доступ.') } finally { setSaving(false) }
   }
-
-  const publishSafeCatalogue = async () => {
-    setSaving(true); setError(''); setPackNotice('')
-    try {
-      const synchronized = await publishSafePackCatalogueAsOwner()
-      setPackNotice(`Опубликованы безопасные версии ${synchronized} наборов. Лидеры увидят только вопросы и варианты ответов, без ключей викторины.`)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Не удалось опубликовать безопасные версии наборов.')
-    } finally { setSaving(false) }
+  const publish = async () => {
+    setSaving(true); setError('')
+    try { const value = await publishSafePackCatalogueAsOwner(); setNotice(`Безопасные версии ${value} наборов опубликованы.`); await load() } catch (cause) { setError(cause instanceof Error ? cause.message : 'Не удалось синхронизировать библиотеку.') } finally { setSaving(false) }
   }
-
-  const exportFeedback = () => {
-    const escape = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
-    const rows = [['Дата', 'Лидер', 'Молодёжка', 'Сообщение'], ...feedbackList.map(item => [formatDate(item.createdAt), leaders[item.uid]?.fullName || item.uid, workspaces[item.workspaceId]?.name || item.workspaceId, item.message])]
-    const blob = new Blob(['\ufeff' + rows.map(row => row.map(escape).join(';')).join('\n')], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'atmosphere-feedback.csv'; link.click(); URL.revokeObjectURL(url)
-  }
-
-  if (authState === 'checking') return <main className="auth-page"><OwnerCard className="owner-auth-card"><p className="eyebrow">ВЛАДЕЛЕЦ ПЛАТФОРМЫ</p><h1>Проверяем доступ…</h1></OwnerCard></main>
-  if (authState === 'denied') return <main className="auth-page"><OwnerCard className="owner-auth-card"><p className="eyebrow">НЕТ ДОСТУПА</p><h1>Панель владельца недоступна</h1><p>Доступ к этой панели выдаётся только владельцу платформы. Обычная ссылка или кнопка его не предоставляют.</p><OwnerButton onClick={() => void logoutLeader().then(() => { window.location.assign(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/login`) })}>Выйти</OwnerButton></OwnerCard></main>
-
-  const tabs: Array<[OwnerTab, string]> = [['overview', 'Обзор'], ['leaders', 'Лидеры'], ['products', 'Продукты'], ['packs', 'Глобальная библиотека'], ['sessions', 'Сессии'], ['feedback', 'Обратная связь']]
-  if (authState === 'error') return <main className="auth-page"><OwnerCard className="owner-auth-card"><p className="eyebrow">ОШИБКА ПРОВЕРКИ</p><h1>Не удалось открыть панель владельца</h1><p>{authError || 'Проверьте интернет-соединение и обновите страницу.'}</p><OwnerButton onClick={() => window.location.reload()}>Повторить проверку</OwnerButton><OwnerButton secondary onClick={() => void logoutLeader().then(() => { window.location.assign(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/login`) })}>Выйти</OwnerButton></OwnerCard></main>
-
-  const filteredSessions = sessionList.filter(session => {
-    const leader = leaders[session.hostUid]
-    const workspace = workspaces[session.workspaceId || leader?.workspaceId || '']
-    const date = calendarDate(session.createdAt)
-    return (!sessionFilter.leader || session.hostUid === sessionFilter.leader) && (!sessionFilter.workspace || workspace?.id === sessionFilter.workspace) && (!sessionFilter.status || session.phase === sessionFilter.status) && (!sessionFilter.date || date === sessionFilter.date)
-  })
-
-  return <main className="owner-shell"><aside className="owner-sidebar"><div className="brand"><span>✦</span><b>Молодёжный Вайб</b><small>владелец платформы</small></div><nav>{tabs.map(([id, label]) => <button type="button" key={id} className={tab === id ? 'selected' : ''} onClick={() => setTab(id)}>{label}</button>)}</nav><div className="owner-sidebar-foot"><small>Защищённый доступ</small><b>Владелец</b><OwnerButton secondary onClick={() => void logoutLeader().then(() => { window.location.assign(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/login`) })}>Выйти</OwnerButton></div></aside><section className="owner-content">{error && <p className="owner-error">{error}</p>}{dataState === 'loading' && <OwnerCard className="owner-note"><h2>Загружаем данные платформы…</h2><p>Панель останется доступной, даже если часть старых записей окажется неполной.</p></OwnerCard>}
-    {tab === 'overview' && <><header className="owner-header"><div><p className="eyebrow">ПЛАТФОРМА · СВОДКА</p><h1>Обзор владельца</h1></div><span className="status">ЗАЩИЩЁННЫЙ ДОСТУП</span></header><div className="owner-metrics"><OwnerCard><small>Лидеры</small><b>{leaderList.length}</b><span>{leaderList.filter(item => item.status === 'active').length} активны</span></OwnerCard><OwnerCard><small>Активные комнаты</small><b>{activeRooms}</b><span>в реальном времени</span></OwnerCard><OwnerCard><small>Завершённые сессии</small><b>{archiveList.length}</b><span>история сохранена</span></OwnerCard><OwnerCard><small>Отзывы</small><b>{feedbackList.length}</b><span>собраны от лидеров</span></OwnerCard></div><OwnerCard className="owner-note"><h2>Что видно владельцу</h2><p>Здесь собрана только служебная сводка платформы. Кабинеты лидеров, их комнаты и личные наборы остаются изолированными друг от друга правилами Firebase.</p></OwnerCard></>}
-    {tab === 'leaders' && <><header className="owner-header"><div><p className="eyebrow">ПОЛЬЗОВАТЕЛИ ПЛАТФОРМЫ</p><h1>Лидеры</h1></div></header><div className="owner-split"><OwnerCard className="owner-table-card"><div className="owner-table-scroll"><table className="owner-table"><thead><tr><th>Лидер</th><th>Телефон</th><th>Email</th><th>Молодёжка</th><th>Город</th><th>Регистрация</th><th>Активность</th><th>Статус</th></tr></thead><tbody>{leaderList.map(leader => <tr key={leader.uid} className={selectedLeaderId === leader.uid ? 'selected' : ''} onClick={() => setSelectedLeaderId(leader.uid)}><td>{leader.fullName}</td><td>{leader.phone}</td><td>{leader.email}</td><td>{workspaces[leader.workspaceId]?.name || '—'}</td><td>{workspaces[leader.workspaceId]?.city || '—'}</td><td>{formatDate(leader.createdAt)}</td><td>{formatDate(leader.lastActiveAt)}</td><td><span className={`owner-status ${leader.status}`}>{statusLabel[leader.status]}</span></td></tr>)}</tbody></table></div></OwnerCard>{selectedLeader && <OwnerCard className="leader-detail"><p className="eyebrow">КАРТОЧКА ЛИДЕРА</p><h2>{selectedLeader.fullName}</h2><dl><div><dt>Workspace</dt><dd>{selectedWorkspace?.name || selectedLeader.workspaceId}</dd></div><div><dt>Комнаты</dt><dd>{selectedSessions.length}</dd></div><div><dt>Участники</dt><dd>{selectedParticipants}</dd></div><div><dt>Feedback</dt><dd>{selectedFeedback.length}</dd></div></dl><div className="owner-actions"><OwnerButton disabled={saving || selectedLeader.status === 'active'} onClick={() => void performLeaderAction(selectedLeader.uid, 'active')}>Active / Restore</OwnerButton><OwnerButton secondary disabled={saving || selectedLeader.status === 'paused'} onClick={() => void performLeaderAction(selectedLeader.uid, 'paused')}>Pause</OwnerButton><OwnerButton danger disabled={saving || selectedLeader.status === 'revoked'} onClick={() => void performLeaderAction(selectedLeader.uid, 'revoked')}>Revoke</OwnerButton></div><p className="owner-help">Pause и Revoke сохраняют историю. Открытые комнаты автоматически переходят в <code>closed</code>, поэтому участники больше не могут отвечать.</p></OwnerCard>}</div></>}
-    {tab === 'products' && <OwnerProducts products={products} workspaces={workspaces} workspaceProducts={workspaceProducts} saving={saving} onSaving={setSaving} onError={setError} />}
-    {tab === 'packs' && <><header className="owner-header"><div><p className="eyebrow">СИСТЕМНЫЙ КОНТЕНТ</p><h1>Глобальная библиотека</h1></div><div className="owner-actions"><OwnerButton secondary disabled={saving} onClick={() => void publishSafeCatalogue()}>Опубликовать безопасные версии</OwnerButton></div></header><OwnerCard className="owner-note"><h2>Наборы доступны только для просмотра</h2><p>Вопросы и структура наборов «Проверь себя» и «Библейская викторина» защищены от изменений для всех ролей, включая владельца платформы. Откройте вопросы только у нужного набора — длинные списки прокручиваются внутри карточки.</p>{packNotice && <p className="owner-help">{packNotice}</p>}</OwnerCard><div className="owner-pack-list">{Object.values(packs).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).map(pack => <OwnerCard key={pack.packId} className="owner-pack-card"><div><p className="eyebrow">{pack.mode === 'quiz' ? 'БИБЛЕЙСКАЯ ВИКТОРИНА · ' : 'ПРОВЕРЬ СЕБЯ · '}{pack.status === 'active' ? 'ОПУБЛИКОВАН' : pack.status === 'archived' ? 'АРХИВ' : 'ЧЕРНОВИК'} · v{pack.packVersion}</p><h2>{pack.title}</h2><p>{pack.content.questions.length} вопросов · обновлён {formatDate(pack.updatedAt)}</p></div><div className="owner-actions"><OwnerButton disabled={saving || pack.status === 'active'} onClick={() => void saveGlobalPackAsOwner({ ...pack, status: 'active' }).catch(reason => setError(reason.message))}>Опубликовать</OwnerButton><OwnerButton danger disabled={saving || pack.status === 'archived'} onClick={() => void saveGlobalPackAsOwner({ ...pack, status: 'archived' }).catch(reason => setError(reason.message))}>Архивировать</OwnerButton></div><QuestionPackPreview modeLabel={pack.mode === 'quiz' ? 'Библейская викторина' : 'Проверь себя'} packId={pack.packId} questions={pack.questions.length ? pack.questions : pack.content.questions} /></OwnerCard>)}</div></>}
-    {tab === 'sessions' && <><header className="owner-header"><div><p className="eyebrow">АКТИВНЫЕ И ЗАВЕРШЁННЫЕ</p><h1>Сессии</h1></div></header><OwnerCard className="owner-filters"><select value={sessionFilter.leader} onChange={event => setSessionFilter({ ...sessionFilter, leader: event.target.value })}><option value="">Все лидеры</option>{leaderList.map(item => <option value={item.uid} key={item.uid}>{item.fullName}</option>)}</select><select value={sessionFilter.workspace} onChange={event => setSessionFilter({ ...sessionFilter, workspace: event.target.value })}><option value="">Все молодёжки</option>{Object.values(workspaces).map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select><select value={sessionFilter.status} onChange={event => setSessionFilter({ ...sessionFilter, status: event.target.value })}><option value="">Все статусы</option><option value="lobby">Сбор</option><option value="live">Идёт</option><option value="closed">Завершена</option></select><input type="date" value={sessionFilter.date} onChange={event => setSessionFilter({ ...sessionFilter, date: event.target.value })} /></OwnerCard><div className="owner-session-list">{filteredSessions.map(session => <OwnerCard key={session.roomId} className="owner-session-card"><div><p className="eyebrow">{session.phase} · {formatDate(session.createdAt)}</p><h2>{session.roomTitle || session.roomId}</h2><p>{leaders[session.hostUid]?.fullName || session.hostUid} · {workspaces[session.workspaceId || '']?.name || '—'} · {Object.keys(session.participants || {}).length} участников</p></div><span className={`owner-status ${session.phase === 'closed' ? 'revoked' : 'active'}`}>{session.phase}</span></OwnerCard>)}</div></>}
-    {tab === 'feedback' && <><header className="owner-header"><div><p className="eyebrow">ОБРАТНАЯ СВЯЗЬ</p><h1>Отзывы</h1></div><OwnerButton disabled={!feedbackList.length} onClick={exportFeedback}>Скачать CSV</OwnerButton></header><div className="owner-feedback-list">{feedbackList.map(item => <OwnerCard key={item.id} className="owner-feedback-card"><p className="eyebrow">{formatDate(item.createdAt)} · {workspaces[item.workspaceId]?.name || 'Без молодёжки'}</p><h2>{leaders[item.uid]?.fullName || item.uid}</h2><p>{item.message}</p></OwnerCard>)}{!feedbackList.length && <OwnerCard><h2>Отзывов пока нет</h2><p>Новые отзывы появятся здесь сразу после отправки и будут доступны для выгрузки.</p></OwnerCard>}</div></>}
+  if (auth === 'checking') return <main className="auth-page"><Card className="owner-auth-card"><p className="eyebrow">ВЛАДЕЛЕЦ ПЛАТФОРМЫ</p><h1>Проверяем доступ…</h1></Card></main>
+  if (auth === 'denied') return <main className="auth-page"><Card className="owner-auth-card"><p className="eyebrow">НЕТ ДОСТУПА</p><h1>Панель владельца недоступна</h1><p>Нужна серверная роль владельца платформы.</p><ButtonX onClick={() => void logoutLeader().then(() => window.location.assign(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/login`))}>Выйти</ButtonX></Card></main>
+  if (auth === 'error') return <main className="auth-page"><Card className="owner-auth-card"><p className="eyebrow">ОШИБКА ПРОВЕРКИ</p><h1>Не удалось открыть панель</h1><p>{error}</p></Card></main>
+  const tabs: Array<[Tab, string]> = [['overview', 'Обзор'], ['users', 'Пользователи'], ['rooms', 'Комнаты'], ['activity', 'Журнал действий'], ['library', 'Библиотека'], ['feedback', 'Обратная связь']]
+  return <main className="owner-shell"><aside className="owner-sidebar"><div className="brand"><span>✦</span><b>Молодёжный Вайб</b><small>рабочая панель владельца</small></div><nav>{tabs.map(([id, name]) => <button type="button" key={id} className={tab === id ? 'selected' : ''} onClick={() => setTab(id)}>{name}</button>)}</nav><div className="owner-sidebar-foot"><small>Часовой пояс отчёта</small><b>{timezone}</b><ButtonX secondary onClick={() => void logoutLeader().then(() => window.location.assign(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/login`))}>Выйти</ButtonX></div></aside><section className="owner-content">
+    {error && <p className="owner-error" role="alert">{error}</p>}{notice && <p className="owner-success" role="status">{notice}</p>}
+    <div className="owner-toolbar"><div className="owner-range">{([['today', 'Сегодня'], ['7d', '7 дней'], ['30d', '30 дней'], ['custom', 'Диапазон']] as Array<[Range, string]>).map(([id, name]) => <button type="button" key={id} className={range === id ? 'selected' : ''} onClick={() => setRange(id)}>{name}</button>)}</div>{range === 'custom' && <div className="owner-custom-range"><input type="date" aria-label="Начало периода" value={custom.from} onChange={event => setCustom({ ...custom, from: event.target.value })} /><input type="date" aria-label="Конец периода" value={custom.to} onChange={event => setCustom({ ...custom, to: event.target.value })} /></div>}<ButtonX secondary disabled={loading} onClick={() => void load()}>{loading ? 'Обновляем…' : 'Обновить'}</ButtonX></div>
+    {!data && loading && <Card className="owner-note"><h2>Загружаем защищённую сводку…</h2><p>Личные ответы участников в административную панель не передаются.</p></Card>}
+    {data && tab === 'overview' && <><header className="owner-header"><div><p className="eyebrow">ПЛАТФОРМА · СВОДКА</p><h1>Обзор</h1><p className="owner-header-subtitle">Период: {date(period.from)} — {date(period.to)} · {data.timezone}</p></div><span className="status">ОБНОВЛЕНО {date(data.generatedAt)}</span></header><div className="owner-metrics owner-metrics-wide"><Card><small>Всего аккаунтов</small><b>{count(data.metrics.totalAccounts)}</b><span>за всё время</span></Card><Card><small>Новые регистрации</small><b>{count(data.metrics.newRegistrations)}</b><span>за период</span></Card><Card><small>Активные ведущие</small><b>{count(data.metrics.activeHosts)}</b><span>запускали комнаты</span></Card><Card><small>Активные сейчас</small><b>{count(data.metrics.roomsActiveNow)}</b><span>сбор или игра &lt; 10 минут</span></Card><Card><small>Завершённые за период</small><b>{count(data.metrics.roomsCompleted)}</b><span>по времени завершения</span></Card><Card><small>Неактивные / незавершённые</small><b>{count(data.metrics.inactiveUnfinished)}</b><span>не меняют жизненный цикл</span></Card><Card><small>Подключения</small><b>{count(data.metrics.participantConnections)}</b><span>{data.metrics.participantConnections == null ? 'история ещё не накоплена' : 'за период'}</span></Card><Card><small>Завершения прохождений</small><b>{count(data.metrics.completedRuns)}</b><span>{data.metrics.completedRuns == null ? 'история ещё не накоплена' : 'за период'}</span></Card></div><p className="owner-metric-summary">Комнаты за период: создано <b>{data.metrics.roomsCreated}</b>, запущено <b>{data.metrics.roomsStarted}</b>. Старые незавершённые комнаты без свежей активности не считаются активными и не закрываются автоматически.</p><div className="owner-chart-grid"><Card className="owner-graph"><h2>Регистрации и запуски</h2><Bars rows={data.charts.daily} fields={['registrations', 'starts']} /><small className="owner-chart-key"><i className="chart-registrations" /> Регистрации <i className="chart-starts" /> Запуски</small></Card><Card className="owner-graph"><h2>Подключения и завершения</h2><Bars rows={data.charts.daily} fields={['joins', 'completions']} /><small className="owner-chart-key"><i className="chart-joins" /> Подключения <i className="chart-completions" /> Завершения</small></Card><Card className="owner-graph"><h2>Использование режимов</h2><div className="owner-mode-usage">{data.charts.modeUsage.map(item => <div key={item.mode}><span>{mode[item.mode] || item.mode}</span><b>{item.value}</b></div>)}</div></Card></div><div className="owner-two-columns"><Card className="owner-recent"><h2>Последние комнаты</h2>{data.rooms.slice(0, 5).map(room => <button type="button" key={room.roomId} onClick={() => { setTab('rooms'); setQuery(room.displayCode); setAppliedQuery(room.displayCode) }}><b>{room.roomTitle}</b><small>{roomState[room.operationalStatus]} · {date(room.createdAt)}</small></button>)}</Card><Card className="owner-recent"><h2>Последние действия</h2>{data.activity.slice(0, 5).map(item => <div key={item.id}><b>{label(item.type)}</b><small>{date(item.createdAt)} · {item.targetName || item.targetId || 'платформа'}</small></div>)}</Card></div></>}
+    {data && tab === 'users' && <><header className="owner-header"><div><p className="eyebrow">ПОЛЬЗОВАТЕЛИ</p><h1>Ведущие и доступы</h1><p className="owner-header-subtitle">Первые 50 результатов; поиск выполняется на сервере.</p></div></header><div className="owner-search"><input value={query} placeholder="Имя, email или ID" onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') setAppliedQuery(query) }} /><ButtonX onClick={() => setAppliedQuery(query)}>Найти</ButtonX></div><div className="owner-split"><Card className="owner-table-card"><div className="owner-table-scroll"><table className="owner-table"><thead><tr><th>Пользователь</th><th>Регистрация</th><th>Доступ</th><th>Активность</th><th>Комнаты</th><th>Участия</th></tr></thead><tbody>{data.users.map(user => <tr key={user.uid} className={selectedId === user.uid ? 'selected' : ''} onClick={() => setSelectedId(user.uid)}><td><b>{user.fullName}</b><small>{user.email || 'Email не доступен'}</small></td><td>{date(user.createdAt)}</td><td><span className={`owner-status ${user.status}`}>{status[user.status]}</span></td><td>{date(user.lastActiveAt)}</td><td>{user.createdRooms} / {user.completedRooms}</td><td>{user.roomParticipations}</td></tr>)}{!data.users.length && <tr><td colSpan={6}>Ничего не найдено.</td></tr>}</tbody></table></div></Card>{selected && <Card className="leader-detail"><p className="eyebrow">КАРТОЧКА ПОЛЬЗОВАТЕЛЯ</p><h2>{selected.fullName}</h2><p>{selected.email || 'Email не доступен'}</p><dl><div><dt>Доступ</dt><dd>{status[selected.status]}</dd></div><div><dt>Последняя активность</dt><dd>{date(selected.lastActiveAt)}</dd></div><div><dt>Создано / завершено</dt><dd>{selected.createdRooms} / {selected.completedRooms}</dd></div><div><dt>Участия в его комнатах</dt><dd>{selected.roomParticipations}</dd></div></dl><div className="owner-actions"><ButtonX disabled={saving || selected.status === 'active'} onClick={() => setConfirm({ uid: selected.uid, next: 'active' })}>Восстановить</ButtonX><ButtonX secondary disabled={saving || selected.status === 'paused'} onClick={() => setConfirm({ uid: selected.uid, next: 'paused' })}>Заблокировать</ButtonX><ButtonX danger disabled={saving || selected.status === 'revoked'} onClick={() => setConfirm({ uid: selected.uid, next: 'revoked' })}>Отозвать</ButtonX></div><p className="owner-help">Изменение доступа не завершает активную комнату скрыто. Новые действия ведущего будут отклонены сервером.</p></Card>}</div></>}
+    {data && tab === 'rooms' && <><header className="owner-header"><div><p className="eyebrow">КОМНАТЫ</p><h1>Реальное состояние встреч</h1><p className="owner-header-subtitle">Активна сейчас: открытый сбор или игра с действием за последние 10 минут. Тайм-аут не завершает комнату.</p></div></header><div className="owner-search"><input value={query} placeholder="Название, код или ID ведущего" onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') setAppliedQuery(query) }} /><select aria-label="Статус комнаты" value={roomStateFilter} onChange={event => setRoomStateFilter(event.target.value)}><option value="">Все состояния</option><option value="active">Активные сейчас</option><option value="inactive">Неактивные / незавершённые</option><option value="completed">Завершённые</option><option value="unknown">Неопределённые</option></select><ButtonX onClick={() => setAppliedQuery(query)}>Фильтровать</ButtonX></div><Card className="owner-table-card"><div className="owner-table-scroll"><table className="owner-table"><thead><tr><th>Комната</th><th>Ведущий</th><th>Режим</th><th>Время</th><th>Участники</th><th>Состояние</th></tr></thead><tbody>{filteredRooms.map(room => <tr key={room.roomId}><td><b>{room.roomTitle}</b><small>Код: {room.displayCode}</small></td><td>{data.users.find(user => user.uid === room.hostUid)?.fullName || room.hostUid}</td><td>{mode[room.mode] || room.mode}</td><td>{date(room.createdAt)}<small>{room.startedAt ? `Старт: ${date(room.startedAt)}` : 'Не запускалась'}{room.endedAt ? ` · Конец: ${date(room.endedAt)}` : room.operationalStatus === 'completed' ? ' · Время завершения не сохранено' : ''}</small></td><td>{room.participantCount} / {room.completedCount}</td><td><span className={`owner-status ${room.operationalStatus === 'active' ? 'active' : room.operationalStatus === 'completed' ? 'revoked' : 'pending'}`}>{roomState[room.operationalStatus]}<small>{room.lastActivityAt ? `Последняя активность: ${date(room.lastActivityAt)}` : 'Нет отметки активности'}</small></span></td></tr>)}{!filteredRooms.length && <tr><td colSpan={6}>Нет комнат по заданным условиям.</td></tr>}</tbody></table></div></Card></>}
+    {data && tab === 'activity' && <><header className="owner-header"><div><p className="eyebrow">АУДИТ</p><h1>Журнал действий</h1><p className="owner-header-subtitle">Только подтверждённые операции; пароли, токены, ответы и ввод в поля не сохраняются.</p></div></header><Card className="owner-table-card"><div className="owner-table-scroll"><table className="owner-table"><thead><tr><th>Время</th><th>Действие</th><th>Кто</th><th>Объект</th><th>Причина</th></tr></thead><tbody>{data.activity.map(item => <tr key={item.id}><td>{date(item.createdAt)}</td><td>{label(item.type)}</td><td>{data.users.find(user => user.uid === item.actorUid)?.fullName || item.actorUid || 'Система'}</td><td>{item.targetName || item.targetId || '—'}</td><td>{item.reason || '—'}</td></tr>)}{!data.activity.length && <tr><td colSpan={5}>Журнал пока пуст.</td></tr>}</tbody></table></div></Card></>}
+    {data && tab === 'library' && <><header className="owner-header"><div><p className="eyebrow">БИБЛИОТЕКА И ДОСТУПЫ</p><h1>Наборы и продукты</h1><p className="owner-header-subtitle">Версии наборов в уже созданных комнатах не меняются.</p></div><ButtonX secondary disabled={saving} onClick={() => void publish()}>Синхронизировать публикации</ButtonX></header><OwnerProducts products={data.products} workspaces={data.workspaces} workspaceProducts={data.workspaceProducts} saving={saving} onSaving={setSaving} onError={setError} /></>}
+    {data && tab === 'feedback' && <><header className="owner-header"><div><p className="eyebrow">ОБРАТНАЯ СВЯЗЬ</p><h1>Отзывы</h1></div></header><div className="owner-feedback-list">{Object.values(data.feedback).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map(item => <Card key={item.id} className="owner-feedback-card"><p className="eyebrow">{date(item.createdAt)} · {data.workspaces[item.workspaceId]?.name || 'Без молодёжки'}</p><h2>{data.users.find(user => user.uid === item.uid)?.fullName || item.uid}</h2><p>{item.message}</p></Card>)}{!Object.keys(data.feedback).length && <Card><h2>Интеграция обратной связи не подключена</h2><p>В доступной базе нет отзывов. Фиктивные отзывы и счётчики не показываются.</p></Card>}</div></>}
+    {confirm && selected && <div className="owner-modal-backdrop"><Card className="owner-confirm"><p className="eyebrow">ПОДТВЕРДИТЕ ИЗМЕНЕНИЕ ДОСТУПА</p><h2>{confirm.next === 'active' ? 'Восстановить доступ' : confirm.next === 'paused' ? 'Заблокировать доступ' : 'Отозвать доступ'}</h2><p>Пользователь: <b>{selected.fullName}</b>. {confirm.next === 'active' ? 'Он снова сможет войти и работать.' : 'Текущая комната не будет завершена автоматически; новые действия ведущего сервер отклонит.'}</p><label>Причина (необязательно)<textarea value={reason} maxLength={300} onChange={event => setReason(event.target.value)} /></label><div className="owner-actions"><ButtonX danger={confirm.next !== 'active'} disabled={saving} onClick={() => void applyAccess()}>{saving ? 'Сохраняем…' : 'Подтвердить'}</ButtonX><ButtonX secondary disabled={saving} onClick={() => { setConfirm(null); setReason('') }}>Отмена</ButtonX></div></Card></div>}
   </section></main>
 }

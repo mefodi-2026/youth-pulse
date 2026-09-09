@@ -34,6 +34,146 @@ const byQuestionId = (questions, questionId) => Object.values(asObject(questions
 const ROOM_INACTIVITY_MS = 10 * 60 * 1000
 const roomActivityAt = room => Number(room?.lastActivityAt || room?.createdAt || 0)
 const isExpiredRoom = (room, at = Date.now()) => at - roomActivityAt(room) >= ROOM_INACTIVITY_MS
+const assertPlatformOwner = request => {
+  if (!request.auth?.token?.platformAdmin) throw new HttpsError('permission-denied', 'Только владелец платформы может выполнить это действие.')
+  return request.auth.uid
+}
+const asTimestamp = value => Number.isFinite(Number(value)) ? Number(value) : 0
+const ownerDay = timestamp => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(timestamp))
+const adminAuditId = (type, targetId, at) => `${type}:${targetId}:${at}`
+const safeAdminRoom = room => {
+  const participants = asObject(room.participants)
+  const events = Object.values(asObject(room.events)).filter(event => event && typeof event === 'object')
+  const rawPhase = room.phase || room.status || 'lobby'
+  const activityAt = asTimestamp(room.lastActivityAt)
+  // A room is not finished merely because its owner disconnected.  This flag
+  // is only a reporting classification: lifecycle data remains untouched.
+  const operationalStatus = rawPhase === 'closed'
+    ? 'completed'
+    : !['lobby', 'live'].includes(rawPhase)
+      ? 'unknown'
+      : !activityAt
+        ? 'unknown'
+        : Date.now() - activityAt < ROOM_INACTIVITY_MS ? 'active' : 'inactive'
+  return {
+    roomId: room.roomId,
+    roomTitle: room.roomTitle || room.roomId,
+    displayCode: room.displayCode || room.roomId,
+    hostUid: room.hostUid,
+    workspaceId: room.workspaceId || '',
+    mode: room.mode || 'diagnostic',
+    phase: rawPhase,
+    operationalStatus,
+    createdAt: asTimestamp(room.createdAt),
+    startedAt: asTimestamp(room.startedAt) || null,
+    endedAt: asTimestamp(room.endedAt || room.closedAt) || null,
+    lastActivityAt: activityAt || null,
+    participantCount: Number.isFinite(Number(room.participantCount)) ? Number(room.participantCount) : Object.keys(participants).length,
+    completedCount: Number.isFinite(Number(room.completedCount)) ? Number(room.completedCount) : Object.values(participants).filter(participant => participant?.status === 'finished').length,
+    eventCounts: {
+      joined: events.filter(event => event.type === 'participant_joined').length,
+      finished: events.filter(event => event.type === 'participant_finished').length,
+    },
+    events: events.map(event => ({ id: event.id, type: event.type, createdAt: asTimestamp(event.createdAt), hostUid: event.hostUid, participantId: event.participantId })),
+  }
+}
+
+/**
+ * Owner-only operational projection. The browser receives paginated user and
+ * room summaries, never raw participant answers, private question material or
+ * a subscription to protected database roots. Historical event metrics are
+ * deliberately null when no persisted events exist instead of being shown as 0.
+ */
+exports.getOwnerAdminDashboard = onCall(async request => {
+  assertPlatformOwner(request)
+  const input = asObject(request.data)
+  const now = Date.now()
+  const requestedFrom = asTimestamp(input.from)
+  const requestedTo = asTimestamp(input.to)
+  const to = requestedTo > 0 ? Math.min(requestedTo, now) : now
+  const from = requestedFrom > 0 ? Math.min(requestedFrom, to) : to - 30 * 24 * 60 * 60 * 1000
+  const search = String(input.search || '').trim().toLocaleLowerCase('ru-RU').slice(0, 120)
+  const pageSize = Math.max(10, Math.min(100, Math.floor(Number(input.pageSize) || 30)))
+  const [usersSnap, workspacesSnap, sessionsSnap, archivesSnap, productsSnap, accessSnap, packsSnap, feedbackSnap, auditSnap] = await Promise.all([
+    db.ref('users').once('value'), db.ref('workspaces').once('value'), db.ref('sessions').once('value'),
+    db.ref('sessionArchives').once('value'), db.ref('products').once('value'), db.ref('workspaceProducts').once('value'),
+    db.ref('globalPacks').once('value'), db.ref('feedback').once('value'), db.ref('adminAudit').limitToLast(100).once('value'),
+  ])
+  const users = asObject(usersSnap.val())
+  const workspaces = asObject(workspacesSnap.val())
+  const liveRooms = Object.values(asObject(sessionsSnap.val())).filter(room => room?.roomId).map(safeAdminRoom)
+  const archivedRooms = Object.values(asObject(archivesSnap.val())).filter(room => room?.roomId).map(safeAdminRoom)
+  const roomsById = new Map(archivedRooms.map(room => [room.roomId, room]))
+  liveRooms.forEach(room => roomsById.set(room.roomId, room))
+  const rooms = [...roomsById.values()]
+  const inPeriod = timestamp => timestamp >= from && timestamp <= to
+  const roomEvents = rooms.flatMap(room => room.events.map(event => ({ ...event, roomId: room.roomId, workspaceId: room.workspaceId })))
+  const joinedEvents = roomEvents.filter(event => event.type === 'participant_joined' && inPeriod(event.createdAt))
+  const finishedEvents = roomEvents.filter(event => event.type === 'participant_finished' && inPeriod(event.createdAt))
+  const eventHistoryAvailable = roomEvents.length > 0
+  const registrations = Object.values(users).filter(user => inPeriod(asTimestamp(user?.createdAt)))
+  const registeredByDay = {}
+  const startedByDay = {}
+  const joinsByDay = {}
+  const finishedByDay = {}
+  registrations.forEach(user => { const day = ownerDay(asTimestamp(user.createdAt)); registeredByDay[day] = (registeredByDay[day] || 0) + 1 })
+  rooms.filter(room => room.startedAt && inPeriod(room.startedAt)).forEach(room => { const day = ownerDay(room.startedAt); startedByDay[day] = (startedByDay[day] || 0) + 1 })
+  joinedEvents.forEach(event => { const day = ownerDay(event.createdAt); joinsByDay[day] = (joinsByDay[day] || 0) + 1 })
+  finishedEvents.forEach(event => { const day = ownerDay(event.createdAt); finishedByDay[day] = (finishedByDay[day] || 0) + 1 })
+  const days = [...new Set([...Object.keys(registeredByDay), ...Object.keys(startedByDay), ...Object.keys(joinsByDay), ...Object.keys(finishedByDay)])].sort()
+  // Both an open lobby and a live game can be active now. An old room is only
+  // labelled inactive; no write is made and its game lifecycle is preserved.
+  const activeNow = liveRooms.filter(room => room.operationalStatus === 'active')
+  const inactiveUnfinished = liveRooms.filter(room => room.operationalStatus === 'inactive')
+  const modeUsage = ['diagnostic', 'quiz', 'wheel'].map(mode => ({ mode, value: rooms.filter(room => room.mode === mode && inPeriod(room.createdAt)).length }))
+  const userRows = Object.values(users).filter(user => user?.uid).map(user => {
+    const ownRooms = rooms.filter(room => room.hostUid === user.uid)
+    return {
+      uid: user.uid, fullName: user.fullName || 'Без имени', email: user.email || null, status: user.status || 'pending',
+      workspaceId: user.workspaceId || '', createdAt: asTimestamp(user.createdAt), lastActiveAt: asTimestamp(user.lastActiveAt) || null,
+      createdRooms: ownRooms.length, completedRooms: ownRooms.filter(room => room.phase === 'closed').length,
+      roomParticipations: ownRooms.reduce((sum, room) => sum + room.participantCount, 0),
+    }
+  }).filter(user => !search || [user.fullName, user.email || '', user.uid].join(' ').toLocaleLowerCase('ru-RU').includes(search)).sort((a, b) => b.createdAt - a.createdAt).slice(0, pageSize)
+  const roomRows = rooms.filter(room => !search || [room.roomTitle, room.displayCode, room.hostUid].join(' ').toLocaleLowerCase('ru-RU').includes(search)).sort((a, b) => b.createdAt - a.createdAt).slice(0, pageSize)
+  const administrativeAudit = Object.values(asObject(auditSnap.val())).filter(item => item?.id).map(item => ({ ...item, createdAt: asTimestamp(item.createdAt) }))
+  const activity = [
+    ...registrations.map(user => ({ id: `registration:${user.uid}`, type: 'registration', actorUid: user.uid, targetId: user.uid, createdAt: asTimestamp(user.createdAt) })),
+    ...roomEvents.filter(event => ['room_created', 'room_started', 'room_closed'].includes(event.type)).map(event => ({ id: event.id, type: event.type, actorUid: event.hostUid || null, targetId: event.roomId, createdAt: event.createdAt })),
+    ...administrativeAudit,
+  ].sort((a, b) => b.createdAt - a.createdAt).slice(0, 60)
+  return {
+    generatedAt: now, timezone: 'Asia/Almaty',
+    metrics: {
+      totalAccounts: Object.keys(users).length, newRegistrations: registrations.length,
+      activeHosts: new Set(rooms.filter(room => room.startedAt && inPeriod(room.startedAt)).map(room => room.hostUid)).size,
+      roomsCreated: rooms.filter(room => inPeriod(room.createdAt)).length,
+      roomsStarted: rooms.filter(room => room.startedAt && inPeriod(room.startedAt)).length,
+      roomsCompleted: rooms.filter(room => room.endedAt && inPeriod(room.endedAt)).length,
+      roomsActiveNow: activeNow.length, inactiveUnfinished: inactiveUnfinished.length,
+      participantConnections: eventHistoryAvailable ? joinedEvents.length : null,
+      completedRuns: eventHistoryAvailable ? finishedEvents.length : null,
+    },
+    charts: { daily: days.map(day => ({ day, registrations: registeredByDay[day] || 0, starts: startedByDay[day] || 0, joins: eventHistoryAvailable ? joinsByDay[day] || 0 : null, completions: eventHistoryAvailable ? finishedByDay[day] || 0 : null })), modeUsage },
+    users: userRows, rooms: roomRows, activity,
+    workspaces, products: asObject(productsSnap.val()), workspaceProducts: asObject(accessSnap.val()), packs: asObject(packsSnap.val()), feedback: asObject(feedbackSnap.val()),
+  }
+})
+
+/** Reversible account access change with server-side auditing. It never closes a room. */
+exports.changeLeaderAccess = onCall(async request => {
+  const actorUid = assertPlatformOwner(request)
+  const { uid, status, reason } = asObject(request.data)
+  if (typeof uid !== 'string' || !['active', 'paused', 'revoked'].includes(status)) throw new HttpsError('invalid-argument', 'Некорректные параметры доступа.')
+  if (uid === actorUid) throw new HttpsError('failed-precondition', 'Нельзя изменить собственный доступ владельца.')
+  const profileSnap = await db.ref(`users/${uid}`).once('value')
+  const profile = profileSnap.val()
+  if (!profile) throw new HttpsError('not-found', 'Пользователь не найден.')
+  const now = Date.now()
+  const audit = { id: adminAuditId('access_changed', uid, now), type: 'access_changed', actorUid, targetId: uid, targetName: profile.fullName || uid, previousStatus: profile.status || 'pending', nextStatus: status, reason: typeof reason === 'string' ? reason.trim().slice(0, 300) : '', createdAt: now }
+  await db.ref().update({ [`users/${uid}/status`]: status, [`users/${uid}/updatedAt`]: now, [`adminAudit/${audit.id}`]: audit })
+  return { status, audit }
+})
 const publicPack = source => {
   const sourceQuestions = source.questions || source.content?.questions || source.publicContent?.questions || {}
   const questions = publicQuestions(sourceQuestions)

@@ -241,6 +241,10 @@
     "feedback": {
       ".read": "auth != null && auth.token.platformAdmin === true",
       "$feedbackId": { ".write": "auth != null && (auth.token.platformAdmin === true || (!data.exists() && auth.token.firebase.sign_in_provider !== 'anonymous' && newData.child('uid').val() === auth.uid && newData.child('workspaceId').val() === root.child('users').child(auth.uid).child('workspaceId').val()))" }
+    },
+    "adminAudit": {
+      ".read": "auth != null && auth.token.platformAdmin === true",
+      ".write": false
     }
   }
 }

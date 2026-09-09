@@ -820,6 +820,49 @@ export const saveGlobalPackAsOwner = async (draft: ContentPack) => {
   return pack
 }
 
+export type OwnerDashboard = {
+  generatedAt: number
+  timezone: string
+  metrics: { totalAccounts: number; newRegistrations: number; activeHosts: number; roomsCreated: number; roomsStarted: number; roomsCompleted: number; roomsActiveNow: number; inactiveUnfinished: number; participantConnections: number | null; completedRuns: number | null }
+  charts: { daily: Array<{ day: string; registrations: number; starts: number; joins: number | null; completions: number | null }>; modeUsage: Array<{ mode: string; value: number }> }
+  users: Array<{ uid: string; fullName: string; email: string | null; status: UserStatus; workspaceId: string; createdAt: number; lastActiveAt: number | null; createdRooms: number; completedRooms: number; roomParticipations: number }>
+  rooms: Array<{ roomId: string; roomTitle: string; displayCode: string; hostUid: string; workspaceId: string; mode: RoomMode; phase: SessionPhase; operationalStatus: 'active' | 'inactive' | 'completed' | 'unknown'; createdAt: number; startedAt: number | null; endedAt: number | null; lastActivityAt: number | null; participantCount: number; completedCount: number }>
+  activity: Array<{ id: string; type: string; actorUid?: string | null; targetId?: string; targetName?: string; reason?: string; createdAt: number }>
+  workspaces: Record<string, Workspace>
+  products: Record<string, ProductConfig>
+  workspaceProducts: Record<string, Record<string, WorkspaceProduct>>
+  packs: Record<string, ContentPack>
+  feedback: Record<string, FeedbackItem>
+}
+
+/** Fetches a compact, server-authenticated owner projection. No owner screen
+ * subscribes to raw database roots, which avoids permission leaks and prevents
+ * room answers from being downloaded for administration. */
+export const getOwnerAdminDashboard = async (range: { from: number; to: number }, search = ''): Promise<OwnerDashboard> => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
+  if (!functions) throw new Error('Служба административной сводки недоступна.')
+  const response = await httpsCallable(functions, 'getOwnerAdminDashboard')({ ...range, search, pageSize: 50 })
+  return response.data as OwnerDashboard
+}
+
+export const changeLeaderAccess = async (uid: string, status: UserStatus, reason = '') => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!services.auth.currentUser || services.auth.currentUser.isAnonymous) throw new Error('Войдите как владелец платформы.')
+  if (!functions) throw new Error('Служба изменения доступа недоступна.')
+  try {
+    const result = await httpsCallable(functions, 'changeLeaderAccess')({ uid, status, reason })
+    return result.data as { status: UserStatus }
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+    if (code.includes('failed-precondition')) throw new Error('Нельзя изменить собственный доступ владельца.')
+    if (code.includes('permission')) throw new Error('Сервер отклонил изменение доступа: недостаточно прав.')
+    throw error instanceof Error ? error : new Error('Не удалось изменить доступ пользователя.')
+  }
+}
+
 /** Publishes safe leader-facing projections after protected quiz-pack import.
  * It never creates starter content in the browser and never exposes answer keys. */
 export const publishSafePackCatalogueAsOwner = async () => {

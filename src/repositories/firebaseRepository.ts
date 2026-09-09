@@ -8,6 +8,7 @@
 export {
   archiveSession,
   copyQuizPackToWorkspace,
+  changeLeaderAccess,
   createSession,
   createSessionRecord,
   defaultDiagnosticTemplateSelection,
@@ -19,6 +20,7 @@ export {
   ensureParticipantRoomData,
   firebaseReady,
   isPlatformOwner,
+  getOwnerAdminDashboard,
   joinSession,
   loginLeader,
   logoutLeader,
@@ -65,3 +67,4 @@ export {
 } from '../lib/firebase'
 
 export type { RoomPilotDetails } from '../lib/firebase'
+export type { OwnerDashboard } from '../lib/firebase'
