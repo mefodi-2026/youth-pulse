@@ -28,6 +28,8 @@ import { AppIcon, type AppIconName, Button, LoadingState, PageHeader, StatusBadg
 import { QuestionPackPreview } from './components/QuestionPackPreview'
 import { feedbackFormUrl } from './lib/feedback'
 import { getHomeAssetsStatus, homeAssets, primeHomeAssets, retryHomeAssets, subscribeHomeAssets, type HomeAssetsStatus } from './lib/homeAssets'
+import { PlatformThemeToggle } from './components/PlatformThemeToggle'
+import { applyPlatformTheme, clearPlatformTheme, readPlatformTheme } from './lib/platformTheme'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
 const publicAsset = (fileName: string) => `${import.meta.env.BASE_URL}assets/${fileName}`
@@ -55,24 +57,37 @@ function App() {
   const isHostRoute = path.endsWith('/host') || path.endsWith('/results')
   const requestedTab = isHostRoute ? readHostTab() : null
   const hostTab = requestedTab || 'main'
+  const isOwnerRoute = path.endsWith('/owner')
+
+  // The owner console retains its separate theme implementation. Every other
+  // route gets the saved platform preference before its page content renders.
+  useEffect(() => {
+    if (isOwnerRoute) {
+      clearPlatformTheme()
+      return
+    }
+    applyPlatformTheme(readPlatformTheme())
+  }, [isOwnerRoute])
 
   // Begin image fetching during the access check, rather than after HomePanel
   // mounts. The module-level loader is idempotent and is never called for a
   // participant, stage, or public feedback route.
   if (isAppEntry || (path.endsWith('/host') && hostTab === 'main')) void primeHomeAssets()
 
-  if (path.endsWith('/feedback')) return <FeedbackPage />
+  const withPlatformTheme = (screen: React.ReactNode) => <>{screen}<PlatformThemeToggle /></>
+
+  if (path.endsWith('/feedback')) return withPlatformTheme(<FeedbackPage />)
   if (path.endsWith('/owner')) return <OwnerAdmin />
-  if (path.endsWith('/owner-login')) return <AuthPage mode="owner-login" />
-  if (path.endsWith('/login')) return <AuthPage mode="login" />
-  if (path.endsWith('/register')) return <AuthPage mode="register" />
-  if (path.endsWith('/account')) return <LeaderRoute allowInactive>{profile => <AccountPage profile={profile} />}</LeaderRoute>
+  if (path.endsWith('/owner-login')) return withPlatformTheme(<AuthPage mode="owner-login" />)
+  if (path.endsWith('/login')) return withPlatformTheme(<AuthPage mode="login" />)
+  if (path.endsWith('/register')) return withPlatformTheme(<AuthPage mode="register" />)
+  if (path.endsWith('/account')) return withPlatformTheme(<LeaderRoute allowInactive>{profile => <AccountPage profile={profile} />}</LeaderRoute>)
   if (isHostRoute) {
-    return <LeaderRoute waitForHomeAssets={path.endsWith('/host') && hostTab === 'main'}>{profile => <Host leader={profile} initialTab={path.endsWith('/results') ? 'results' : hostTab} initialRoom={queryRoom()} />}</LeaderRoute>
+    return withPlatformTheme(<LeaderRoute waitForHomeAssets={path.endsWith('/host') && hostTab === 'main'}>{profile => <Host leader={profile} initialTab={path.endsWith('/results') ? 'results' : hostTab} initialRoom={queryRoom()} />}</LeaderRoute>)
   }
-  if (path.endsWith('/join')) return <MobileParticipantFlow room={queryRoom()} />
-  if (path.endsWith('/stage')) return <StageDashboard room={queryRoom()} />
-  return <AppEntry />
+  if (path.endsWith('/join')) return withPlatformTheme(<MobileParticipantFlow room={queryRoom()} />)
+  if (path.endsWith('/stage')) return withPlatformTheme(<StageDashboard room={queryRoom()} />)
+  return withPlatformTheme(<AppEntry />)
 }
 
 /** The root route is an entry gate, not a public product page. A leader who
