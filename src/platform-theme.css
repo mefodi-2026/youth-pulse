@@ -465,6 +465,12 @@ html[data-platform-theme="light"] :is(.feedback-copy, .feedback-qr-panel, .ds-lo
   box-shadow: 0 16px 42px rgba(9, 62, 42, .10);
 }
 
+html[data-platform-theme="light"] .feedback-page {
+  /* Decorative orbs may extend beyond the artboard, but never create a
+     horizontal document scrollbar. The content itself remains scrollable. */
+  overflow-x: clip;
+}
+
 html[data-platform-theme="light"] :is(.feedback-copy > p:not(.eyebrow), .feedback-qr-panel :is(p, small), .ds-loading-state p:not(.eyebrow)) {
   color: var(--muted);
 }
