@@ -41,6 +41,13 @@
   color:var(--owner-text-primary);
 }
 
+.owner-shell .eyebrow,
+.owner-shell :is(.owner-header-subtitle,.owner-help,.owner-empty-copy,.owner-graph>p,.owner-chart-key,.owner-chart-day small),
+.owner-shell .owner-range button:not(.selected),
+.owner-shell .owner-theme-toggle button:not(.selected) {
+  color:var(--owner-text-secondary);
+}
+
 .owner-shell :is(.glass,.owner-card,.owner-table-card,.owner-session-card,.owner-feedback-card,.owner-products-note,.product-editor,.pack-editor,.leader-detail,.owner-note,.owner-confirm,.owner-sidebar-foot) :is(p,small,label,dt),
 .owner-modal-backdrop .owner-confirm :is(p,small,label,dt) {
   color:var(--owner-text-secondary);
@@ -49,6 +56,17 @@
 .owner-shell :is(.glass,.owner-card,.owner-table-card,.owner-session-card,.owner-feedback-card,.owner-products-note,.product-editor,.pack-editor,.leader-detail,.owner-note,.owner-confirm) :is(b,strong,dd),
 .owner-modal-backdrop .owner-confirm :is(b,strong,dd) {
   color:var(--owner-text-primary);
+}
+
+.owner-shell .owner-table :is(th,td),
+.owner-shell .owner-table :is(b,strong),
+.owner-shell :is(input,textarea,select) {
+  color:var(--owner-text-primary);
+}
+
+.owner-shell :is(input,textarea)::placeholder {
+  color:var(--owner-text-secondary);
+  opacity:.88;
 }
 
 .owner-shell :is(.owner-status.active,.owner-status.product-enabled),
