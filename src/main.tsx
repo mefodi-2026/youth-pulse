@@ -4,6 +4,7 @@ import App from './App'
 import './styles.css'
 import './design-system.css'
 import './owner-theme.css'
+import './platform-theme.css'
 
 // GitHub Pages serves unknown routes through 404.html. Restore the original
 // participant/host URL after that lightweight fallback brings us back to the app.

@@ -1,0 +1,524 @@
+/*
+ * Platform-wide theme bridge.
+ *
+ * Mode screens deliberately own their visual tokens so their dark appearance
+ * can evolve independently.  The light preference is applied here, after all
+ * mode styles, by replacing those semantic tokens at the owning boundary.
+ * No session, room, or presentation state is involved in this stylesheet.
+ */
+
+html[data-platform-theme="light"] {
+  color-scheme: light;
+
+  --ink: #edf6f0;
+  --surface: rgba(255, 255, 255, .92);
+  --surface-strong: #f8fcf9;
+  --line: rgba(14, 82, 57, .20);
+  --text: #092d21;
+  --muted: #49665b;
+  --mint: #078a55;
+  --mint-strong: #067346;
+  --gold: #8a6515;
+  --danger: #b44743;
+  --danger-ink: #fff8f6;
+  --field: #ffffff;
+
+  --ds-geoflow-background: #edf6f0;
+  --ds-geoflow-primary: #087c4d;
+  --ds-geoflow-accent: #07965b;
+  --ds-geoflow-green: #087c4d;
+  --ds-geoflow-deep-emerald: #087c4d;
+  --ds-geoflow-calm-emerald: #066b42;
+  --ds-geoflow-muted-gold: #8a6515;
+  --ds-geoflow-white: #092d21;
+  --ds-background: #edf6f0;
+  --ds-surface: rgba(255, 255, 255, .92);
+  --ds-surface-elevated: #ffffff;
+  --ds-surface-subtle: rgba(12, 99, 68, .06);
+  --ds-primary: #087c4d;
+  --ds-primary-hover: #066b42;
+  --ds-accent: #07965b;
+  --ds-success: #087c4d;
+  --ds-warning: #8a6515;
+  --ds-danger: #b44743;
+  --ds-text: #092d21;
+  --ds-text-muted: #49665b;
+  --ds-text-faint: #5e786c;
+  --ds-border: rgba(14, 82, 57, .20);
+  --ds-border-strong: rgba(10, 119, 73, .42);
+  --ds-focus: #057e4b;
+  --ds-shadow-sm: 0 8px 24px rgba(9, 62, 42, .10);
+  --ds-shadow-md: 0 18px 54px rgba(9, 62, 42, .13);
+  --ds-shadow-lg: 0 28px 90px rgba(9, 62, 42, .16);
+  --ds-sidebar: rgba(247, 252, 249, .96);
+  --ds-nav-hover: rgba(7, 138, 85, .10);
+  --ds-room: rgba(7, 138, 85, .08);
+  --ds-border-inset: rgba(255, 255, 255, .88);
+  --ds-accent-border: rgba(138, 101, 21, .50);
+  --ds-hero: linear-gradient(145deg, #dff4e8, #f8fcf9);
+  --ds-accent-glow: radial-gradient(circle, rgba(7, 138, 85, .15), transparent 68%);
+  --ds-feature: rgba(7, 138, 85, .06);
+  --ds-input: #ffffff;
+  --ds-focus-ring: rgba(7, 138, 85, .18);
+  --ds-page-gradient: radial-gradient(800px 420px at 88% -8%, rgba(7, 138, 85, .14), transparent 65%), var(--ds-background);
+  --ds-progress-track: rgba(9, 64, 43, .14);
+}
+
+html[data-platform-theme="light"] body,
+html[data-platform-theme="light"] #root {
+  color: var(--text);
+  background: var(--ink);
+}
+
+/* Fixed, readable brand treatment on every host tab. */
+html[data-platform-theme="light"] .host-menu,
+html[data-platform-theme="light"] .host-menu::before {
+  border-color: var(--line);
+  background: var(--ds-sidebar);
+}
+
+html[data-platform-theme="light"] .brand-vibe {
+  padding: 9px 10px;
+  border-radius: 14px;
+  background: #087c4d;
+  box-shadow: 0 8px 18px rgba(9, 62, 42, .12);
+}
+
+html[data-platform-theme="light"] .host-menu nav button,
+html[data-platform-theme="light"] .host-menu nav button:hover,
+html[data-platform-theme="light"] .host-menu nav button.selected {
+  color: #163d2f;
+}
+
+html[data-platform-theme="light"] .host-menu nav button:hover {
+  background: var(--ds-nav-hover);
+}
+
+html[data-platform-theme="light"] .host-menu nav button.selected {
+  background: rgba(7, 138, 85, .16);
+  box-shadow: inset 0 0 0 1px rgba(7, 138, 85, .16);
+}
+
+html[data-platform-theme="light"] :is(.host-menu-toggle, .host-edge-trigger) {
+  color: var(--text);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 10px 26px rgba(9, 62, 42, .14);
+}
+
+html[data-platform-theme="light"] .menu-room {
+  border-color: var(--line);
+  background: rgba(7, 138, 85, .07);
+}
+
+/* Standard host surfaces: rooms, history, settings, profile, rules and setup. */
+html[data-platform-theme="light"] :is(
+  .host-shell,
+  .auth-page,
+  .account-loading-screen,
+  .stage-dashboard,
+  .mobile-wrap,
+  .feedback-page,
+  .results
+) {
+  color: var(--text);
+  background: radial-gradient(760px 440px at 92% -10%, rgba(7, 138, 85, .13), transparent 66%), radial-gradient(540px 360px at 8% 100%, rgba(29, 126, 80, .08), transparent 72%), var(--ink);
+}
+
+html[data-platform-theme="light"] :is(
+  .glass,
+  .empty-state,
+  .control-panel,
+  .settings-panel,
+  .export-panel,
+  .room-row,
+  .archive-card,
+  .question-group,
+  .question-editor,
+  .room-create-shell,
+  .room-title-editor,
+  .room-empty-pack,
+  .history-filters,
+  .profile-panel dl > div,
+  .room-connection-qr,
+  .room-connection-participants,
+  .room-progress-board,
+  .room-results-ready,
+  .result-board,
+  .closed-room-panel,
+  .results-lock,
+  .tip,
+  .question-pack-preview
+) {
+  color: var(--text);
+  border-color: var(--line);
+  background: linear-gradient(145deg, var(--surface-strong), var(--surface));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .92), 0 16px 42px rgba(9, 62, 42, .10);
+}
+
+html[data-platform-theme="light"] :is(
+  .host-shell,
+  .auth-page,
+  .stage-dashboard,
+  .mobile-wrap,
+  .feedback-page,
+  .results,
+  .glass,
+  .empty-state,
+  .control-panel,
+  .settings-panel,
+  .export-panel,
+  .room-row,
+  .archive-card,
+  .question-group,
+  .question-editor,
+  .room-create-shell,
+  .room-title-editor,
+  .room-empty-pack,
+  .history-filters,
+  .question-pack-preview
+) :is(h1, h2, h3, b, strong, dt, dd) {
+  color: var(--text);
+}
+
+html[data-platform-theme="light"] :is(
+  .host-shell,
+  .auth-page,
+  .stage-dashboard,
+  .mobile-wrap,
+  .feedback-page,
+  .results
+) :is(p, small, label, code, .input-help) {
+  color: var(--muted);
+}
+
+html[data-platform-theme="light"] :is(input, select, textarea) {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--field);
+}
+
+html[data-platform-theme="light"] :is(input, select, textarea)::placeholder {
+  color: #6a8176;
+  opacity: 1;
+}
+
+html[data-platform-theme="light"] :is(input, select, textarea):focus-visible,
+html[data-platform-theme="light"] :is(input, select, textarea):focus {
+  border-color: var(--mint);
+  box-shadow: 0 0 0 3px rgba(7, 138, 85, .18);
+}
+
+html[data-platform-theme="light"] :is(.button, .ds-button):not(.secondary):not(.danger),
+html[data-platform-theme="light"] :is(.mobile-action, .stage-results-button, .stage-retry) {
+  color: #ffffff;
+  border-color: transparent;
+  background: #087c4d;
+}
+
+html[data-platform-theme="light"] :is(.button, .ds-button, .mobile-action, .stage-results-button, .stage-retry):hover:not(:disabled) {
+  color: #ffffff;
+  background: #066b42;
+}
+
+html[data-platform-theme="light"] :is(.button, .ds-button).secondary,
+html[data-platform-theme="light"] .mobile-action.secondary {
+  color: #075235;
+  border-color: var(--line);
+  background: #ffffff;
+}
+
+html[data-platform-theme="light"] :is(.button, .ds-button).secondary:hover:not(:disabled),
+html[data-platform-theme="light"] .mobile-action.secondary:hover:not(:disabled) {
+  color: #ffffff;
+  border-color: #087c4d;
+  background: #087c4d;
+}
+
+html[data-platform-theme="light"] :is(.button, .ds-button).danger {
+  color: #a23d38;
+  border-color: rgba(180, 71, 67, .50);
+  background: #fff7f6;
+}
+
+html[data-platform-theme="light"] :is(.button, .ds-button, .mobile-action):disabled {
+  color: #71857b;
+  border-color: rgba(14, 82, 57, .12);
+  background: #e5efe9;
+}
+
+html[data-platform-theme="light"] :is(.status, .ds-status, .stage-live) {
+  color: #ffffff;
+  background: #087c4d;
+}
+
+html[data-platform-theme="light"] :is(.status.demo, .stage-ready, .ds-status-muted) {
+  color: #ffffff;
+  background: #886515;
+}
+
+/* Host quiz has an independent token scope.  Remap it at that scope. */
+html[data-platform-theme="light"] .host-shell[data-host-tab="quiz"] {
+  --quiz-ink: #edf6f0;
+  --quiz-surface: #ffffff;
+  --quiz-surface-raised: #f7fcf8;
+  --quiz-field: #ffffff;
+  --quiz-accent: #078a55;
+  --quiz-accent-hover: #066b42;
+  --quiz-accent-active: #05623b;
+  --quiz-text: #092d21;
+  --quiz-text-muted: #49665b;
+  --quiz-border: rgba(14, 82, 57, .20);
+  --quiz-border-strong: rgba(10, 119, 73, .40);
+  --quiz-warning: #8a6515;
+  --quiz-danger: #b44743;
+  --quiz-shadow: 0 18px 44px rgba(9, 62, 42, .12);
+  --quiz-focus: 0 0 0 3px rgba(7, 138, 85, .22);
+  color: var(--quiz-text);
+  background: var(--ds-page-gradient);
+}
+
+html[data-platform-theme="light"] .host-shell[data-host-tab="quiz"] :is(.quiz-pilot-intro, .quiz-pilot-pack-card, .question-pack-preview[data-appearance="quiz"], .quiz-pack-row, .quiz-pack-current) {
+  color: var(--quiz-text);
+  border-color: var(--quiz-border);
+  background: linear-gradient(145deg, #ffffff, #f4fbf6);
+  box-shadow: var(--quiz-shadow);
+}
+
+html[data-platform-theme="light"] .host-shell[data-host-tab="quiz"] :is(.quiz-pilot-workspace-action, .question-pack-preview[data-appearance="quiz"] .question-pack-preview-action) {
+  color: #075235;
+  border-color: var(--quiz-border);
+  background: #ffffff;
+}
+
+html[data-platform-theme="light"] .host-shell[data-host-tab="quiz"] :is(.quiz-pilot-workspace-action, .question-pack-preview[data-appearance="quiz"] .question-pack-preview-action):hover:not(:disabled) {
+  color: #ffffff;
+  border-color: #087c4d;
+  background: #087c4d;
+}
+
+/* Operational host tabs have a second local workspace scope on mobile. */
+html[data-platform-theme="light"] .host-shell:is([data-host-tab="profile"], [data-host-tab="settings"], [data-host-tab="rules"], [data-host-tab="rooms"], [data-host-tab="currentRoom"]) {
+  --workspace-ink: #edf6f0;
+  --workspace-surface: #ffffff;
+  --workspace-surface-raised: #f7fcf8;
+  --workspace-field: #ffffff;
+  --workspace-accent: #078a55;
+  --workspace-text: #092d21;
+  --workspace-text-muted: #49665b;
+  --workspace-border: rgba(14, 82, 57, .20);
+  --workspace-warning: #8a6515;
+}
+
+html[data-platform-theme="light"] .host-shell:is([data-host-tab="profile"], [data-host-tab="settings"], [data-host-tab="rules"], [data-host-tab="rooms"], [data-host-tab="currentRoom"]) :is(.glass, .metric, .room-title-editor, .history-filters, .profile-panel dl > div, .qr-card code) {
+  color: var(--workspace-text);
+  border-color: var(--workspace-border);
+  background: linear-gradient(145deg, var(--workspace-surface-raised), var(--workspace-surface));
+}
+
+html[data-platform-theme="light"] .host-shell[data-host-tab="currentRoom"] .empty-state h3,
+html[data-platform-theme="light"] .host-shell[data-host-tab="currentRoom"] .empty-state p {
+  color: var(--workspace-text);
+}
+
+html[data-platform-theme="light"] .host-shell[data-host-tab="currentRoom"] .empty-state p,
+html[data-platform-theme="light"] .host-shell[data-host-tab="rooms"] :is(.room-row p, .archive-card p),
+html[data-platform-theme="light"] .host-shell[data-host-tab="rules"] :is(.rules-intro p, .rule-card p) {
+  color: var(--workspace-text-muted);
+}
+
+/* Public participant flows have their own mode tokens and must not inherit
+   the dark values declared by those flows. */
+html[data-platform-theme="light"] [data-participant-mode="quiz"] .mobile-flow {
+  --quiz-ink: #edf6f0;
+  --quiz-surface: #ffffff;
+  --quiz-surface-raised: #f7fcf8;
+  --quiz-field: #ffffff;
+  --quiz-accent: #078a55;
+  --quiz-accent-hover: #066b42;
+  --quiz-text: #092d21;
+  --quiz-text-muted: #49665b;
+  --quiz-border: rgba(14, 82, 57, .20);
+  --quiz-warning: #8a6515;
+  color: var(--quiz-text);
+  background: var(--ds-page-gradient);
+}
+
+html[data-platform-theme="light"] [data-participant-mode="diagnostic"] .mobile-flow {
+  --diagnostic-ink: #edf6f0;
+  --diagnostic-surface: #ffffff;
+  --diagnostic-raised: #f7fcf8;
+  --diagnostic-field: #ffffff;
+  --diagnostic-accent: #078a55;
+  --diagnostic-accent-hover: #066b42;
+  --diagnostic-text: #092d21;
+  --diagnostic-muted: #49665b;
+  --diagnostic-border: rgba(14, 82, 57, .20);
+  --diagnostic-warning: #8a6515;
+  color: var(--diagnostic-text);
+  background: var(--ds-page-gradient);
+}
+
+html[data-platform-theme="light"] :is([data-participant-mode="quiz"], [data-participant-mode="diagnostic"]) .phone-screen {
+  color: var(--text);
+  border-color: var(--line);
+  background: linear-gradient(150deg, #ffffff, #f4fbf6);
+  box-shadow: inset 0 1px 0 #ffffff, 0 26px 72px rgba(9, 62, 42, .16);
+}
+
+html[data-platform-theme="light"] :is([data-participant-mode="quiz"], [data-participant-mode="diagnostic"]) :is(.intro-info, .waiting-status, .report-summary, .flow-note, .wish-download-panel) {
+  color: var(--text);
+  border-color: var(--line);
+  background: rgba(7, 138, 85, .055);
+}
+
+html[data-platform-theme="light"] :is([data-participant-mode="quiz"], [data-participant-mode="diagnostic"]) :is(.answer-options button, .nickname-screen input) {
+  color: var(--text);
+  border-color: var(--line);
+  background: #ffffff;
+}
+
+html[data-platform-theme="light"] :is([data-participant-mode="quiz"], [data-participant-mode="diagnostic"]) .answer-options button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: rgba(7, 138, 85, .54);
+  background: rgba(7, 138, 85, .10);
+}
+
+html[data-platform-theme="light"] :is([data-participant-mode="quiz"], [data-participant-mode="diagnostic"]) :is(.phone-screen > p, .flow-footnote, .input-help, .question-screen > p, .intro-info small, .intro-info span, .waiting-status small, .flow-note p) {
+  color: var(--muted) !important;
+}
+
+html[data-platform-theme="light"] :is([data-participant-mode="quiz"], [data-participant-mode="diagnostic"]) .flow-error,
+html[data-platform-theme="light"] .wheel-mobile .flow-error,
+html[data-platform-theme="light"] :is(.connection-warning, .auth-error) {
+  color: #8d302b !important;
+  border-color: rgba(180, 71, 67, .42);
+  background: #fff1ef;
+}
+
+/* The projection dashboard remaps its local stage variables, without touching
+   the intentionally dark quiz podium or the wheel's coloured SVG sectors. */
+html[data-platform-theme="light"] .stage-dashboard[data-stage-mode="diagnostic"] {
+  --stage-ink: #edf6f0;
+  --stage-surface: #ffffff;
+  --stage-raised: #f7fcf8;
+  --stage-accent: #078a55;
+  --stage-text: #092d21;
+  --stage-muted: #49665b;
+  --stage-border: rgba(14, 82, 57, .20);
+  color: var(--stage-text);
+  background: var(--ds-page-gradient);
+}
+
+html[data-platform-theme="light"] .stage-dashboard[data-stage-mode="diagnostic"] :is(.stage-hero-card, .stage-stat, .stage-result-control, .stage-ring) {
+  color: var(--stage-text);
+  border-color: var(--stage-border);
+  background: linear-gradient(145deg, #ffffff, #f4fbf6);
+}
+
+html[data-platform-theme="light"] .stage-dashboard[data-stage-mode="diagnostic"] :is(.stage-stat small, .stage-hero-copy > p:last-child, .stage-result-control p:not(.eyebrow), .stage-privacy) {
+  color: var(--stage-muted);
+}
+
+/* The quiz podium is intentionally a dark presentation surface even in the
+   light theme; restore its local on-dark text roles rather than bleaching the
+   visualisation or changing its layout. */
+html[data-platform-theme="light"] .quiz-winners-podium {
+  --text: #eef5ee;
+  --muted: #b7c9bf;
+}
+
+/* Wheel cards and controls become light surfaces.  The SVG slice palette is
+   deliberately omitted so sector colours remain stable and multicolour. */
+html[data-platform-theme="light"] :is(
+  .wheel-setup,
+  .wheel-join,
+  .wheel-pool,
+  .wheel-game-panel,
+  .wheel-pending,
+  .wheel-finish-screen,
+  .wheel-active-list,
+  .wheel-round-card,
+  .wheel-performing-card,
+  .wheel-reveal-card,
+  .wheel-history,
+  .wheel-prep-input,
+  .wheel-prep-actions,
+  .wheel-library-list li
+) {
+  color: var(--text);
+  border-color: var(--line);
+  background: linear-gradient(145deg, #ffffff, #f4fbf6);
+}
+
+html[data-platform-theme="light"] :is(.wheel-pool li, .wheel-list-item, .wheel-pending li, .wheel-library-list li, .wheel-pending-shortcut, .wheel-library-button, .wheel-performing-toolbar > span) {
+  color: var(--text);
+  border-color: var(--line);
+  background: rgba(7, 138, 85, .055);
+}
+
+/* Feedback, generic loading and portals are mounted outside individual views. */
+html[data-platform-theme="light"] :is(.feedback-copy, .feedback-qr-panel, .ds-loading-state) {
+  color: var(--text);
+  border-color: var(--line);
+  background: linear-gradient(145deg, #ffffff, #f4fbf6);
+  box-shadow: 0 16px 42px rgba(9, 62, 42, .10);
+}
+
+html[data-platform-theme="light"] :is(.feedback-copy > p:not(.eyebrow), .feedback-qr-panel :is(p, small), .ds-loading-state p:not(.eyebrow)) {
+  color: var(--muted);
+}
+
+html[data-platform-theme="light"] .feedback-brand button {
+  border-color: rgba(7, 121, 74, .22);
+  background: #087c4d;
+}
+
+html[data-platform-theme="light"] .app-modal {
+  background: rgba(6, 37, 26, .34);
+}
+
+html[data-platform-theme="light"] .app-modal-dialog {
+  color: var(--text);
+  border-color: var(--line);
+  background: linear-gradient(145deg, #ffffff, #f2faf5);
+  box-shadow: 0 24px 70px rgba(4, 35, 23, .26);
+}
+
+html[data-platform-theme="light"] .app-modal-dialog :is(h1, h2, h3, b, strong) {
+  color: var(--text);
+}
+
+html[data-platform-theme="light"] .app-modal-dialog p {
+  color: var(--muted);
+}
+
+html[data-platform-theme="light"] .app-modal-close {
+  color: var(--text);
+  border-color: var(--line);
+  background: #ffffff;
+}
+
+/* The feedback step is secondary by default, but needs the same contrast as
+   every other light-theme secondary action. */
+html[data-platform-theme="light"] .home-vibe-feedback-action {
+  color: #075235 !important;
+  border-color: rgba(7, 138, 85, .36) !important;
+  background: #ffffff !important;
+}
+
+html[data-platform-theme="light"] .home-vibe-feedback-action:hover:not(:disabled) {
+  color: #ffffff !important;
+  background: #087c4d !important;
+}
+
+html[data-platform-theme="light"] .platform-theme-toggle {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 12px 28px rgba(9, 62, 42, .16);
+}
+
+html[data-platform-theme="light"] .platform-theme-toggle button.selected {
+  color: #ffffff;
+  background: #087c4d;
+}
