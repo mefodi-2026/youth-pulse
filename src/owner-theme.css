@@ -17,3 +17,95 @@
   .owner-status.active,.owner-status.product-enabled { color:var(--owner-accent-ink); background:var(--owner-success); }.owner-status.pending,.owner-status.product-maintenance { color:#352908; background:#ebca70; }.owner-status.paused { color:#fff7e3; background:#8b6c27; }.owner-status.revoked,.owner-status.product-disabled { color:#fff0ec; background:var(--owner-danger); }.owner-status.product-testing { color:#f2fff8; background:#267b61; }
   .owner-error { border-color:color-mix(in srgb,var(--owner-danger) 52%,transparent); color:#fff4f2; background:color-mix(in srgb,var(--owner-danger) 82%,#4a1714); }.owner-success { border-color:color-mix(in srgb,var(--owner-success) 52%,transparent); color:#effff7; background:#087a4b; }
 }
+
+/* Text roles stay local to the owner console.  The design-system heading
+   defaults use its app-wide dark-theme token, so every owner surface needs an
+   explicit semantic role instead of inheriting that global colour. */
+.owner-shell {
+  --owner-text-primary:var(--owner-text);
+  --owner-text-secondary:var(--owner-muted);
+  --owner-text-on-accent:var(--owner-accent-ink);
+  --owner-text-on-danger:#fff5f3;
+  --owner-text-on-warning:#352908;
+  --owner-text-on-dark:#fff7e3;
+}
+
+.owner-shell[data-theme="light"] {
+  /* White labels need a darker emerald than the platform's dark-theme accent. */
+  --owner-accent:#087a4b;
+  --owner-success:#087a4b;
+}
+
+.owner-shell :is(h1,h2,h3),
+.owner-modal-backdrop :is(h1,h2,h3) {
+  color:var(--owner-text-primary);
+}
+
+.owner-shell :is(.glass,.owner-card,.owner-table-card,.owner-session-card,.owner-feedback-card,.owner-products-note,.product-editor,.pack-editor,.leader-detail,.owner-note,.owner-confirm,.owner-sidebar-foot) :is(p,small,label,dt),
+.owner-modal-backdrop .owner-confirm :is(p,small,label,dt) {
+  color:var(--owner-text-secondary);
+}
+
+.owner-shell :is(.glass,.owner-card,.owner-table-card,.owner-session-card,.owner-feedback-card,.owner-products-note,.product-editor,.pack-editor,.leader-detail,.owner-note,.owner-confirm) :is(b,strong,dd),
+.owner-modal-backdrop .owner-confirm :is(b,strong,dd) {
+  color:var(--owner-text-primary);
+}
+
+.owner-shell :is(.owner-status.active,.owner-status.product-enabled),
+.owner-shell :is(.owner-status.active,.owner-status.product-enabled) :is(small,b,strong),
+.owner-shell .button:not(.secondary):not(.danger),
+.owner-shell .owner-range button.selected,
+.owner-shell .owner-theme-toggle button.selected,
+.owner-modal-backdrop .button:not(.secondary):not(.danger) {
+  color:var(--owner-text-on-accent);
+}
+
+.owner-shell :is(.owner-status.pending,.owner-status.product-maintenance),
+.owner-shell :is(.owner-status.pending,.owner-status.product-maintenance) :is(small,b,strong) {
+  color:var(--owner-text-on-warning);
+}
+
+.owner-shell .owner-status.paused,
+.owner-shell .owner-status.paused :is(small,b,strong) {
+  color:var(--owner-text-on-dark);
+}
+
+.owner-shell :is(.owner-status.revoked,.owner-status.product-disabled,.owner-status.product-testing),
+.owner-shell :is(.owner-status.revoked,.owner-status.product-disabled,.owner-status.product-testing) :is(small,b,strong) {
+  color:var(--owner-text-on-danger);
+}
+
+.owner-shell .button.danger,
+.owner-modal-backdrop .button.danger {
+  color:var(--owner-text-on-danger);
+}
+
+.owner-shell .owner-error,
+.owner-shell .owner-error :is(p,small,b,strong),
+.owner-modal-backdrop .owner-error,
+.owner-modal-backdrop .owner-error :is(p,small,b,strong) {
+  color:#fff4f2;
+}
+
+.owner-shell .owner-success,
+.owner-shell .owner-success :is(p,small,b,strong),
+.owner-modal-backdrop .owner-success,
+.owner-modal-backdrop .owner-success :is(p,small,b,strong) {
+  color:#effff7;
+}
+
+/* A portal is outside .owner-shell, so it receives the same tokens from the
+   early html marker that prevents a light-theme flash on page reload. */
+html[data-owner-theme="light"] .owner-modal-backdrop {
+  --owner-text-primary:#073326;
+  --owner-text-secondary:#527066;
+  --owner-text-on-accent:#fff;
+  --owner-text-on-danger:#fff5f3;
+}
+
+html[data-owner-theme="dark"] .owner-modal-backdrop {
+  --owner-text-primary:#eef5ee;
+  --owner-text-secondary:#a9beb4;
+  --owner-text-on-accent:#04150f;
+  --owner-text-on-danger:#fff5f3;
+}
