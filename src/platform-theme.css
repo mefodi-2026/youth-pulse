@@ -457,6 +457,31 @@ html[data-platform-theme="light"] :is(.wheel-pool li, .wheel-list-item, .wheel-p
   background: rgba(7, 138, 85, .055);
 }
 
+html[data-platform-theme="light"] .wheel-mobile {
+  --text: #092d21;
+  --muted: #49665b;
+  --mint: #078a55;
+  --gold: #8a6515;
+  --line: rgba(14, 82, 57, .20);
+  color: var(--text);
+  background: var(--ds-page-gradient);
+}
+
+html[data-platform-theme="light"] .wheel-mobile .mobile-card {
+  color: var(--text);
+  border-color: var(--line);
+  background: linear-gradient(150deg, #ffffff, #f4fbf6);
+  box-shadow: inset 0 1px 0 #ffffff, 0 26px 72px rgba(9, 62, 42, .16);
+}
+
+html[data-platform-theme="light"] .wheel-mobile :is(h1, h2, h3, b, strong) {
+  color: var(--text);
+}
+
+html[data-platform-theme="light"] .wheel-mobile :is(p, small, label, .flow-label) {
+  color: var(--muted);
+}
+
 /* Feedback, generic loading and portals are mounted outside individual views. */
 html[data-platform-theme="light"] :is(.feedback-copy, .feedback-qr-panel, .ds-loading-state) {
   color: var(--text);
