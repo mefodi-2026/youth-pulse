@@ -257,8 +257,11 @@ html[data-platform-theme="light"] :is(.status.demo, .stage-ready, .ds-status-mut
   background: #886515;
 }
 
-/* Host quiz has an independent token scope.  Remap it at that scope. */
-html[data-platform-theme="light"] .host-shell[data-host-tab="quiz"] {
+/* Host quiz has an independent token scope.  It is used both by the
+   library tab and by an already-created quiz room, so remap both owning
+   boundaries.  Leaving the room boundary out was what made the light
+   navigation inherit the quiz's dark text token. */
+html[data-platform-theme="light"] .host-shell:is([data-host-tab="quiz"], [data-room-mode="quiz"]) {
   --quiz-ink: #edf6f0;
   --quiz-surface: #ffffff;
   --quiz-surface-raised: #f7fcf8;
@@ -278,20 +281,20 @@ html[data-platform-theme="light"] .host-shell[data-host-tab="quiz"] {
   background: var(--ds-page-gradient);
 }
 
-html[data-platform-theme="light"] .host-shell[data-host-tab="quiz"] :is(.quiz-pilot-intro, .quiz-pilot-pack-card, .question-pack-preview[data-appearance="quiz"], .quiz-pack-row, .quiz-pack-current) {
+html[data-platform-theme="light"] .host-shell:is([data-host-tab="quiz"], [data-room-mode="quiz"]) :is(.quiz-pilot-intro, .quiz-pilot-pack-card, .question-pack-preview[data-appearance="quiz"], .quiz-pack-row, .quiz-pack-current, .room-connection-qr, .room-connection-participants, .room-progress-board, .room-results-ready, .participants-empty) {
   color: var(--quiz-text);
   border-color: var(--quiz-border);
   background: linear-gradient(145deg, #ffffff, #f4fbf6);
   box-shadow: var(--quiz-shadow);
 }
 
-html[data-platform-theme="light"] .host-shell[data-host-tab="quiz"] :is(.quiz-pilot-workspace-action, .question-pack-preview[data-appearance="quiz"] .question-pack-preview-action) {
+html[data-platform-theme="light"] .host-shell:is([data-host-tab="quiz"], [data-room-mode="quiz"]) :is(.quiz-pilot-workspace-action, .question-pack-preview[data-appearance="quiz"] .question-pack-preview-action) {
   color: #075235;
   border-color: var(--quiz-border);
   background: #ffffff;
 }
 
-html[data-platform-theme="light"] .host-shell[data-host-tab="quiz"] :is(.quiz-pilot-workspace-action, .question-pack-preview[data-appearance="quiz"] .question-pack-preview-action):hover:not(:disabled) {
+html[data-platform-theme="light"] .host-shell:is([data-host-tab="quiz"], [data-room-mode="quiz"]) :is(.quiz-pilot-workspace-action, .question-pack-preview[data-appearance="quiz"] .question-pack-preview-action):hover:not(:disabled) {
   color: #ffffff;
   border-color: #087c4d;
   background: #087c4d;
