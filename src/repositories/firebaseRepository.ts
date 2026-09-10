@@ -12,6 +12,7 @@ export {
   createSession,
   createSessionRecord,
   defaultDiagnosticTemplateSelection,
+  deleteLeaderAndData,
   defaultRoomTitle,
   diagnosticGameTypeId,
   diagnosticPackId,
@@ -38,6 +39,7 @@ export {
   saveWorkspacePack,
   saveWorkspaceProductAsOwner,
   publishSafePackCatalogueAsOwner,
+  prepareLeaderDeletion,
   seedDefaultGlobalPack,
   setLeaderStatusAsOwner,
   subscribeAuthUser,
@@ -71,4 +73,4 @@ export {
 } from '../lib/firebase'
 
 export type { RoomPilotDetails } from '../lib/firebase'
-export type { OwnerDashboard, OwnerInviteStat, OwnerLeaderDetails, OwnerRegistrationNotification } from '../lib/firebase'
+export type { LeaderDeletionPreview, OwnerDashboard, OwnerInviteStat, OwnerLeaderDetails, OwnerRegistrationNotification } from '../lib/firebase'

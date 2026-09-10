@@ -1,4 +1,5 @@
 const { initializeApp, getApps } = require('firebase-admin/app')
+const { getAuth } = require('firebase-admin/auth')
 const { getDatabase } = require('firebase-admin/database')
 const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const { logger } = require('firebase-functions')
@@ -17,6 +18,7 @@ const roomDatabaseApp = getApps().find(app => app.name === ROOM_DATABASE_APP)
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 })
 
 const db = getDatabase(roomDatabaseApp)
+const adminAuth = getAuth(roomDatabaseApp)
 const asObject = value => value && typeof value === 'object' ? value : {}
 const publicQuestions = questions => Object.values(asObject(questions)).map(question => ({
   id: question.id,
@@ -255,6 +257,80 @@ exports.getOwnerLeaderDetails = onCall(async request => {
     workspace: workspace ? { name: workspace.name || '', city: workspace.city || '', ownerUid: workspace.ownerUid || '' } : null,
     rooms: allRooms.slice(offset, offset + pageSize), totalRooms: allRooms.length, nextOffset: offset + pageSize < allRooms.length ? offset + pageSize : null,
   }
+})
+
+const leaderRoomSet = (sessions, archives, uid) => {
+  const rooms = new Map(Object.values(asObject(archives)).filter(room => room?.hostUid === uid).map(room => [room.roomId, safeAdminRoom(room)]))
+  Object.values(asObject(sessions)).filter(room => room?.hostUid === uid).map(safeAdminRoom).forEach(room => rooms.set(room.roomId, room))
+  return [...rooms.values()]
+}
+const assertDeletableLeader = async (actorUid, uid, email) => {
+  if (!uid || uid === actorUid) throw new HttpsError('failed-precondition', 'Нельзя удалить собственный административный аккаунт.')
+  const profile = (await db.ref(`users/${uid}`).once('value')).val()
+  if (!profile) throw new HttpsError('not-found', 'Пользователь не найден или уже удалён.')
+  if (String(profile.email || '').trim().toLocaleLowerCase('ru-RU') !== String(email || '').trim().toLocaleLowerCase('ru-RU')) throw new HttpsError('permission-denied', 'Email не подтверждает выбранный аккаунт.')
+  const targetAuth = await adminAuth.getUser(uid).catch(error => error?.code === 'auth/user-not-found' ? null : Promise.reject(error))
+  if (targetAuth?.customClaims?.platformAdmin) {
+    let pageToken; let owners = 0
+    do { const page = await adminAuth.listUsers(1000, pageToken); owners += page.users.filter(user => user.customClaims?.platformAdmin).length; pageToken = page.pageToken } while (pageToken && owners < 2)
+    if (owners < 2) throw new HttpsError('failed-precondition', 'Нельзя удалить последнего владельца платформы.')
+  }
+  return profile
+}
+const deletionSummary = async uid => {
+  const [sessionsSnap, archivesSnap, resultsSnap, feedbackSnap] = await Promise.all([db.ref('sessions').once('value'), db.ref('sessionArchives').once('value'), db.ref('roomParticipantResults').once('value'), db.ref('feedback').once('value')])
+  const rooms = leaderRoomSet(sessionsSnap.val(), archivesSnap.val(), uid)
+  const byMode = Object.fromEntries(['diagnostic', 'quiz', 'wheel'].map(mode => [mode, rooms.filter(room => room.mode === mode).length]))
+  const roomIds = new Set(rooms.map(room => room.roomId))
+  const participantRecords = rooms.reduce((total, room) => total + room.participantCount, 0)
+  const resultRecords = Object.entries(asObject(resultsSnap.val())).filter(([roomId]) => roomIds.has(roomId)).reduce((total, [, values]) => total + Object.keys(asObject(values)).length, 0)
+  return { rooms: byMode, totalRooms: rooms.length, participantRecords, resultRecords, feedbackRecords: Object.values(asObject(feedbackSnap.val())).filter(item => item?.uid === uid).length, activeRooms: rooms.filter(room => room.operationalStatus === 'active').map(room => ({ roomId: room.roomId, roomTitle: room.roomTitle, mode: room.mode })) }
+}
+
+exports.prepareLeaderDeletion = onCall(async request => {
+  const actorUid = assertPlatformOwner(request)
+  const input = asObject(request.data)
+  const uid = typeof input.uid === 'string' ? input.uid : ''
+  const profile = (await db.ref(`users/${uid}`).once('value')).val()
+  if (!profile || uid === actorUid) throw new HttpsError('failed-precondition', 'Этот аккаунт нельзя удалить.')
+  const summary = await deletionSummary(uid)
+  const workspace = profile.workspaceId ? (await db.ref(`workspaces/${profile.workspaceId}`).once('value')).val() : null
+  return { uid, email: profile.email || '', fullName: profile.fullName || '', summary: { ...summary, personalWorkspace: Boolean(workspace?.ownerUid === uid), personalPacks: workspace?.ownerUid === uid ? Object.keys(asObject(workspace.workspacePacks)).length : 0, sharedWorkspacePreserved: Boolean(workspace && workspace.ownerUid !== uid) } }
+})
+
+/** Irreversible owner-only removal. The target is revoked before the final
+ * cleanup, so a retry after an Auth/RTDB failure cannot create new rooms. */
+exports.deleteLeaderAndData = onCall(async request => {
+  const actorUid = assertPlatformOwner(request)
+  const input = asObject(request.data)
+  const uid = typeof input.uid === 'string' ? input.uid : ''
+  const email = typeof input.email === 'string' ? input.email : ''
+  const profile = await assertDeletableLeader(actorUid, uid, email)
+  const initial = await deletionSummary(uid)
+  if (initial.activeRooms.length) throw new HttpsError('failed-precondition', 'У ведущего есть активная комната. Сначала завершите её обычным способом.')
+  // A status transition first closes the race with direct room writes that
+  // require an active owner profile. It is intentionally idempotent for retry.
+  await db.ref().update({ [`users/${uid}/status`]: 'revoked', [`users/${uid}/updatedAt`]: Date.now() })
+  const summary = await deletionSummary(uid)
+  if (summary.activeRooms.length) throw new HttpsError('failed-precondition', 'Во время удаления появилась активная комната. Удаление остановлено.')
+  try { await adminAuth.deleteUser(uid) } catch (error) { if (error?.code !== 'auth/user-not-found') throw new HttpsError('unavailable', 'Не удалось удалить учётную запись. Повторите удаление: данные сохранены в безопасном состоянии.') }
+
+  const [sessionsSnap, archivesSnap, feedbackSnap] = await Promise.all([db.ref('sessions').once('value'), db.ref('sessionArchives').once('value'), db.ref('feedback').once('value')])
+  const rooms = leaderRoomSet(sessionsSnap.val(), archivesSnap.val(), uid)
+  const workspaceId = typeof profile.workspaceId === 'string' ? profile.workspaceId : ''
+  const workspace = workspaceId ? (await db.ref(`workspaces/${workspaceId}`).once('value')).val() : null
+  const ownsWorkspace = Boolean(workspace?.ownerUid === uid)
+  const now = Date.now(); const audit = { id: adminAuditId('leader_deleted', uid, now), type: 'leader_deleted', actorUid, targetId: uid, createdAt: now, result: 'completed' }
+  const patch = { [`users/${uid}`]: null, [`adminNotifications/${registrationNotificationId(uid)}`]: null, [`adminAudit/${audit.id}`]: audit }
+  rooms.forEach(room => {
+    patch[`sessions/${room.roomId}`] = null; patch[`sessionArchives/${room.roomId}`] = null; patch[`publicRooms/${room.roomId}`] = null; patch[`roomLobbies/${room.roomId}`] = null
+    patch[`roomParticipantQuestions/${room.roomId}`] = null; patch[`roomPrivateQuestions/${room.roomId}`] = null; patch[`roomParticipantResults/${room.roomId}`] = null
+    if (room.workspaceId) patch[`workspaceArchives/${room.workspaceId}/${room.roomId}`] = null
+  })
+  Object.entries(asObject(feedbackSnap.val())).forEach(([id, item]) => { if (item?.uid === uid || (ownsWorkspace && item?.workspaceId === workspaceId)) patch[`feedback/${id}`] = null })
+  if (ownsWorkspace && workspaceId) { patch[`workspaces/${workspaceId}`] = null; patch[`workspaceProducts/${workspaceId}`] = null; patch[`workspaceArchives/${workspaceId}`] = null }
+  await db.ref().update(patch)
+  return { deleted: true, summary: { ...summary, personalWorkspace: ownsWorkspace } }
 })
 
 const invitationCodePattern = /^[A-Z0-9-]{4,64}$/

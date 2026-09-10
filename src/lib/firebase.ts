@@ -834,6 +834,8 @@ export type OwnerLeaderDetails = {
   nextOffset: number | null
 }
 
+export type LeaderDeletionPreview = { uid: string; email: string; fullName: string; summary: { rooms: Record<string, number>; totalRooms: number; participantRecords: number; resultRecords: number; feedbackRecords: number; activeRooms: Array<{ roomId: string; roomTitle: string; mode: string }>; personalWorkspace: boolean; personalPacks: number; sharedWorkspacePreserved: boolean } }
+
 const asOwnerRegistrationNotification = (value: unknown): OwnerRegistrationNotification | null => {
   if (!value || typeof value !== 'object') return null
   const item = value as Partial<OwnerRegistrationNotification>
@@ -890,6 +892,20 @@ export const getOwnerLeaderDetails = async (uid: string, filters: { mode?: strin
   if (!services.auth.currentUser || services.auth.currentUser.isAnonymous || !await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
   if (!functions) throw new Error('Сервис карточки ведущего недоступен.')
   const result = await httpsCallable<{ uid: string; mode?: string; roomStatus?: string; offset?: number; pageSize: number }, OwnerLeaderDetails>(functions, 'getOwnerLeaderDetails')({ uid, ...filters, pageSize: 20 })
+  return result.data
+}
+
+export const prepareLeaderDeletion = async (uid: string): Promise<LeaderDeletionPreview> => {
+  const services = requireFirebase(); await authPersistence
+  if (!services.auth.currentUser || services.auth.currentUser.isAnonymous || !await isPlatformOwner() || !functions) throw new Error('Недостаточно прав владельца платформы.')
+  const result = await httpsCallable<{ uid: string }, LeaderDeletionPreview>(functions, 'prepareLeaderDeletion')({ uid })
+  return result.data
+}
+
+export const deleteLeaderAndData = async (uid: string, email: string) => {
+  const services = requireFirebase(); await authPersistence
+  if (!services.auth.currentUser || services.auth.currentUser.isAnonymous || !await isPlatformOwner() || !functions) throw new Error('Недостаточно прав владельца платформы.')
+  const result = await httpsCallable<{ uid: string; email: string }, { deleted: boolean }>(functions, 'deleteLeaderAndData')({ uid, email })
   return result.data
 }
 
