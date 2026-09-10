@@ -51,6 +51,11 @@
         ".write": "auth != null && auth.token.platformAdmin === true"
       }
     },
+    "adminNotifications": {
+      ".indexOn": ["createdAt"],
+      ".read": "auth != null && auth.token.platformAdmin === true",
+      ".write": false
+    },
     "globalPacks": {
       "$packId": {
         ".read": "auth != null && auth.token.platformAdmin === true",

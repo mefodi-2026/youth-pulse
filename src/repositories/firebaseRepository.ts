@@ -24,6 +24,7 @@ export {
   joinSession,
   loginLeader,
   logoutLeader,
+  markOwnerNotificationsRead,
   markPersonalViewed,
   platformProductDefaults,
   ParticipantAnswerError,
@@ -40,6 +41,7 @@ export {
   subscribeAuthUser,
   subscribeGlobalPack,
   subscribeLeaderProfile,
+  subscribeOwnerNotifications,
   subscribeParticipantQuestionSet,
   subscribeParticipantQuizResult,
   subscribeParticipantRecord,
@@ -67,4 +69,4 @@ export {
 } from '../lib/firebase'
 
 export type { RoomPilotDetails } from '../lib/firebase'
-export type { OwnerDashboard } from '../lib/firebase'
+export type { OwnerDashboard, OwnerRegistrationNotification } from '../lib/firebase'

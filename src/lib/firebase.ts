@@ -1,5 +1,5 @@
 import { createUserWithEmailAndPassword, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
-import { equalTo, get, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
+import { equalTo, get, limitToLast, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
 import { httpsCallable } from 'firebase/functions'
 import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
@@ -804,6 +804,58 @@ export type OwnerDashboard = {
   workspaceProducts: Record<string, Record<string, WorkspaceProduct>>
   packs: Record<string, ContentPack>
   feedback: Record<string, FeedbackItem>
+}
+
+export type OwnerRegistrationNotification = {
+  id: string
+  type: 'registration_pending' | 'registration_invite'
+  uid: string
+  fullName: string
+  email: string
+  status: Extract<UserStatus, 'pending' | 'active'>
+  createdAt: number
+  readBy: Record<string, number>
+}
+
+const asOwnerRegistrationNotification = (value: unknown): OwnerRegistrationNotification | null => {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Partial<OwnerRegistrationNotification>
+  if (typeof item.id !== 'string' || !/^registration:[A-Za-z0-9_-]{1,128}$/.test(item.id)) return null
+  if (item.type !== 'registration_pending' && item.type !== 'registration_invite') return null
+  if (typeof item.uid !== 'string' || !item.uid || !Number.isFinite(Number(item.createdAt))) return null
+  if (item.status !== 'pending' && item.status !== 'active') return null
+  return {
+    id: item.id, type: item.type, uid: item.uid,
+    fullName: typeof item.fullName === 'string' ? item.fullName : '',
+    email: typeof item.email === 'string' ? item.email : '',
+    status: item.status, createdAt: Number(item.createdAt),
+    readBy: item.readBy && typeof item.readBy === 'object' ? item.readBy as Record<string, number> : {},
+  }
+}
+
+/** Owner-only, bounded subscription. It listens to registration events rather
+ * than the user collection, so it does not poll or download all accounts. */
+export const subscribeOwnerNotifications = (callback: (items: OwnerRegistrationNotification[]) => void, onError?: (error: Error) => void) => {
+  if (!db) { callback([]); return () => undefined }
+  const notificationsQuery = query(ref(db, 'adminNotifications'), orderByChild('createdAt'), limitToLast(100))
+  return onValue(notificationsQuery, snapshot => {
+    const items = Object.values(snapshot.val() || {})
+      .map(asOwnerRegistrationNotification)
+      .filter((item): item is OwnerRegistrationNotification => item !== null)
+      .sort((a, b) => b.createdAt - a.createdAt)
+    callback(items)
+  }, error => onError?.(error))
+}
+
+export const markOwnerNotificationsRead = async (ids: string[]) => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!services.auth.currentUser || services.auth.currentUser.isAnonymous || !await isPlatformOwner()) {
+    throw new Error('Недостаточно прав владельца платформы.')
+  }
+  if (!functions) throw new Error('Сервис уведомлений недоступен.')
+  const result = await httpsCallable<{ ids: string[] }, { updated: number }>(functions, 'markOwnerNotificationsRead')({ ids })
+  return Number(result.data?.updated) || 0
 }
 
 /** Fetches a compact, server-authenticated owner projection. No owner screen

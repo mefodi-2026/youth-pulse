@@ -27,7 +27,7 @@ export function Icon({ children, label }: { children: ReactNode; label?: string 
 export type AppIconName =
   | 'arrow-right' | 'plus' | 'eye' | 'edit' | 'trash' | 'flag'
   | 'dashboard' | 'room' | 'history' | 'diagnostic' | 'quiz' | 'wheel'
-  | 'settings' | 'profile' | 'rules'
+  | 'settings' | 'profile' | 'rules' | 'bell'
 
 const iconPaths: Record<AppIconName, ReactNode> = {
   'arrow-right': <><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></>,
@@ -45,6 +45,7 @@ const iconPaths: Record<AppIconName, ReactNode> = {
   settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.04 2.04-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.04 1.56v.1h-2.88v-.1a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-2.04-2.04.06-.06A1.7 1.7 0 0 0 7.3 15a1.7 1.7 0 0 0-1.56-1.04h-.1v-2.88h.1A1.7 1.7 0 0 0 7.3 10.04a1.7 1.7 0 0 0-.34-1.88L6.9 8.1l2.04-2.04.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 11.92 4.9v-.1h2.88v.1a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.04 2.04-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.56 1.04h.1v2.88h-.1A1.7 1.7 0 0 0 19.4 15Z" /></>,
   profile: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20c.7-3.2 3.1-5 7-5s6.3 1.8 7 5" /></>,
   rules: <><path d="M7 4h10a2 2 0 0 1 2 2v14H7a2 2 0 0 0-2 2V6a2 2 0 0 1 2-2Z" /><path d="M8 9h7M8 13h7M8 17h4" /></>,
+  bell: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
 }
 
 /** Shared inline SVGs keep visual weight stable across host actions. */

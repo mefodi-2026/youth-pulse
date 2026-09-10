@@ -41,6 +41,9 @@ const assertPlatformOwner = request => {
 const asTimestamp = value => Number.isFinite(Number(value)) ? Number(value) : 0
 const ownerDay = timestamp => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(timestamp))
 const adminAuditId = (type, targetId, at) => `${type}:${targetId}:${at}`
+// Registration notifications have a stable key. A retried callable or a
+// returning account therefore cannot create another event for the same UID.
+const registrationNotificationId = uid => `registration:${uid}`
 const safeAdminRoom = room => {
   const participants = asObject(room.participants)
   const events = Object.values(asObject(room.events)).filter(event => event && typeof event === 'object')
@@ -253,7 +256,7 @@ const redeemInvitation = async (rawCode, uid, now) => {
     outcome = 'redeemed'
     return { ...currentInvite, uses: uses + 1, usedBy: { ...usedBy, [uid]: now }, updatedAt: now }
   })
-  if (outcome === 'redeemed' || outcome === 'already-redeemed') return
+  if (outcome === 'redeemed' || outcome === 'already-redeemed') return true
   if (outcome === 'expired') throw new HttpsError('failed-precondition', 'Срок действия кода приглашения истёк. Уберите код и отправьте заявку на одобрение.')
   if (outcome === 'exhausted') throw new HttpsError('resource-exhausted', 'Лимит использований этого кода приглашения исчерпан. Уберите код и отправьте заявку на одобрение.')
   throw new HttpsError('not-found', 'Код приглашения не найден или больше не активен. Проверьте его либо отправьте заявку без кода.')
@@ -285,14 +288,16 @@ exports.registerLeaderWithInvite = onCall(async request => {
 
   const inviteCode = typeof input.inviteCode === 'string' ? input.inviteCode.trim() : ''
   const now = Date.now()
-  if (inviteCode) await redeemInvitation(inviteCode, uid, now)
+  // The invite transaction, rather than a browser-supplied field, is the
+  // authority for both the access state and the notification category.
+  const invitationUsed = inviteCode ? await redeemInvitation(inviteCode, uid, now) : false
 
   const workspaceId = typeof existing?.workspaceId === 'string' && existing.workspaceId
     ? existing.workspaceId
     : db.ref('workspaces').push().key
   if (!workspaceId) throw new HttpsError('internal', 'Не удалось подготовить рабочее пространство.')
 
-  const status = inviteCode ? 'active' : 'pending'
+  const status = invitationUsed ? 'active' : 'pending'
   const profile = {
     uid,
     fullName: existing?.fullName || fullName,
@@ -303,10 +308,25 @@ exports.registerLeaderWithInvite = onCall(async request => {
     createdAt: asTimestamp(existing?.createdAt) || now,
     updatedAt: now,
     lastActiveAt: now,
-    accessSource: inviteCode ? 'invite' : (existing?.accessSource || 'approval'),
+    accessSource: invitationUsed ? 'invite' : (existing?.accessSource || 'approval'),
   }
   const workspaceSnap = await db.ref(`workspaces/${workspaceId}`).once('value')
   const updates = { [`users/${uid}`]: profile }
+  if (!existing) {
+    // This is part of the same atomic write as the confirmed profile. A
+    // notification can never be published for a registration that failed to
+    // persist, and no invitation code is copied into the admin-facing event.
+    updates[`adminNotifications/${registrationNotificationId(uid)}`] = {
+      id: registrationNotificationId(uid),
+      type: invitationUsed ? 'registration_invite' : 'registration_pending',
+      uid,
+      fullName: profile.fullName,
+      email: profile.email,
+      status: profile.status,
+      createdAt: now,
+      readBy: {},
+    }
+  }
   if (!workspaceSnap.exists()) {
     updates[`workspaces/${workspaceId}`] = {
       id: workspaceId, name: workspaceName, city, ownerUid: uid,
@@ -316,8 +336,30 @@ exports.registerLeaderWithInvite = onCall(async request => {
     updates[`workspaceProducts/${workspaceId}/bible-quiz`] = defaultWorkspaceAccess('bible-quiz', uid, now)
   }
   await db.ref().update(updates)
-  logger.info('Leader registration finalized', { uid, status, invitationUsed: Boolean(inviteCode) })
+  logger.info('Leader registration finalized', { uid, status, invitationUsed: Boolean(invitationUsed), createdNotification: !existing })
   return { profile, reused: Boolean(existing) }
+})
+
+/** Marks existing server-created registration notifications as read for one
+ * platform owner. The client cannot write notification records or invent IDs. */
+exports.markOwnerNotificationsRead = onCall(async request => {
+  const ownerUid = assertPlatformOwner(request)
+  const input = asObject(request.data)
+  const ids = [...new Set(Array.isArray(input.ids) ? input.ids : [])]
+    .filter(id => typeof id === 'string' && /^registration:[A-Za-z0-9_-]{1,128}$/.test(id))
+    .slice(0, 100)
+  if (!ids.length) return { updated: 0 }
+
+  const notifications = await Promise.all(ids.map(async id => ({ id, value: (await db.ref(`adminNotifications/${id}`).once('value')).val() })))
+  const now = Date.now()
+  const updates = {}
+  notifications.forEach(({ id, value }) => {
+    if (value?.id === id && ['registration_pending', 'registration_invite'].includes(value.type)) {
+      updates[`adminNotifications/${id}/readBy/${ownerUid}`] = now
+    }
+  })
+  if (Object.keys(updates).length) await db.ref().update(updates)
+  return { updated: Object.keys(updates).length }
 })
 const publicPack = source => {
   const sourceQuestions = source.questions || source.content?.questions || source.publicContent?.questions || {}
