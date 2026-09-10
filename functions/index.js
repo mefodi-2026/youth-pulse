@@ -227,6 +227,36 @@ exports.getOwnerInviteStats = onCall(async request => {
   return { generatedAt: now, invites: items }
 })
 
+/** Detailed, redacted owner view of one leader. Participant answers and quiz
+ * keys stay on the server; only operational room summaries are returned. */
+exports.getOwnerLeaderDetails = onCall(async request => {
+  assertPlatformOwner(request)
+  const input = asObject(request.data)
+  const uid = typeof input.uid === 'string' ? input.uid : ''
+  if (!uid) throw new HttpsError('invalid-argument', 'Не указан пользователь.')
+  const mode = ['diagnostic', 'quiz', 'wheel'].includes(input.mode) ? input.mode : ''
+  const roomStatus = ['active', 'inactive', 'completed', 'unknown'].includes(input.roomStatus) ? input.roomStatus : ''
+  const offset = Math.max(0, Math.floor(Number(input.offset) || 0))
+  const pageSize = Math.max(10, Math.min(50, Math.floor(Number(input.pageSize) || 20)))
+  const [profileSnap, sessionsSnap, archivesSnap, workspaceSnap] = await Promise.all([
+    db.ref(`users/${uid}`).once('value'), db.ref('sessions').once('value'), db.ref('sessionArchives').once('value'),
+    db.ref(`users/${uid}/workspaceId`).once('value'),
+  ])
+  const profile = profileSnap.val()
+  if (!profile) throw new HttpsError('not-found', 'Пользователь не найден или уже удалён.')
+  const workspaceId = typeof workspaceSnap.val() === 'string' ? workspaceSnap.val() : profile.workspaceId || ''
+  const workspace = workspaceId ? (await db.ref(`workspaces/${workspaceId}`).once('value')).val() : null
+  const archived = Object.values(asObject(archivesSnap.val())).filter(room => room?.hostUid === uid).map(safeAdminRoom)
+  const roomsById = new Map(archived.map(room => [room.roomId, room]))
+  Object.values(asObject(sessionsSnap.val())).filter(room => room?.hostUid === uid).map(safeAdminRoom).forEach(room => roomsById.set(room.roomId, room))
+  const allRooms = [...roomsById.values()].filter(room => (!mode || room.mode === mode) && (!roomStatus || room.operationalStatus === roomStatus)).sort((a, b) => b.createdAt - a.createdAt)
+  return {
+    profile: { uid, fullName: profile.fullName || '', email: profile.email || '', phone: profile.phone || '', status: profile.status || 'pending', createdAt: asTimestamp(profile.createdAt) || null, lastActiveAt: asTimestamp(profile.lastActiveAt) || null, accessSource: profile.accessSource || null, workspaceId },
+    workspace: workspace ? { name: workspace.name || '', city: workspace.city || '', ownerUid: workspace.ownerUid || '' } : null,
+    rooms: allRooms.slice(offset, offset + pageSize), totalRooms: allRooms.length, nextOffset: offset + pageSize < allRooms.length ? offset + pageSize : null,
+  }
+})
+
 const invitationCodePattern = /^[A-Z0-9-]{4,64}$/
 const registrationField = (value, label, maxLength) => {
   const normalized = typeof value === 'string' ? value.trim() : ''

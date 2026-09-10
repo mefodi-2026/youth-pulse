@@ -826,6 +826,14 @@ export type OwnerInviteStat = {
   expiresAt: number | null
 }
 
+export type OwnerLeaderDetails = {
+  profile: { uid: string; fullName: string; email: string; phone: string; status: UserStatus; createdAt: number | null; lastActiveAt: number | null; accessSource: string | null; workspaceId: string }
+  workspace: { name: string; city: string; ownerUid: string } | null
+  rooms: OwnerDashboard['rooms']
+  totalRooms: number
+  nextOffset: number | null
+}
+
 const asOwnerRegistrationNotification = (value: unknown): OwnerRegistrationNotification | null => {
   if (!value || typeof value !== 'object') return null
   const item = value as Partial<OwnerRegistrationNotification>
@@ -874,6 +882,15 @@ export const getOwnerInviteStats = async (): Promise<OwnerInviteStat[]> => {
   if (!functions) throw new Error('Сервис статистики приглашений недоступен.')
   const result = await httpsCallable<unknown, { invites?: OwnerInviteStat[] }>(functions, 'getOwnerInviteStats')()
   return Array.isArray(result.data?.invites) ? result.data.invites : []
+}
+
+export const getOwnerLeaderDetails = async (uid: string, filters: { mode?: string; roomStatus?: string; offset?: number } = {}): Promise<OwnerLeaderDetails> => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!services.auth.currentUser || services.auth.currentUser.isAnonymous || !await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
+  if (!functions) throw new Error('Сервис карточки ведущего недоступен.')
+  const result = await httpsCallable<{ uid: string; mode?: string; roomStatus?: string; offset?: number; pageSize: number }, OwnerLeaderDetails>(functions, 'getOwnerLeaderDetails')({ uid, ...filters, pageSize: 20 })
+  return result.data
 }
 
 /** Fetches a compact, server-authenticated owner projection. No owner screen
