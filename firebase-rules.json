@@ -5,7 +5,7 @@
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || auth.token.platformAdmin === true)",
         ".write": "auth != null && (auth.token.platformAdmin === true || (auth.uid === $uid && newData.exists()))",
-        ".validate": "newData.hasChildren(['uid','fullName','phone','email','workspaceId','status','createdAt','updatedAt']) && !newData.child('password').exists() && newData.child('uid').val() === $uid && newData.child('fullName').isString() && newData.child('phone').isString() && newData.child('email').isString() && newData.child('workspaceId').isString() && (newData.child('status').val() === 'pending' || newData.child('status').val() === 'active' || newData.child('status').val() === 'paused' || newData.child('status').val() === 'revoked') && (!data.exists() ? (newData.child('status').val() === 'pending' || (newData.child('status').val() === 'active' && root.child('invites').child(newData.child('inviteCode').val()).child('status').val() === 'active')) : (auth.token.platformAdmin === true || (newData.child('uid').val() === data.child('uid').val() && newData.child('workspaceId').val() === data.child('workspaceId').val() && newData.child('status').val() === data.child('status').val())))"
+        ".validate": "newData.hasChildren(['uid','fullName','phone','email','workspaceId','status','createdAt','updatedAt']) && !newData.child('password').exists() && newData.child('uid').val() === $uid && newData.child('fullName').isString() && newData.child('phone').isString() && newData.child('email').isString() && newData.child('workspaceId').isString() && (newData.child('status').val() === 'pending' || newData.child('status').val() === 'active' || newData.child('status').val() === 'paused' || newData.child('status').val() === 'revoked') && (!data.exists() ? newData.child('status').val() === 'pending' : (auth.token.platformAdmin === true || (newData.child('uid').val() === data.child('uid').val() && newData.child('workspaceId').val() === data.child('workspaceId').val() && newData.child('status').val() === data.child('status').val())))"
       }
     },
     "workspaces": {
@@ -47,7 +47,7 @@
     },
     "invites": {
       "$code": {
-        ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".read": "auth != null && auth.token.platformAdmin === true",
         ".write": "auth != null && auth.token.platformAdmin === true"
       }
     },

@@ -203,6 +203,122 @@ exports.changeLeaderAccess = onCall(async request => {
   await db.ref().update({ [`users/${uid}/status`]: status, [`users/${uid}/updatedAt`]: now, [`adminAudit/${audit.id}`]: audit })
   return { status, audit }
 })
+
+const invitationCodePattern = /^[A-Z0-9-]{4,64}$/
+const registrationField = (value, label, maxLength) => {
+  const normalized = typeof value === 'string' ? value.trim() : ''
+  if (!normalized || normalized.length > maxLength) {
+    throw new HttpsError('invalid-argument', `Проверьте поле «${label}».`)
+  }
+  return normalized
+}
+const defaultWorkspaceAccess = (productId, ownerUid, now) => ({
+  productId, ownerUid, enabled: true, accessSource: 'pilot', plan: 'pilot-free', planId: 'pilot-free', startsAt: now, expiresAt: 0, testing: false,
+})
+
+/**
+ * Redeems an invitation once per Firebase UID.  The transaction is the
+ * authority for expiry and capacity, while `usedBy` makes retried callable
+ * requests idempotent if a network failure happens after the first write.
+ */
+const redeemInvitation = async (rawCode, uid, now) => {
+  const code = typeof rawCode === 'string' ? rawCode.trim().toUpperCase() : ''
+  if (!invitationCodePattern.test(code)) {
+    throw new HttpsError('invalid-argument', 'Код приглашения имеет неверный формат. Проверьте его и попробуйте снова.')
+  }
+  const inviteRef = db.ref(`invites/${code}`)
+  // The Admin SDK can optimistically invoke a transaction with an empty local
+  // cache. Hydrate first so that a valid invite is not mistaken for a missing
+  // one on that initial callback.
+  const initialSnap = await inviteRef.once('value')
+  const initialInvite = initialSnap.val()
+  if (!initialInvite || typeof initialInvite !== 'object') {
+    throw new HttpsError('not-found', 'Код приглашения не найден или больше не активен. Проверьте его либо отправьте заявку без кода.')
+  }
+  let outcome = 'unknown'
+  let firstTransactionPass = true
+  await inviteRef.transaction(invite => {
+    const currentInvite = !invite && firstTransactionPass ? initialInvite : invite
+    firstTransactionPass = false
+    if (!currentInvite || typeof currentInvite !== 'object' || currentInvite.status !== 'active') { outcome = 'invalid'; return }
+    const usedBy = asObject(currentInvite.usedBy)
+    // A UID that already redeemed the code can safely resume an interrupted
+    // registration even if the code later expired or reached its cap.
+    if (usedBy[uid]) { outcome = 'already-redeemed'; return currentInvite }
+    const expiresAt = asTimestamp(currentInvite.expiresAt)
+    if (expiresAt && expiresAt <= now) { outcome = 'expired'; return }
+    const maxUses = Math.max(0, Math.floor(asTimestamp(currentInvite.maxUses)))
+    const uses = Math.max(0, Math.floor(asTimestamp(currentInvite.uses) || Object.keys(usedBy).length))
+    if (maxUses && uses >= maxUses) { outcome = 'exhausted'; return }
+    outcome = 'redeemed'
+    return { ...currentInvite, uses: uses + 1, usedBy: { ...usedBy, [uid]: now }, updatedAt: now }
+  })
+  if (outcome === 'redeemed' || outcome === 'already-redeemed') return
+  if (outcome === 'expired') throw new HttpsError('failed-precondition', 'Срок действия кода приглашения истёк. Уберите код и отправьте заявку на одобрение.')
+  if (outcome === 'exhausted') throw new HttpsError('resource-exhausted', 'Лимит использований этого кода приглашения исчерпан. Уберите код и отправьте заявку на одобрение.')
+  throw new HttpsError('not-found', 'Код приглашения не найден или больше не активен. Проверьте его либо отправьте заявку без кода.')
+}
+
+/**
+ * Creates or resumes one leader profile from a Firebase Auth identity.
+ * The browser never reads an invite or decides its own account status.
+ */
+exports.registerLeaderWithInvite = onCall(async request => {
+  const uid = request.auth?.uid
+  const provider = request.auth?.token?.firebase?.sign_in_provider
+  if (!uid || provider === 'anonymous') throw new HttpsError('unauthenticated', 'Сначала создайте аккаунт ведущего.')
+  const input = asObject(request.data)
+  const fullName = registrationField(input.fullName, 'Имя и фамилия', 120)
+  const phone = registrationField(input.phone, 'Телефон', 40)
+  const workspaceName = registrationField(input.workspaceName, 'Название молодёжки', 120)
+  const city = registrationField(input.city, 'Город', 120)
+  const email = typeof request.auth?.token?.email === 'string' ? request.auth.token.email.trim() : ''
+  if (!email) throw new HttpsError('failed-precondition', 'В аккаунте не найден email. Войдите снова и повторите регистрацию.')
+
+  const profileRef = db.ref(`users/${uid}`)
+  const existingSnap = await profileRef.once('value')
+  const existing = existingSnap.val()
+  if (existing?.status === 'paused' || existing?.status === 'revoked') {
+    throw new HttpsError('permission-denied', 'Доступ этого аккаунта ограничен владельцем платформы. Приглашение не может его восстановить.')
+  }
+  if (existing?.status === 'active') return { profile: existing, reused: true }
+
+  const inviteCode = typeof input.inviteCode === 'string' ? input.inviteCode.trim() : ''
+  const now = Date.now()
+  if (inviteCode) await redeemInvitation(inviteCode, uid, now)
+
+  const workspaceId = typeof existing?.workspaceId === 'string' && existing.workspaceId
+    ? existing.workspaceId
+    : db.ref('workspaces').push().key
+  if (!workspaceId) throw new HttpsError('internal', 'Не удалось подготовить рабочее пространство.')
+
+  const status = inviteCode ? 'active' : 'pending'
+  const profile = {
+    uid,
+    fullName: existing?.fullName || fullName,
+    phone: existing?.phone || phone,
+    email: existing?.email || email,
+    workspaceId,
+    status,
+    createdAt: asTimestamp(existing?.createdAt) || now,
+    updatedAt: now,
+    lastActiveAt: now,
+    accessSource: inviteCode ? 'invite' : (existing?.accessSource || 'approval'),
+  }
+  const workspaceSnap = await db.ref(`workspaces/${workspaceId}`).once('value')
+  const updates = { [`users/${uid}`]: profile }
+  if (!workspaceSnap.exists()) {
+    updates[`workspaces/${workspaceId}`] = {
+      id: workspaceId, name: workspaceName, city, ownerUid: uid,
+      planId: 'pilot-free', billingStatus: 'pilot', accessEndsAt: 0, accessSource: 'pilot', createdAt: now, updatedAt: now,
+    }
+    updates[`workspaceProducts/${workspaceId}/youth-atmosphere`] = defaultWorkspaceAccess('youth-atmosphere', uid, now)
+    updates[`workspaceProducts/${workspaceId}/bible-quiz`] = defaultWorkspaceAccess('bible-quiz', uid, now)
+  }
+  await db.ref().update(updates)
+  logger.info('Leader registration finalized', { uid, status, invitationUsed: Boolean(inviteCode) })
+  return { profile, reused: Boolean(existing) }
+})
 const publicPack = source => {
   const sourceQuestions = source.questions || source.content?.questions || source.publicContent?.questions || {}
   const questions = publicQuestions(sourceQuestions)

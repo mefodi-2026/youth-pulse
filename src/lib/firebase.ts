@@ -1,4 +1,4 @@
-import { createUserWithEmailAndPassword, deleteUser, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
+import { createUserWithEmailAndPassword, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
 import { equalTo, get, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
 import { httpsCallable } from 'firebase/functions'
 import { questions as builtInQuestions } from '../data/questions'
@@ -10,7 +10,7 @@ import { participantQuestionsPath, participantResultPath, publicRoomPath, roomPa
 import { normalizeQuestionsForMode, resolveCanonicalPackQuestions } from '../modes/contentPackAdapter'
 import { resolveRegisteredRoomMode } from '../modes/modeRegistry'
 import { firebaseAuth as auth, firebaseAuthPersistence as authPersistence, firebaseDb as db, firebaseFunctions as functions, firebaseReady } from '../repositories/firebaseClient'
-import { getSessionQuestions, type Answer, type ContentPack, type FeedbackItem, type Invite, type LeaderProfile, type Participant, type ParticipantQuestion, type ParticipantQuestionSet, type ParticipantQuizResult, type ProductConfig, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type RoomMode, type ScoringTemplateId, type Session, type SessionArchive, type SessionEvent, type SessionEventType, type SessionPhase, type TemplateSelection, type TemplateSnapshot, type UserStatus, type Workspace, type WorkspaceProduct } from '../types'
+import { getSessionQuestions, type Answer, type ContentPack, type FeedbackItem, type LeaderProfile, type Participant, type ParticipantQuestion, type ParticipantQuestionSet, type ParticipantQuizResult, type ProductConfig, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type RoomMode, type ScoringTemplateId, type Session, type SessionArchive, type SessionEvent, type SessionEventType, type SessionPhase, type TemplateSelection, type TemplateSnapshot, type UserStatus, type Workspace, type WorkspaceProduct } from '../types'
 
 export { firebaseReady }
 export const diagnosticProductId = diagnosticGameModule.productId
@@ -334,15 +334,6 @@ const requireFirebase = () => {
   return { auth, db }
 }
 
-const inviteStatus = async (inviteCode?: string): Promise<UserStatus> => {
-  if (!inviteCode || !db) return 'pending'
-  const snapshot = await get(ref(db, `invites/${inviteCode}`))
-  const invite = snapshot.val() as Invite | null
-  if (!invite || invite.status !== 'active') return 'pending'
-  if (invite.expiresAt && invite.expiresAt <= Date.now()) return 'pending'
-  return 'active'
-}
-
 export const subscribeAuthUser = (callback: (user: User | null) => void) => {
   if (!auth) { callback(null); return () => undefined }
   const currentAuth = auth
@@ -404,56 +395,35 @@ export const subscribePlatformWorkspaceProducts = (callback: (value: Record<stri
 export const registerLeader = async (input: RegisterLeaderInput) => {
   const services = requireFirebase()
   await authPersistence
-  const credential = await createUserWithEmailAndPassword(services.auth, input.email.trim(), input.password)
-  const { user } = credential
-  const now = Date.now()
-  const cleanInviteCode = input.inviteCode?.trim().toUpperCase() || undefined
+  let user: User
   try {
-    const status = await inviteStatus(cleanInviteCode)
-    const workspaceId = push(ref(services.db, 'workspaces')).key
-    if (!workspaceId) throw new Error('Не удалось создать профиль молодёжной команды.')
-    const profile: LeaderProfile = {
-      uid: user.uid,
-      fullName: input.fullName.trim(),
-      phone: input.phone.trim(),
-      email: user.email || input.email.trim(),
-      workspaceId,
-      status,
-      ...(cleanInviteCode ? { inviteCode: cleanInviteCode } : {}),
-      createdAt: now,
-      updatedAt: now,
-      lastActiveAt: now,
-    }
-    const workspace: Workspace = {
-      id: workspaceId,
-      name: input.workspaceName.trim(),
-      city: input.city.trim(),
-      ownerUid: user.uid,
-      planId: pilotPlanId,
-      billingStatus: 'pilot',
-      accessEndsAt: 0,
-      accessSource: pilotAccessSource,
-      createdAt: now,
-      updatedAt: now,
-    }
-    const diagnosticAccess = createPilotWorkspaceAccess(diagnosticProductId, user.uid, now)
-    const quizAccess = createPilotWorkspaceAccess(quizProductId, user.uid, now)
-    // The workspace must exist before product access is created. Keeping the
-    // two atomic writes separate lets RTDB Rules verify real ownership without
-    // granting a broad bootstrap exception to arbitrary workspaceProducts.
-    await update(ref(services.db), {
-      [`users/${user.uid}`]: profile,
-      [`workspaces/${workspaceId}`]: workspace,
-    })
-    await update(ref(services.db), {
-      [`workspaceProducts/${workspaceId}/${diagnosticProductId}`]: diagnosticAccess,
-      [`workspaceProducts/${workspaceId}/${quizProductId}`]: quizAccess,
-    })
-    return profile
+    user = (await createUserWithEmailAndPassword(services.auth, input.email.trim(), input.password)).user
   } catch (error) {
-    await deleteUser(user).catch(() => undefined)
-    throw error
+    const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+    if (code !== 'auth/email-already-in-use') throw error
+    // A retry after a temporary callable/network failure must resume the same
+    // Auth identity instead of creating a second account or spending an invite twice.
+    user = (await signInWithEmailAndPassword(services.auth, input.email.trim(), input.password)).user
   }
+  if (!functions) throw new Error('Сервис регистрации временно недоступен. Попробуйте ещё раз.')
+  const finalizeRegistration = httpsCallable<{
+    fullName: string
+    phone: string
+    workspaceName: string
+    city: string
+    inviteCode?: string
+  }, { profile: LeaderProfile }>(functions, 'registerLeaderWithInvite')
+  const result = await finalizeRegistration({
+    fullName: input.fullName.trim(),
+    phone: input.phone.trim(),
+    workspaceName: input.workspaceName.trim(),
+    city: input.city.trim(),
+    ...(input.inviteCode?.trim() ? { inviteCode: input.inviteCode.trim().toUpperCase() } : {}),
+  })
+  if (!result.data?.profile?.uid || result.data.profile.uid !== user.uid) {
+    throw new Error('Сервис регистрации не подтвердил профиль. Повторите попытку.')
+  }
+  return result.data.profile
 }
 
 export const loginLeader = async (email: string, password: string) => {
