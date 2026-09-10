@@ -819,7 +819,7 @@ export type OwnerRegistrationNotification = {
 
 export type OwnerInviteStat = {
   code: string
-  status: 'active' | 'disabled' | 'expired'
+  status: 'active' | 'disabled' | 'expired' | 'exhausted'
   limit: number | null
   used: number | null
   remaining: number | null

@@ -223,8 +223,15 @@ exports.getOwnerInviteStats = onCall(async request => {
     const storedLimit = Number(invite.maxUses)
     const limit = Number.isFinite(storedLimit) && storedLimit > 0 ? Math.floor(storedLimit) : null
     const expiresAt = asTimestamp(invite.expiresAt) || null
-    const status = invite.status === 'active' && (!expiresAt || expiresAt > now) ? 'active' : invite.status === 'active' ? 'expired' : 'disabled'
-    return { code, status, limit, used, remaining: limit === null ? null : used === null ? null : Math.max(0, limit - used), expiresAt }
+    const remaining = limit === null ? null : used === null ? null : Math.max(0, limit - used)
+    const status = invite.status !== 'active'
+      ? 'disabled'
+      : expiresAt && expiresAt <= now
+        ? 'expired'
+        : remaining === 0
+          ? 'exhausted'
+          : 'active'
+    return { code, status, limit, used, remaining, expiresAt }
   }).sort((a, b) => (a.expiresAt || Number.MAX_SAFE_INTEGER) - (b.expiresAt || Number.MAX_SAFE_INTEGER) || a.code.localeCompare(b.code))
   return { generatedAt: now, invites: items }
 })
