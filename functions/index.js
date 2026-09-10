@@ -207,6 +207,26 @@ exports.changeLeaderAccess = onCall(async request => {
   return { status, audit }
 })
 
+/** Owner-only invitation projection. It uses the same records and counters
+ * that the redemption transaction reads; no account-derived reconstruction. */
+exports.getOwnerInviteStats = onCall(async request => {
+  assertPlatformOwner(request)
+  const now = Date.now()
+  const snap = await db.ref('invites').once('value')
+  const items = Object.entries(asObject(snap.val())).map(([code, raw]) => {
+    const invite = asObject(raw)
+    const usedBy = asObject(invite.usedBy)
+    const storedUses = Number(invite.uses)
+    const used = Number.isFinite(storedUses) && storedUses >= 0 ? Math.floor(storedUses) : Object.keys(usedBy).length || null
+    const storedLimit = Number(invite.maxUses)
+    const limit = Number.isFinite(storedLimit) && storedLimit > 0 ? Math.floor(storedLimit) : null
+    const expiresAt = asTimestamp(invite.expiresAt) || null
+    const status = invite.status === 'active' && (!expiresAt || expiresAt > now) ? 'active' : invite.status === 'active' ? 'expired' : 'disabled'
+    return { code, status, limit, used, remaining: limit === null ? null : used === null ? null : Math.max(0, limit - used), expiresAt }
+  }).sort((a, b) => (a.expiresAt || Number.MAX_SAFE_INTEGER) - (b.expiresAt || Number.MAX_SAFE_INTEGER) || a.code.localeCompare(b.code))
+  return { generatedAt: now, invites: items }
+})
+
 const invitationCodePattern = /^[A-Z0-9-]{4,64}$/
 const registrationField = (value, label, maxLength) => {
   const normalized = typeof value === 'string' ? value.trim() : ''

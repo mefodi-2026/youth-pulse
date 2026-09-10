@@ -21,6 +21,7 @@ export {
   firebaseReady,
   isPlatformOwner,
   getOwnerAdminDashboard,
+  getOwnerInviteStats,
   joinSession,
   loginLeader,
   logoutLeader,
@@ -69,4 +70,4 @@ export {
 } from '../lib/firebase'
 
 export type { RoomPilotDetails } from '../lib/firebase'
-export type { OwnerDashboard, OwnerRegistrationNotification } from '../lib/firebase'
+export type { OwnerDashboard, OwnerInviteStat, OwnerRegistrationNotification } from '../lib/firebase'

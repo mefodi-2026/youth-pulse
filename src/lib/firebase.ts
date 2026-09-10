@@ -817,6 +817,15 @@ export type OwnerRegistrationNotification = {
   readBy: Record<string, number>
 }
 
+export type OwnerInviteStat = {
+  code: string
+  status: 'active' | 'disabled' | 'expired'
+  limit: number | null
+  used: number | null
+  remaining: number | null
+  expiresAt: number | null
+}
+
 const asOwnerRegistrationNotification = (value: unknown): OwnerRegistrationNotification | null => {
   if (!value || typeof value !== 'object') return null
   const item = value as Partial<OwnerRegistrationNotification>
@@ -856,6 +865,15 @@ export const markOwnerNotificationsRead = async (ids: string[]) => {
   if (!functions) throw new Error('Сервис уведомлений недоступен.')
   const result = await httpsCallable<{ ids: string[] }, { updated: number }>(functions, 'markOwnerNotificationsRead')({ ids })
   return Number(result.data?.updated) || 0
+}
+
+export const getOwnerInviteStats = async (): Promise<OwnerInviteStat[]> => {
+  const services = requireFirebase()
+  await authPersistence
+  if (!services.auth.currentUser || services.auth.currentUser.isAnonymous || !await isPlatformOwner()) throw new Error('Недостаточно прав владельца платформы.')
+  if (!functions) throw new Error('Сервис статистики приглашений недоступен.')
+  const result = await httpsCallable<unknown, { invites?: OwnerInviteStat[] }>(functions, 'getOwnerInviteStats')()
+  return Array.isArray(result.data?.invites) ? result.data.invites : []
 }
 
 /** Fetches a compact, server-authenticated owner projection. No owner screen
