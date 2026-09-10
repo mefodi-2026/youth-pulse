@@ -1,5 +1,5 @@
 import { createUserWithEmailAndPassword, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
-import { equalTo, get, limitToLast, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
+import { equalTo, get, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
 import { httpsCallable } from 'firebase/functions'
 import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
@@ -833,11 +833,11 @@ const asOwnerRegistrationNotification = (value: unknown): OwnerRegistrationNotif
   }
 }
 
-/** Owner-only, bounded subscription. It listens to registration events rather
- * than the user collection, so it does not poll or download all accounts. */
+/** Owner-only subscription. It listens to registration events rather than the
+ * user collection, so it does not poll or download all accounts. */
 export const subscribeOwnerNotifications = (callback: (items: OwnerRegistrationNotification[]) => void, onError?: (error: Error) => void) => {
   if (!db) { callback([]); return () => undefined }
-  const notificationsQuery = query(ref(db, 'adminNotifications'), orderByChild('createdAt'), limitToLast(100))
+  const notificationsQuery = query(ref(db, 'adminNotifications'), orderByChild('createdAt'))
   return onValue(notificationsQuery, snapshot => {
     const items = Object.values(snapshot.val() || {})
       .map(asOwnerRegistrationNotification)
