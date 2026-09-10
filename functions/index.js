@@ -315,7 +315,9 @@ exports.deleteLeaderAndData = onCall(async request => {
   if (summary.activeRooms.length) throw new HttpsError('failed-precondition', 'Во время удаления появилась активная комната. Удаление остановлено.')
   try { await adminAuth.deleteUser(uid) } catch (error) { if (error?.code !== 'auth/user-not-found') throw new HttpsError('unavailable', 'Не удалось удалить учётную запись. Повторите удаление: данные сохранены в безопасном состоянии.') }
 
-  const [sessionsSnap, archivesSnap, feedbackSnap] = await Promise.all([db.ref('sessions').once('value'), db.ref('sessionArchives').once('value'), db.ref('feedback').once('value')])
+  const [sessionsSnap, archivesSnap, feedbackSnap, auditSnap] = await Promise.all([
+    db.ref('sessions').once('value'), db.ref('sessionArchives').once('value'), db.ref('feedback').once('value'), db.ref('adminAudit').once('value'),
+  ])
   const rooms = leaderRoomSet(sessionsSnap.val(), archivesSnap.val(), uid)
   const workspaceId = typeof profile.workspaceId === 'string' ? profile.workspaceId : ''
   const workspace = workspaceId ? (await db.ref(`workspaces/${workspaceId}`).once('value')).val() : null
@@ -328,6 +330,12 @@ exports.deleteLeaderAndData = onCall(async request => {
     if (room.workspaceId) patch[`workspaceArchives/${room.workspaceId}/${room.roomId}`] = null
   })
   Object.entries(asObject(feedbackSnap.val())).forEach(([id, item]) => { if (item?.uid === uid || (ownsWorkspace && item?.workspaceId === workspaceId)) patch[`feedback/${id}`] = null })
+  // Keep no historical profile links in the owner feed; retain only the
+  // anonymous, minimal deletion audit record created above.
+  Object.entries(asObject(auditSnap.val())).forEach(([id, item]) => {
+    if (item?.targetId === uid || item?.actorUid === uid) patch[`adminAudit/${id}`] = null
+  })
+  patch[`adminAudit/${audit.id}`] = audit
   if (ownsWorkspace && workspaceId) { patch[`workspaces/${workspaceId}`] = null; patch[`workspaceProducts/${workspaceId}`] = null; patch[`workspaceArchives/${workspaceId}`] = null }
   await db.ref().update(patch)
   return { deleted: true, summary: { ...summary, personalWorkspace: ownsWorkspace } }
