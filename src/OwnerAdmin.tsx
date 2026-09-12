@@ -339,6 +339,19 @@ function InvitationCodes({
   );
 }
 
+function LeaderDetailsScreen({ user, details, error, roomMode, roomStatus, saving, onBack, onRoomMode, onRoomStatus, onLoadMore, onOpenRooms, onAccess, onDelete }: { user: OwnerDashboard['users'][number]; details: OwnerLeaderDetails | null; error: string; roomMode: string; roomStatus: string; saving: boolean; onBack: () => void; onRoomMode: (value: string) => void; onRoomStatus: (value: string) => void; onLoadMore: () => void; onOpenRooms: () => void; onAccess: (next: UserStatus) => void; onDelete: () => void }) {
+  const profile = details?.profile
+  return <>
+    <header className="owner-header owner-detail-header"><div><p className="eyebrow">АККАУНТЫ · КАРТОЧКА ВЕДУЩЕГО</p><h1>{profile?.fullName || user.fullName || 'Ведущий'}</h1><p className="owner-header-subtitle">Данные и комнаты выбранного ведущего. Личные ответы участников не раскрываются.</p></div><ButtonX secondary onClick={onBack}>← Назад к аккаунтам</ButtonX></header>
+    <Card className="leader-detail leader-detail-screen">
+      {error && <p className="owner-error">{error}</p>}
+      {!details && !error && <p>Загружаем поля регистрации и комнаты…</p>}
+      {details && <><div className="leader-detail-grid"><div><dt>Email</dt><dd>{profile?.email || 'Не указано'}</dd></div><div><dt>Телефон</dt><dd>{profile?.phone || 'Не указано'}</dd></div><div><dt>Молодёжная группа / организация</dt><dd>{details.workspace?.name || 'Не указано'}</dd></div><div><dt>Город</dt><dd>{details.workspace?.city || 'Не указано'}</dd></div><div><dt>Дата регистрации</dt><dd>{date(profile?.createdAt)}</dd></div><div><dt>Роль</dt><dd>Ведущий</dd></div><div><dt>Доступ</dt><dd>{status[profile!.status]}</dd></div><div><dt>Способ доступа</dt><dd>{profile?.accessSource === 'invite' ? 'Приглашение' : profile?.accessSource === 'approval' ? 'Одобрение администратора' : profile?.accessSource || 'Не указано'}</dd></div></div><div className="leader-room-filters"><select value={roomMode} onChange={event => onRoomMode(event.target.value)}><option value="">Все режимы</option>{Object.entries(modeName).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select><select value={roomStatus} onChange={event => onRoomStatus(event.target.value)}><option value="">Все статусы</option>{Object.entries(roomState).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></div><p className="eyebrow">КОМНАТЫ · {details.totalRooms}</p><div className="leader-room-list">{details.rooms.map(room => <button type="button" key={room.roomId} onClick={onOpenRooms}><b>{room.roomTitle}</b><small>{modeName[room.mode]} · {date(room.createdAt)} · {room.participantCount} участников · {room.endedAt ? `завершена ${date(room.endedAt)}` : roomState[room.operationalStatus]}</small></button>)}{!details.rooms.length && <p>Комнат по выбранным фильтрам нет.</p>}</div>{details.nextOffset !== null && <ButtonX secondary onClick={onLoadMore}>Загрузить ещё</ButtonX>}<ButtonX secondary onClick={onOpenRooms}>Открыть комнаты в списке</ButtonX></>}
+      <div className="owner-actions"><ButtonX disabled={saving || user.status === 'active'} onClick={() => onAccess('active')}>Восстановить</ButtonX><ButtonX secondary disabled={saving || user.status === 'paused'} onClick={() => onAccess('paused')}>Заблокировать</ButtonX><ButtonX danger disabled={saving || user.status === 'revoked'} onClick={() => onAccess('revoked')}>Отозвать</ButtonX><ButtonX danger disabled={saving} onClick={onDelete}>Удалить ведущего и его данные</ButtonX></div>
+    </Card>
+  </>
+}
+
 export function OwnerAdmin() {
   const [auth, setAuth] = useState<"checking" | "owner" | "denied" | "error">(
     "checking",
@@ -1059,7 +1072,7 @@ export function OwnerAdmin() {
             </div>
           </>
         )}
-        {data && tab === "users" && (
+        {data && tab === "users" && !selectedUser && (
           <>
             <header className="owner-header">
               <div>
@@ -1322,27 +1335,27 @@ export function OwnerAdmin() {
                   )}
                   <div className="owner-actions">
                     <ButtonX
-                      disabled={saving || selectedUser.status === "active"}
+                      disabled={saving || (selectedUser as OwnerDashboard['users'][number]).status === "active"}
                       onClick={() =>
-                        setConfirm({ uid: selectedUser.uid, next: "active" })
+                        setConfirm({ uid: (selectedUser as OwnerDashboard['users'][number]).uid, next: "active" })
                       }
                     >
                       Восстановить
                     </ButtonX>
                     <ButtonX
                       secondary
-                      disabled={saving || selectedUser.status === "paused"}
+                      disabled={saving || (selectedUser as OwnerDashboard['users'][number]).status === "paused"}
                       onClick={() =>
-                        setConfirm({ uid: selectedUser.uid, next: "paused" })
+                        setConfirm({ uid: (selectedUser as OwnerDashboard['users'][number]).uid, next: "paused" })
                       }
                     >
                       Заблокировать
                     </ButtonX>
                     <ButtonX
                       danger
-                      disabled={saving || selectedUser.status === "revoked"}
+                      disabled={saving || (selectedUser as OwnerDashboard['users'][number]).status === "revoked"}
                       onClick={() =>
-                        setConfirm({ uid: selectedUser.uid, next: "revoked" })
+                        setConfirm({ uid: (selectedUser as OwnerDashboard['users'][number]).uid, next: "revoked" })
                       }
                     >
                       Отозвать
@@ -1359,6 +1372,23 @@ export function OwnerAdmin() {
               )}
             </div>
           </>
+        )}
+        {data && tab === "users" && selectedUser && (
+          <LeaderDetailsScreen
+            user={selectedUser}
+            details={leaderDetails}
+            error={leaderDetailsError}
+            roomMode={leaderRoomMode}
+            roomStatus={leaderRoomStatus}
+            saving={saving}
+            onBack={() => { setSelectedUserId(""); setLeaderDetails(null); setLeaderDetailsError("") }}
+            onRoomMode={setLeaderRoomMode}
+            onRoomStatus={setLeaderRoomStatus}
+            onLoadMore={() => { if (!leaderDetails) return; void getOwnerLeaderDetails(leaderDetails.profile.uid, { mode: leaderRoomMode, roomStatus: leaderRoomStatus, offset: leaderDetails.rooms.length }).then(page => setLeaderDetails({ ...page, rooms: [...leaderDetails.rooms, ...page.rooms] })).catch(cause => setLeaderDetailsError(cause instanceof Error ? cause.message : "Не удалось загрузить следующую страницу.")) }}
+            onOpenRooms={openLeaderRooms}
+            onAccess={next => setConfirm({ uid: selectedUser.uid, next })}
+            onDelete={() => void openDeletionPreview()}
+          />
         )}
         {data && tab === "invites" && (
           <>

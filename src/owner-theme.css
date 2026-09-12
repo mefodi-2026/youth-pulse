@@ -160,3 +160,15 @@ html[data-owner-theme="dark"] .owner-modal-backdrop {
 @media (max-width:720px) { .owner-invites { padding:16px; }.owner-invites-head { display:grid; }.owner-invites-head .button { width:100%; } }
 .leader-room-filters { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:14px 0; }.leader-room-list { display:grid; gap:7px; max-height:300px; margin:8px 0 12px; overflow:auto; }.leader-room-list button { display:grid; gap:3px; padding:10px; border:1px solid var(--owner-border); border-radius:10px; color:var(--owner-text-primary); background:var(--owner-raised); text-align:left; cursor:pointer; }.leader-room-list button:hover { border-color:var(--owner-accent); background:var(--owner-hover); }.leader-room-list small { color:var(--owner-text-secondary); font-size:10px; line-height:1.4; }
 @media (max-width:720px) { .leader-room-filters { grid-template-columns:1fr; } }
+
+.owner-detail-header { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+.owner-detail-header .button { flex:0 0 auto; margin-top:6px; }
+.leader-detail-screen { width:100%; max-width:1120px; padding:clamp(20px,3vw,32px); }
+.leader-detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.leader-detail-grid>div { min-width:0; padding:14px; border:1px solid var(--owner-border); border-radius:13px; background:var(--owner-raised); }
+.leader-detail-grid dt { color:var(--owner-text-secondary); font-size:10px; }
+.leader-detail-grid dd { min-width:0; margin:6px 0 0; overflow-wrap:anywhere; word-break:break-word; color:var(--owner-text-primary); font-weight:800; line-height:1.45; }
+.leader-room-list { max-height:none; }
+.leader-room-list button { min-width:0; overflow-wrap:anywhere; word-break:break-word; }
+.leader-room-list button small { overflow-wrap:anywhere; word-break:break-word; }
+@media (max-width:720px) { .owner-detail-header { display:grid; }.owner-detail-header .button { width:100%; margin:0; }.leader-detail-grid { grid-template-columns:1fr; }.leader-detail-screen .owner-actions { display:grid; grid-template-columns:1fr; }.leader-detail-screen .owner-actions .button { width:100%; } }
