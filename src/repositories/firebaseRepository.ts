@@ -9,6 +9,7 @@ export {
   archiveSession,
   copyQuizPackToWorkspace,
   changeLeaderAccess,
+  closeLeaderRoomAsOwner,
   createSession,
   createSessionRecord,
   defaultDiagnosticTemplateSelection,

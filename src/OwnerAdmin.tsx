@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
 import {
   changeLeaderAccess,
+  closeLeaderRoomAsOwner,
   deleteLeaderAndData,
   getOwnerAdminDashboard,
   getOwnerInviteStats,
@@ -400,8 +401,8 @@ export function OwnerAdmin() {
   const [leaderRoomStatus, setLeaderRoomStatus] = useState("");
   const [deletionPreview, setDeletionPreview] =
     useState<LeaderDeletionPreview | null>(null);
-  const [deletionEmail, setDeletionEmail] = useState("");
   const [deletionError, setDeletionError] = useState("");
+  const [deletionProgress, setDeletionProgress] = useState("");
   const seenNotificationIds = useRef(new Set<string>());
   const period = useMemo(() => {
     const to = Date.now();
@@ -627,9 +628,9 @@ export function OwnerAdmin() {
     if (!selectedUser) return;
     setSaving(true);
     setDeletionError("");
+    setDeletionProgress("Проверяем связанные данные…");
     try {
       setDeletionPreview(await prepareLeaderDeletion(selectedUser.uid));
-      setDeletionEmail("");
     } catch (cause) {
       setDeletionError(
         cause instanceof Error
@@ -638,14 +639,16 @@ export function OwnerAdmin() {
       );
     } finally {
       setSaving(false);
+      setDeletionProgress("");
     }
   };
   const deleteLeader = async () => {
     if (!deletionPreview) return;
     setSaving(true);
     setDeletionError("");
+    setDeletionProgress("Отзываем доступ и удаляем связанные данные…");
     try {
-      await deleteLeaderAndData(deletionPreview.uid, deletionEmail);
+      await deleteLeaderAndData(deletionPreview.uid);
       setDeletionPreview(null);
       setSelectedUserId("");
       setLeaderDetails(null);
@@ -661,6 +664,23 @@ export function OwnerAdmin() {
       );
     } finally {
       setSaving(false);
+      setDeletionProgress("");
+    }
+  };
+  const closeActiveLeaderRoom = async (roomId: string) => {
+    if (!deletionPreview) return;
+    setSaving(true);
+    setDeletionError("");
+    setDeletionProgress("Завершаем активную комнату…");
+    try {
+      await closeLeaderRoomAsOwner(deletionPreview.uid, roomId);
+      setDeletionPreview(await prepareLeaderDeletion(deletionPreview.uid));
+      setNotice("Комната завершена администратором. Теперь можно продолжить удаление.");
+    } catch (cause) {
+      setDeletionError(cause instanceof Error ? cause.message : "Не удалось завершить активную комнату.");
+    } finally {
+      setSaving(false);
+      setDeletionProgress("");
     }
   };
   const updateTheme = (nextTheme: "dark" | "light") => {
@@ -1818,94 +1838,24 @@ export function OwnerAdmin() {
               <p className="eyebrow">НЕОБРАТИМОЕ УДАЛЕНИЕ</p>
               <h2>Удалить ведущего и его данные?</h2>
               <p>
-                <b>{deletionPreview.fullName || deletionPreview.email}</b> будет
-                удалён из аутентификации и аналитики. Активные комнаты сервер не
-                удаляет — сначала их нужно завершить обычным способом.
+                <b>{deletionPreview.fullName || "Без имени"}</b>
+                <br />
+                {deletionPreview.email || "Email не указан"}
               </p>
-              {deletionPreview.summary.activeRooms.length > 0 ? (
-                <p className="owner-error">
-                  Есть активные комнаты:{" "}
-                  {deletionPreview.summary.activeRooms
-                    .map((room) => room.roomTitle)
-                    .join(", ")}
-                  . Удаление сейчас недоступно.
-                </p>
-              ) : (
-                <>
-                  <dl>
-                    <div>
-                      <dt>Комнаты</dt>
-                      <dd>
-                        {deletionPreview.summary.totalRooms} (диагностика:{" "}
-                        {deletionPreview.summary.rooms.diagnostic || 0},
-                        викторина: {deletionPreview.summary.rooms.quiz || 0},
-                        колесо: {deletionPreview.summary.rooms.wheel || 0})
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Участники / результаты</dt>
-                      <dd>
-                        {deletionPreview.summary.participantRecords} /{" "}
-                        {deletionPreview.summary.resultRecords}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Отзывы</dt>
-                      <dd>{deletionPreview.summary.feedbackRecords}</dd>
-                    </div>
-                    <div>
-                      <dt>Рабочее пространство</dt>
-                      <dd>
-                        {deletionPreview.summary.personalWorkspace
-                          ? `Личное; наборов: ${deletionPreview.summary.personalPacks}`
-                          : deletionPreview.summary.sharedWorkspacePreserved
-                            ? "Общее — будет сохранено"
-                            : "Не указано"}
-                      </dd>
-                    </div>
-                  </dl>
-                  <p>
-                    Будут удалены профиль, комнаты, их публичные записи,
-                    участники, результаты, архивы и личные данные рабочего
-                    пространства. Общая библиотека, коды приглашений и данные
-                    других ведущих сохраняются.
-                  </p>
-                  <label>
-                    Введите email ведущего для подтверждения
-                    <input
-                      type="email"
-                      value={deletionEmail}
-                      onChange={(event) => setDeletionEmail(event.target.value)}
-                      placeholder={deletionPreview.email}
-                    />
-                  </label>
-                  {deletionError && (
-                    <p className="owner-error">{deletionError}</p>
-                  )}
-                  <div className="owner-actions">
-                    <ButtonX
-                      danger
-                      disabled={
-                        saving ||
-                        deletionEmail.trim().toLocaleLowerCase("ru-RU") !==
-                          deletionPreview.email
-                            .trim()
-                            .toLocaleLowerCase("ru-RU")
-                      }
-                      onClick={() => void deleteLeader()}
-                    >
-                      Удалить навсегда
-                    </ButtonX>
-                    <ButtonX
-                      secondary
-                      disabled={saving}
-                      onClick={() => setDeletionPreview(null)}
-                    >
-                      Отмена
-                    </ButtonX>
-                  </div>
-                </>
-              )}
+              <dl>
+                <div><dt>Комнаты</dt><dd>{deletionPreview.summary.totalRooms} (диагностика: {deletionPreview.summary.rooms.diagnostic || 0}, викторина: {deletionPreview.summary.rooms.quiz || 0}, колесо: {deletionPreview.summary.rooms.wheel || 0})</dd></div>
+                <div><dt>Участники / результаты</dt><dd>{deletionPreview.summary.participantRecords} / {deletionPreview.summary.resultRecords}</dd></div>
+                <div><dt>Отзывы</dt><dd>{deletionPreview.summary.feedbackRecords}</dd></div>
+                <div><dt>Рабочее пространство</dt><dd>{deletionPreview.summary.personalWorkspace ? `Личное; наборов: ${deletionPreview.summary.personalPacks}` : deletionPreview.summary.sharedWorkspacePreserved ? "Общее — будет сохранено" : "Не указано"}</dd></div>
+              </dl>
+              <p>Операция необратима: будут удалены учётная запись, профиль, комнаты, публичные записи, подключения, ответы, результаты, архивы и личные данные рабочего пространства. Общая библиотека, приглашения и данные других ведущих сохраняются.</p>
+              {deletionPreview.summary.activeRooms.length > 0 && <div className="owner-delete-active"><p className="owner-error">Удаление временно недоступно: сначала завершите активные комнаты.</p>{deletionPreview.summary.activeRooms.map(room => <div key={room.roomId}><b>{room.roomTitle}</b><small>{modeName[room.mode] || room.mode}</small><ButtonX secondary disabled={saving} onClick={() => void closeActiveLeaderRoom(room.roomId)}>Завершить комнату</ButtonX></div>)}</div>}
+              {deletionProgress && <p className="owner-help" role="status">{deletionProgress}</p>}
+              {deletionError && <p className="owner-error">{deletionError}</p>}
+              <div className="owner-actions">
+                {deletionPreview.summary.activeRooms.length === 0 && <ButtonX danger disabled={saving} onClick={() => void deleteLeader()}>Удалить ведущего и данные</ButtonX>}
+                <ButtonX secondary disabled={saving} onClick={() => setDeletionPreview(null)}>Отмена</ButtonX>
+              </div>
             </Card>
           </div>
         )}

@@ -271,11 +271,10 @@ const leaderRoomSet = (sessions, archives, uid) => {
   Object.values(asObject(sessions)).filter(room => room?.hostUid === uid).map(safeAdminRoom).forEach(room => rooms.set(room.roomId, room))
   return [...rooms.values()]
 }
-const assertDeletableLeader = async (actorUid, uid, email) => {
+const assertDeletableLeader = async (actorUid, uid) => {
   if (!uid || uid === actorUid) throw new HttpsError('failed-precondition', 'Нельзя удалить собственный административный аккаунт.')
   const profile = (await db.ref(`users/${uid}`).once('value')).val()
   if (!profile) throw new HttpsError('not-found', 'Пользователь не найден или уже удалён.')
-  if (String(profile.email || '').trim().toLocaleLowerCase('ru-RU') !== String(email || '').trim().toLocaleLowerCase('ru-RU')) throw new HttpsError('permission-denied', 'Email не подтверждает выбранный аккаунт.')
   const targetAuth = await adminAuth.getUser(uid).catch(error => error?.code === 'auth/user-not-found' ? null : Promise.reject(error))
   if (targetAuth?.customClaims?.platformAdmin) {
     let pageToken; let owners = 0
@@ -305,14 +304,40 @@ exports.prepareLeaderDeletion = onCall(async request => {
   return { uid, email: profile.email || '', fullName: profile.fullName || '', summary: { ...summary, personalWorkspace: Boolean(workspace?.ownerUid === uid), personalPacks: workspace?.ownerUid === uid ? Object.keys(asObject(workspace.workspacePacks)).length : 0, sharedWorkspacePreserved: Boolean(workspace && workspace.ownerUid !== uid) } }
 })
 
+/** Owner-initiated equivalent of the normal room closing operation. It is
+ * deliberately limited to a currently active room belonging to the selected
+ * leader; old inactive rooms are deleted without changing their lifecycle. */
+exports.closeLeaderRoomAsOwner = onCall(async request => {
+  const actorUid = assertPlatformOwner(request)
+  const input = asObject(request.data)
+  const uid = typeof input.uid === 'string' ? input.uid : ''
+  const roomId = typeof input.roomId === 'string' ? input.roomId : ''
+  if (!uid || !roomId) throw new HttpsError('invalid-argument', 'Не выбрана комната для завершения.')
+  const [profileSnap, roomSnap, publicSnap] = await Promise.all([db.ref(`users/${uid}`).once('value'), db.ref(`sessions/${roomId}`).once('value'), db.ref(`publicRooms/${roomId}`).once('value')])
+  if (!profileSnap.exists()) throw new HttpsError('not-found', 'Пользователь не найден или уже удалён.')
+  const room = roomSnap.val()
+  if (!room || room.hostUid !== uid) throw new HttpsError('not-found', 'Активная комната не найдена у выбранного ведущего.')
+  if (safeAdminRoom(room).operationalStatus !== 'active') return { closed: false, reason: 'Комната уже не активна.' }
+  const now = Date.now()
+  const participants = asObject(room.participants)
+  const participantCount = Object.keys(participants).length
+  const completedCount = Object.values(participants).filter(participant => participant?.status === 'finished').length
+  const event = { id: 'room_closed', type: 'room_closed', roomId, ...(room.workspaceId ? { workspaceId: room.workspaceId } : {}), hostUid: uid, createdAt: now }
+  const closedRoom = { ...room, phase: 'closed', status: 'closed', closedAt: now, endedAt: now, lastActivityAt: now, participantCount, completedCount, events: { ...asObject(room.events), [event.id]: event } }
+  const patch = { [`sessions/${roomId}`]: closedRoom, [`sessionArchives/${roomId}`]: { ...closedRoom, archivedAt: now }, [`adminAudit/${adminAuditId('room_closed_by_owner', roomId, now)}`]: { id: adminAuditId('room_closed_by_owner', roomId, now), type: 'room_closed_by_owner', actorUid, targetId: roomId, createdAt: now } }
+  if (room.workspaceId) patch[`workspaceArchives/${room.workspaceId}/${roomId}`] = { ...closedRoom, archivedAt: now }
+  if (publicSnap.exists()) Object.assign(patch, { [`publicRooms/${roomId}/phase`]: 'closed', [`publicRooms/${roomId}/closedAt`]: now, [`publicRooms/${roomId}/endedAt`]: now, [`publicRooms/${roomId}/lastActivityAt`]: now })
+  await db.ref().update(patch)
+  return { closed: true, room: { roomId, roomTitle: room.roomTitle || roomId } }
+})
+
 /** Irreversible owner-only removal. The target is revoked before the final
  * cleanup, so a retry after an Auth/RTDB failure cannot create new rooms. */
 exports.deleteLeaderAndData = onCall(async request => {
   const actorUid = assertPlatformOwner(request)
   const input = asObject(request.data)
   const uid = typeof input.uid === 'string' ? input.uid : ''
-  const email = typeof input.email === 'string' ? input.email : ''
-  const profile = await assertDeletableLeader(actorUid, uid, email)
+  const profile = await assertDeletableLeader(actorUid, uid)
   const initial = await deletionSummary(uid)
   if (initial.activeRooms.length) throw new HttpsError('failed-precondition', 'У ведущего есть активная комната. Сначала завершите её обычным способом.')
   // A status transition first closes the race with direct room writes that
@@ -320,6 +345,7 @@ exports.deleteLeaderAndData = onCall(async request => {
   await db.ref().update({ [`users/${uid}/status`]: 'revoked', [`users/${uid}/updatedAt`]: Date.now() })
   const summary = await deletionSummary(uid)
   if (summary.activeRooms.length) throw new HttpsError('failed-precondition', 'Во время удаления появилась активная комната. Удаление остановлено.')
+  try { await adminAuth.revokeRefreshTokens(uid) } catch (error) { if (error?.code !== 'auth/user-not-found') throw new HttpsError('unavailable', 'Не удалось отозвать сессии учётной записи. Повторите удаление.') }
   try { await adminAuth.deleteUser(uid) } catch (error) { if (error?.code !== 'auth/user-not-found') throw new HttpsError('unavailable', 'Не удалось удалить учётную запись. Повторите удаление: данные сохранены в безопасном состоянии.') }
 
   const [sessionsSnap, archivesSnap, feedbackSnap, auditSnap] = await Promise.all([

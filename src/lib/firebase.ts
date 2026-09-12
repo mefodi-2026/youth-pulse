@@ -902,10 +902,17 @@ export const prepareLeaderDeletion = async (uid: string): Promise<LeaderDeletion
   return result.data
 }
 
-export const deleteLeaderAndData = async (uid: string, email: string) => {
+export const closeLeaderRoomAsOwner = async (uid: string, roomId: string) => {
   const services = requireFirebase(); await authPersistence
   if (!services.auth.currentUser || services.auth.currentUser.isAnonymous || !await isPlatformOwner() || !functions) throw new Error('Недостаточно прав владельца платформы.')
-  const result = await httpsCallable<{ uid: string; email: string }, { deleted: boolean }>(functions, 'deleteLeaderAndData')({ uid, email })
+  const result = await httpsCallable<{ uid: string; roomId: string }, { closed: boolean; reason?: string }>(functions, 'closeLeaderRoomAsOwner')({ uid, roomId })
+  return result.data
+}
+
+export const deleteLeaderAndData = async (uid: string) => {
+  const services = requireFirebase(); await authPersistence
+  if (!services.auth.currentUser || services.auth.currentUser.isAnonymous || !await isPlatformOwner() || !functions) throw new Error('Недостаточно прав владельца платформы.')
+  const result = await httpsCallable<{ uid: string }, { deleted: boolean }>(functions, 'deleteLeaderAndData')({ uid })
   return result.data
 }
 
