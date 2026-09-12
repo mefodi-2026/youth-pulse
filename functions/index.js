@@ -43,6 +43,10 @@ const assertPlatformOwner = request => {
 const asTimestamp = value => Number.isFinite(Number(value)) ? Number(value) : 0
 const ownerDay = timestamp => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Almaty', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(timestamp))
 const adminAuditId = (type, targetId, at) => `${type}:${targetId}:${at}`
+const leaderDeletionAuditKey = uid => `leader_delete:${uid}`
+const leaderDeletionOperationId = () => `ld-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+const callableErrorCodes = new Set(['aborted', 'already-exists', 'cancelled', 'data-loss', 'deadline-exceeded', 'failed-precondition', 'internal', 'invalid-argument', 'not-found', 'out-of-range', 'permission-denied', 'resource-exhausted', 'unauthenticated', 'unavailable', 'unimplemented'])
+const isCallableError = error => error instanceof HttpsError || callableErrorCodes.has(error?.code)
 // Registration notifications have a stable key. A retried callable or a
 // returning account therefore cannot create another event for the same UID.
 const registrationNotificationId = uid => `registration:${uid}`
@@ -337,41 +341,84 @@ exports.deleteLeaderAndData = onCall(async request => {
   const actorUid = assertPlatformOwner(request)
   const input = asObject(request.data)
   const uid = typeof input.uid === 'string' ? input.uid : ''
-  const profile = await assertDeletableLeader(actorUid, uid)
-  const initial = await deletionSummary(uid)
-  if (initial.activeRooms.length) throw new HttpsError('failed-precondition', 'У ведущего есть активная комната. Сначала завершите её обычным способом.')
-  // A status transition first closes the race with direct room writes that
-  // require an active owner profile. It is intentionally idempotent for retry.
-  await db.ref().update({ [`users/${uid}/status`]: 'revoked', [`users/${uid}/updatedAt`]: Date.now() })
-  const summary = await deletionSummary(uid)
-  if (summary.activeRooms.length) throw new HttpsError('failed-precondition', 'Во время удаления появилась активная комната. Удаление остановлено.')
-  try { await adminAuth.revokeRefreshTokens(uid) } catch (error) { if (error?.code !== 'auth/user-not-found') throw new HttpsError('unavailable', 'Не удалось отозвать сессии учётной записи. Повторите удаление.') }
-  try { await adminAuth.deleteUser(uid) } catch (error) { if (error?.code !== 'auth/user-not-found') throw new HttpsError('unavailable', 'Не удалось удалить учётную запись. Повторите удаление: данные сохранены в безопасном состоянии.') }
+  const operationId = leaderDeletionOperationId()
+  const operationKey = leaderDeletionAuditKey(uid)
+  let stage = 'validation'
+  const recordFailure = async (error, result = 'failed') => {
+    if (!uid) return
+    try {
+      await db.ref(`adminAudit/${operationKey}`).update({
+        id: operationKey, type: 'leader_delete_operation', actorUid, targetId: uid,
+        result, operationId, stage, updatedAt: Date.now(), errorCode: typeof error?.code === 'string' ? error.code : 'internal',
+      })
+    } catch (auditError) {
+      logger.error('Unable to record leader deletion failure', { operationId, stage, targetUid: uid, auditCode: auditError?.code || 'unknown' })
+    }
+  }
 
-  const [sessionsSnap, archivesSnap, feedbackSnap, auditSnap] = await Promise.all([
-    db.ref('sessions').once('value'), db.ref('sessionArchives').once('value'), db.ref('feedback').once('value'), db.ref('adminAudit').once('value'),
-  ])
-  const rooms = leaderRoomSet(sessionsSnap.val(), archivesSnap.val(), uid)
-  const workspaceId = typeof profile.workspaceId === 'string' ? profile.workspaceId : ''
-  const workspace = workspaceId ? (await db.ref(`workspaces/${workspaceId}`).once('value')).val() : null
-  const ownsWorkspace = Boolean(workspace?.ownerUid === uid)
-  const now = Date.now(); const audit = { id: adminAuditId('leader_deleted', uid, now), type: 'leader_deleted', actorUid, targetId: uid, createdAt: now, result: 'completed' }
-  const patch = { [`users/${uid}`]: null, [`adminNotifications/${registrationNotificationId(uid)}`]: null, [`adminAudit/${audit.id}`]: audit }
-  rooms.forEach(room => {
-    patch[`sessions/${room.roomId}`] = null; patch[`sessionArchives/${room.roomId}`] = null; patch[`publicRooms/${room.roomId}`] = null; patch[`roomLobbies/${room.roomId}`] = null
-    patch[`roomParticipantQuestions/${room.roomId}`] = null; patch[`roomPrivateQuestions/${room.roomId}`] = null; patch[`roomParticipantResults/${room.roomId}`] = null
-    if (room.workspaceId) patch[`workspaceArchives/${room.workspaceId}/${room.roomId}`] = null
-  })
-  Object.entries(asObject(feedbackSnap.val())).forEach(([id, item]) => { if (item?.uid === uid || (ownsWorkspace && item?.workspaceId === workspaceId)) patch[`feedback/${id}`] = null })
-  // Keep no historical profile links in the owner feed; retain only the
-  // anonymous, minimal deletion audit record created above.
-  Object.entries(asObject(auditSnap.val())).forEach(([id, item]) => {
-    if (item?.targetId === uid || item?.actorUid === uid) patch[`adminAudit/${id}`] = null
-  })
-  patch[`adminAudit/${audit.id}`] = audit
-  if (ownsWorkspace && workspaceId) { patch[`workspaces/${workspaceId}`] = null; patch[`workspaceProducts/${workspaceId}`] = null; patch[`workspaceArchives/${workspaceId}`] = null }
-  await db.ref().update(patch)
-  return { deleted: true, summary: { ...summary, personalWorkspace: ownsWorkspace } }
+  try {
+    if (!uid) throw new HttpsError('invalid-argument', 'Не выбран ведущий для удаления.')
+    stage = 'resume_check'
+    const [profileSnap, previousOperationSnap] = await Promise.all([db.ref(`users/${uid}`).once('value'), db.ref(`adminAudit/${operationKey}`).once('value')])
+    const previousOperation = previousOperationSnap.val()
+    if (!profileSnap.exists()) {
+      if (previousOperation?.type === 'leader_delete_operation' && previousOperation?.result === 'completed') {
+        logger.info('Leader deletion retry acknowledged after completed cleanup', { operationId, targetUid: uid })
+        return { deleted: true, alreadyDeleted: true, operationId }
+      }
+      throw new HttpsError('not-found', 'Пользователь не найден. Возможно, он уже удалён в другой операции. Обновите список аккаунтов.')
+    }
+
+    stage = 'permission_check'
+    const profile = await assertDeletableLeader(actorUid, uid)
+    stage = 'dependency_check'
+    const initial = await deletionSummary(uid)
+    if (initial.activeRooms.length) throw new HttpsError('failed-precondition', 'Удаление пока не выполнено: сначала завершите активные комнаты в этом окне.')
+
+    stage = 'access_revocation'
+    const startedAt = Date.now()
+    await db.ref().update({
+      [`users/${uid}/status`]: 'revoked', [`users/${uid}/updatedAt`]: startedAt,
+      [`adminAudit/${operationKey}`]: { id: operationKey, type: 'leader_delete_operation', actorUid, targetId: uid, result: 'started', operationId, stage, createdAt: previousOperation?.createdAt || startedAt, updatedAt: startedAt },
+    })
+    const summary = await deletionSummary(uid)
+    if (summary.activeRooms.length) throw new HttpsError('failed-precondition', 'Во время удаления появилась активная комната. Операция остановлена; завершите комнату и повторите попытку.')
+    try { await adminAuth.revokeRefreshTokens(uid) } catch (error) { if (error?.code !== 'auth/user-not-found') throw new HttpsError('unavailable', 'Доступ ведущего уже приостановлен, но сессии не удалось отозвать. Повторите удаление.') }
+    try { await adminAuth.deleteUser(uid) } catch (error) { if (error?.code !== 'auth/user-not-found') throw new HttpsError('unavailable', 'Доступ ведущего уже приостановлен, но учётную запись пока не удалось удалить. Повторите удаление.') }
+
+    stage = 'data_cleanup'
+    const [sessionsSnap, archivesSnap, feedbackSnap, auditSnap] = await Promise.all([
+      db.ref('sessions').once('value'), db.ref('sessionArchives').once('value'), db.ref('feedback').once('value'), db.ref('adminAudit').once('value'),
+    ])
+    const rooms = leaderRoomSet(sessionsSnap.val(), archivesSnap.val(), uid)
+    const workspaceId = typeof profile.workspaceId === 'string' ? profile.workspaceId : ''
+    const workspace = workspaceId ? (await db.ref(`workspaces/${workspaceId}`).once('value')).val() : null
+    const ownsWorkspace = Boolean(workspace?.ownerUid === uid)
+    const now = Date.now(); const audit = { id: adminAuditId('leader_deleted', uid, now), type: 'leader_deleted', actorUid, targetId: uid, createdAt: now, result: 'completed', operationId }
+    const patch = { [`users/${uid}`]: null, [`adminNotifications/${registrationNotificationId(uid)}`]: null, [`adminAudit/${audit.id}`]: audit }
+    rooms.forEach(room => {
+      patch[`sessions/${room.roomId}`] = null; patch[`sessionArchives/${room.roomId}`] = null; patch[`publicRooms/${room.roomId}`] = null; patch[`roomLobbies/${room.roomId}`] = null
+      patch[`roomParticipantQuestions/${room.roomId}`] = null; patch[`roomPrivateQuestions/${room.roomId}`] = null; patch[`roomParticipantResults/${room.roomId}`] = null
+      if (room.workspaceId) patch[`workspaceArchives/${room.workspaceId}/${room.roomId}`] = null
+    })
+    Object.entries(asObject(feedbackSnap.val())).forEach(([id, item]) => { if (item?.uid === uid || (ownsWorkspace && item?.workspaceId === workspaceId)) patch[`feedback/${id}`] = null })
+    // Keep no historical profile links in the owner feed; retain only the
+    // anonymous, minimal deletion audit record and its retry marker.
+    Object.entries(asObject(auditSnap.val())).forEach(([id, item]) => {
+      if (item?.targetId === uid || item?.actorUid === uid) patch[`adminAudit/${id}`] = null
+    })
+    patch[`adminAudit/${audit.id}`] = audit
+    patch[`adminAudit/${operationKey}`] = { id: operationKey, type: 'leader_delete_operation', actorUid, targetId: uid, result: 'completed', operationId, createdAt: previousOperation?.createdAt || startedAt, updatedAt: now }
+    if (ownsWorkspace && workspaceId) { patch[`workspaces/${workspaceId}`] = null; patch[`workspaceProducts/${workspaceId}`] = null; patch[`workspaceArchives/${workspaceId}`] = null }
+    await db.ref().update(patch)
+    logger.info('Leader deletion completed', { operationId, targetUid: uid, roomCount: rooms.length })
+    return { deleted: true, operationId, summary: { ...summary, personalWorkspace: ownsWorkspace } }
+  } catch (error) {
+    logger.error('Leader deletion did not complete', { operationId, stage, targetUid: uid || null, actorUid, errorCode: error?.code || 'internal' })
+    await recordFailure(error, isCallableError(error) ? 'blocked' : 'failed')
+    if (isCallableError(error)) throw error
+    throw new HttpsError('internal', `Удаление не завершено. Данные не удаляйте вручную: повторите попытку. Код операции: ${operationId}.`)
+  }
 })
 
 const invitationCodePattern = /^[A-Z0-9-]{4,64}$/

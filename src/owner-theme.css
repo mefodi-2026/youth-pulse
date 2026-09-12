@@ -105,6 +105,20 @@
   color:#fff4f2;
 }
 
+/* A deletion error can appear inside the portal confirmation card. Give it
+   an opaque danger surface so inherited card text never reduces contrast. */
+.owner-modal-backdrop .owner-delete-confirm .owner-error {
+  border:1px solid #ffb5aa;
+  border-radius:10px;
+  padding:10px 12px;
+  color:#fff !important;
+  background:#8d2118;
+  font-weight:700;
+  line-height:1.45;
+}
+.owner-shell[data-theme="light"] .owner-delete-confirm .owner-error,
+html[data-owner-theme="light"] .owner-modal-backdrop .owner-delete-confirm .owner-error { border-color:#ad2318; color:#fff !important; background:#9f251b; }
+
 .owner-shell .owner-success,
 .owner-shell .owner-success :is(p,small,b,strong),
 .owner-modal-backdrop .owner-success,

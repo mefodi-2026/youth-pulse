@@ -648,20 +648,19 @@ export function OwnerAdmin() {
     setDeletionError("");
     setDeletionProgress("Отзываем доступ и удаляем связанные данные…");
     try {
-      await deleteLeaderAndData(deletionPreview.uid);
+      const result = await deleteLeaderAndData(deletionPreview.uid);
       setDeletionPreview(null);
       setSelectedUserId("");
       setLeaderDetails(null);
-      setNotice(
-        "Ведущий и принадлежащие ему данные удалены. Аналитика пересчитана из оставшихся записей.",
-      );
+      setNotice(result.alreadyDeleted
+        ? "Предыдущая операция уже завершила удаление. Список и аналитика обновлены."
+        : "Ведущий и принадлежащие ему данные удалены. Аналитика пересчитана из оставшихся записей.");
       await load();
     } catch (cause) {
-      setDeletionError(
-        cause instanceof Error
-          ? cause.message
-          : "Не удалось завершить удаление.",
-      );
+      const message = cause instanceof Error ? cause.message : "";
+      setDeletionError(!message || message === "INTERNAL"
+        ? "Удаление не завершено. Ничего не удаляйте вручную: повторите попытку. Если ошибка повторится, обратитесь к владельцу платформы."
+        : message);
     } finally {
       setSaving(false);
       setDeletionProgress("");

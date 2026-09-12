@@ -835,6 +835,7 @@ export type OwnerLeaderDetails = {
 }
 
 export type LeaderDeletionPreview = { uid: string; email: string; fullName: string; summary: { rooms: Record<string, number>; totalRooms: number; participantRecords: number; resultRecords: number; feedbackRecords: number; activeRooms: Array<{ roomId: string; roomTitle: string; mode: string }>; personalWorkspace: boolean; personalPacks: number; sharedWorkspacePreserved: boolean } }
+export type LeaderDeletionResult = { deleted: boolean; alreadyDeleted?: boolean; operationId?: string }
 
 const asOwnerRegistrationNotification = (value: unknown): OwnerRegistrationNotification | null => {
   if (!value || typeof value !== 'object') return null
@@ -909,10 +910,10 @@ export const closeLeaderRoomAsOwner = async (uid: string, roomId: string) => {
   return result.data
 }
 
-export const deleteLeaderAndData = async (uid: string) => {
+export const deleteLeaderAndData = async (uid: string): Promise<LeaderDeletionResult> => {
   const services = requireFirebase(); await authPersistence
   if (!services.auth.currentUser || services.auth.currentUser.isAnonymous || !await isPlatformOwner() || !functions) throw new Error('Недостаточно прав владельца платформы.')
-  const result = await httpsCallable<{ uid: string }, { deleted: boolean }>(functions, 'deleteLeaderAndData')({ uid })
+  const result = await httpsCallable<{ uid: string }, LeaderDeletionResult>(functions, 'deleteLeaderAndData')({ uid })
   return result.data
 }
 
