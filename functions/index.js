@@ -396,13 +396,15 @@ exports.deleteLeaderAndData = onCall(async request => {
     const ownsWorkspace = Boolean(workspace?.ownerUid === uid)
     const now = Date.now(); const audit = { id: adminAuditId('leader_deleted', uid, now), type: 'leader_deleted', actorUid, targetId: uid, createdAt: now, result: 'completed', operationId }
     const patch = { [`users/${uid}`]: null, [`adminNotifications/${registrationNotificationId(uid)}`]: null, [`adminAudit/${audit.id}`]: audit }
+    const personalArchiveRoot = ownsWorkspace && workspaceId ? `workspaceArchives/${workspaceId}` : ''
     rooms.forEach(room => {
       patch[`sessions/${room.roomId}`] = null; patch[`sessionArchives/${room.roomId}`] = null; patch[`publicRooms/${room.roomId}`] = null; patch[`roomLobbies/${room.roomId}`] = null
       patch[`roomParticipantQuestions/${room.roomId}`] = null; patch[`roomPrivateQuestions/${room.roomId}`] = null; patch[`roomParticipantResults/${room.roomId}`] = null
       // A personal workspace is removed at its root below. RTDB rejects a
       // multi-location update containing both that root and one of its child
       // paths, while rooms in another workspace still need a narrow cleanup.
-      if (room.workspaceId && !(ownsWorkspace && room.workspaceId === workspaceId)) patch[`workspaceArchives/${room.workspaceId}/${room.roomId}`] = null
+      const roomArchivePath = room.workspaceId ? `workspaceArchives/${room.workspaceId}/${room.roomId}` : ''
+      if (roomArchivePath && !(personalArchiveRoot && roomArchivePath.startsWith(`${personalArchiveRoot}/`))) patch[roomArchivePath] = null
     })
     Object.entries(asObject(feedbackSnap.val())).forEach(([id, item]) => { if (item?.uid === uid || (ownsWorkspace && item?.workspaceId === workspaceId)) patch[`feedback/${id}`] = null })
     // Keep no historical profile links in the owner feed; retain only the
@@ -412,7 +414,12 @@ exports.deleteLeaderAndData = onCall(async request => {
     })
     patch[`adminAudit/${audit.id}`] = audit
     patch[`adminAudit/${operationKey}`] = { id: operationKey, type: 'leader_delete_operation', actorUid, targetId: uid, result: 'completed', operationId, createdAt: previousOperation?.createdAt || startedAt, updatedAt: now }
-    if (ownsWorkspace && workspaceId) { patch[`workspaces/${workspaceId}`] = null; patch[`workspaceProducts/${workspaceId}`] = null; patch[`workspaceArchives/${workspaceId}`] = null }
+    if (ownsWorkspace && workspaceId) { patch[`workspaces/${workspaceId}`] = null; patch[`workspaceProducts/${workspaceId}`] = null; patch[personalArchiveRoot] = null }
+    const conflict = Object.keys(patch).find(path => Object.keys(patch).some(otherPath => path !== otherPath && otherPath.startsWith(`${path}/`)))
+    if (conflict) {
+      logger.error('Leader deletion patch contains conflicting RTDB paths', { operationId, targetUid: uid, conflict })
+      throw new HttpsError('internal', `Удаление не выполнено из-за конфликта данных. Повторите попытку. Код операции: ${operationId}.`)
+    }
     await db.ref().update(patch)
     logger.info('Leader deletion completed', { operationId, targetUid: uid, roomCount: rooms.length })
     return { deleted: true, operationId, summary: { ...summary, personalWorkspace: ownsWorkspace } }
