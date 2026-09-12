@@ -399,7 +399,10 @@ exports.deleteLeaderAndData = onCall(async request => {
     rooms.forEach(room => {
       patch[`sessions/${room.roomId}`] = null; patch[`sessionArchives/${room.roomId}`] = null; patch[`publicRooms/${room.roomId}`] = null; patch[`roomLobbies/${room.roomId}`] = null
       patch[`roomParticipantQuestions/${room.roomId}`] = null; patch[`roomPrivateQuestions/${room.roomId}`] = null; patch[`roomParticipantResults/${room.roomId}`] = null
-      if (room.workspaceId) patch[`workspaceArchives/${room.workspaceId}/${room.roomId}`] = null
+      // A personal workspace is removed at its root below. RTDB rejects a
+      // multi-location update containing both that root and one of its child
+      // paths, while rooms in another workspace still need a narrow cleanup.
+      if (room.workspaceId && !(ownsWorkspace && room.workspaceId === workspaceId)) patch[`workspaceArchives/${room.workspaceId}/${room.roomId}`] = null
     })
     Object.entries(asObject(feedbackSnap.val())).forEach(([id, item]) => { if (item?.uid === uid || (ownsWorkspace && item?.workspaceId === workspaceId)) patch[`feedback/${id}`] = null })
     // Keep no historical profile links in the owner feed; retain only the
