@@ -24,6 +24,7 @@ try {
   })
   await import(`${pathToFileURL(join(outputDir, 'architecture-contract.mjs')).href}?run=${Date.now()}`)
   require('../functions/quizAnswerPolicy.contract.test.cjs')
+  require('../functions/verseMatchEngine.contract.test.cjs')
   const firebaseSource = await readFile(new URL('../src/lib/firebase.ts', import.meta.url), 'utf8')
   const functionsSource = await readFile(new URL('../functions/index.js', import.meta.url), 'utf8')
   assert.match(firebaseSource, /const reconciled = await get\(ref\(services\.db, roomParticipantPath\(roomId, participant\.id\)\)\)\.catch\(\(\) => null\)/)
