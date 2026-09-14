@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+functions/node_modules/
+
+# Local environment configuration. Keep only the safe, documented template.
+.env
+.env.*
+!.env.example
+
+# Generated build and TypeScript state. Existing tracked production artifacts
+# are deliberately left intact; this prevents new local artifacts being added.
+dist/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Local tooling and diagnostics
+.vercel/
+coverage/
+firebase-debug.log
+ui-debug.log
+*.log
+.DS_Store
+Thumbs.db

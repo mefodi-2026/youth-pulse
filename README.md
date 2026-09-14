@@ -52,7 +52,22 @@ pnpm build
 
 ## GitHub Pages
 
-`vite.config.ts` использует относительный `base: './'`. После публикации настройте в GitHub Pages источник из ветки/папки с собранным `dist`.
+`vite.config.ts` читает `VITE_BASE_PATH`; production workflow передаёт ему
+`/youth-pulse/` для GitHub Pages и публикует собранный `dist`.
+
+## Development и Vercel Preview
+
+Production остаётся на GitHub Pages и публикуется только workflow из ветки `main`.
+Ветка `develop` предназначена для отдельного Vercel Preview и использует тот же
+Firebase-проект. Для Vercel добавьте значения `VITE_FIREBASE_*` из существующих
+GitHub Secrets в окружение **Preview** и задайте `VITE_BASE_PATH=/`.
+
+Конфигурация `vercel.json` направляет все прямые переходы, включая `/owner`,
+`/join` и `/stage`, в Vite SPA. В Vercel не назначайте `develop` production
+branch и не подключайте к preview production-домен GitHub Pages.
+
+Для локальной работы скопируйте `.env.example` в `.env.local` и заполните
+существующими Firebase web-переменными. `.env.local` не попадает в Git.
 
 ## Визуальная система
 
