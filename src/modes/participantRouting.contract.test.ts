@@ -4,7 +4,7 @@ const assert: (condition: unknown, message: string) => asserts condition = (cond
   if (!condition) throw new Error(`Participant routing contract failed: ${message}`)
 }
 
-for (const mode of ['diagnostic', 'quiz', 'wheel'] as const) {
+for (const mode of ['diagnostic', 'quiz', 'wheel', 'verse-match'] as const) {
   const resolution = resolveParticipantRoomMode({ mode, gameTypeId: mode })
   assert(resolution.state === 'ready' && resolution.mode === mode, `${mode} must resolve before its participant flow mounts`)
 }

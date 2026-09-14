@@ -17,6 +17,18 @@ assert.equal(started.queue.slice(0, 20).every((item, index, items) => index === 
 const directionCounts = Object.values(started.participants).flatMap(item => Object.values(item.cards)).reduce((counts, card) => ({ ...counts, [card.direction]: (counts[card.direction] || 0) + 1 }), {})
 assert.deepEqual(directionCounts, { end: 100, start: 100 })
 
+for (const cardsPerPlayer of [5, 7, 10]) {
+  for (const direction of ['starts', 'ends', 'mixed']) {
+    const sample = startVerseGame({ ...source, config: { ...source.config, cardsPerPlayer, direction } }, () => 0.31, 90).game
+    assert.equal(sample.queue.length, 20 * cardsPerPlayer)
+    const directions = new Set(Object.values(sample.participants).flatMap(item => Object.values(item.cards)).map(card => card.direction))
+    assert.deepEqual([...directions].sort(), direction === 'starts' ? ['start'] : direction === 'ends' ? ['end'] : ['end', 'start'])
+  }
+}
+const insufficient = { ...source, config: { ...source.config, cardsPerPlayer: 10 }, packSnapshot: { entries: syntheticEntries.slice(0, 199) } }
+assert.throws(() => startVerseGame(insufficient, () => 0.1, 95), /Недостаточно стихов/)
+assert.equal(Object.values(insufficient.participants).every(item => !item.cards), true, 'failed start must not partially distribute cards')
+
 const round = started.currentRound
 const owner = started.participants[round.ownerId]
 const rightCard = owner.cards[round.cardId]
@@ -48,7 +60,19 @@ assert.equal(ranked.find(row => row.participantId === resultPlayers[0].id).place
 assert.equal(ranked.find(row => row.participantId === resultPlayers[1].id).place, 2)
 assert.equal(ranked.find(row => row.participantId === resultPlayers[2].id).place, 3)
 assert.equal(ranked.find(row => row.participantId === resultPlayers[3].id).place, 4)
+Object.values(resultPlayers[1].cards).forEach(card => { card.status = 'correct' })
+const twoPerfect = rankVerseResults(resultsGame, false)
+assert.equal(twoPerfect.filter(row => row.place === 1).length, 2, 'all perfect players share first place')
+Object.values(resultPlayers[0].cards).slice(0, 1).forEach(card => { card.status = 'error' })
+Object.values(resultPlayers[1].cards).slice(0, 1).forEach(card => { card.status = 'error' })
+const noPerfect = rankVerseResults(resultsGame, false)
+assert.equal(noPerfect.some(row => row.place === 1), false, 'first place stays empty without a perfect result')
+assert.equal(noPerfect.find(row => row.participantId === resultPlayers[0].id).place, noPerfect.find(row => row.participantId === resultPlayers[1].id).place, 'equal results share a place')
 const early = finishVerseGame(started, true, 400)
 assert.equal(early.endedEarly, true); assert.equal(early.results.every(row => row.place === null), true)
+
+const snapshotGame = startVerseGame(source, () => 0.2, 500).game
+source.packSnapshot.entries[0].fullText = 'Изменённый после запуска текст'
+assert.notEqual(snapshotGame.packSnapshot.entries[0].fullText, source.packSnapshot.entries[0].fullText, 'running room must keep its immutable pack snapshot')
 
 console.log('Verse match engine contracts passed.')
