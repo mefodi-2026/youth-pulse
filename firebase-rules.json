@@ -116,6 +116,42 @@
         }
       }
     },
+    "verseMatchGames": {
+      ".read": false,
+      ".write": false
+    },
+    "verseMatchPacks": {
+      ".read": false,
+      ".write": false
+    },
+    "verseMatchHostViews": {
+      "$roomId": {
+        ".read": "auth != null && (auth.token.platformAdmin === true || data.child('hostUid').val() === auth.uid)",
+        ".write": false
+      }
+    },
+    "verseMatchParticipantViews": {
+      "$roomId": {
+        "$participantId": {
+          ".read": "auth != null && (auth.token.platformAdmin === true || auth.uid === $participantId || root.child('verseMatchHostViews').child($roomId).child('hostUid').val() === auth.uid)",
+          ".write": false
+        }
+      }
+    },
+    "verseMatchPublicViews": {
+      "$roomId": {
+        ".read": "auth != null",
+        ".write": false
+      }
+    },
+    "verseMatchArchives": {
+      "$workspaceId": {
+        "$roomId": {
+          ".read": "auth != null && (auth.token.platformAdmin === true || root.child('workspaces').child($workspaceId).child('ownerUid').val() === auth.uid)",
+          ".write": false
+        }
+      }
+    },
     "roomParticipantQuestions": {
       "$roomId": {
         ".read": "auth != null",

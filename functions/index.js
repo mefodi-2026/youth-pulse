@@ -5,6 +5,8 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const { logger } = require('firebase-functions')
 const { setGlobalOptions } = require('firebase-functions/v2')
 const { existingQuizAnswer } = require('./quizAnswerPolicy')
+const createVerseMatchFunctions = require('./verseMatchFunctions')
+const { finishVerseGame } = require('./verseMatchEngine')
 
 const ROOM_DATABASE_URL = 'https://molodeh-c523e-default-rtdb.europe-west1.firebasedatabase.app'
 const ROOM_DATABASE_APP = 'room-data'
@@ -19,6 +21,7 @@ setGlobalOptions({ region: 'europe-west1', maxInstances: 10 })
 
 const db = getDatabase(roomDatabaseApp)
 const adminAuth = getAuth(roomDatabaseApp)
+Object.assign(exports, createVerseMatchFunctions({ db, logger }))
 const asObject = value => value && typeof value === 'object' ? value : {}
 const publicQuestions = questions => Object.values(asObject(questions)).map(question => ({
   id: question.id,
@@ -288,13 +291,18 @@ const assertDeletableLeader = async (actorUid, uid) => {
   return profile
 }
 const deletionSummary = async uid => {
-  const [sessionsSnap, archivesSnap, resultsSnap, feedbackSnap] = await Promise.all([db.ref('sessions').once('value'), db.ref('sessionArchives').once('value'), db.ref('roomParticipantResults').once('value'), db.ref('feedback').once('value')])
+  const [sessionsSnap, archivesSnap, resultsSnap, feedbackSnap, verseGamesSnap] = await Promise.all([db.ref('sessions').once('value'), db.ref('sessionArchives').once('value'), db.ref('roomParticipantResults').once('value'), db.ref('feedback').once('value'), db.ref('verseMatchGames').once('value')])
   const rooms = leaderRoomSet(sessionsSnap.val(), archivesSnap.val(), uid)
-  const byMode = Object.fromEntries(['diagnostic', 'quiz', 'wheel'].map(mode => [mode, rooms.filter(room => room.mode === mode).length]))
+  const verseRooms = Object.values(asObject(verseGamesSnap.val())).filter(room => room?.hostUid === uid).map(room => ({
+    roomId: room.roomId, roomTitle: room.title || room.roomId, mode: 'verse-match', participantCount: Object.keys(asObject(room.participants)).length,
+    operationalStatus: ['lobby', 'live'].includes(room.phase) ? 'active' : 'completed',
+  }))
+  const allRooms = [...rooms, ...verseRooms]
+  const byMode = Object.fromEntries(['diagnostic', 'quiz', 'wheel', 'verse-match'].map(mode => [mode, allRooms.filter(room => room.mode === mode).length]))
   const roomIds = new Set(rooms.map(room => room.roomId))
-  const participantRecords = rooms.reduce((total, room) => total + room.participantCount, 0)
-  const resultRecords = Object.entries(asObject(resultsSnap.val())).filter(([roomId]) => roomIds.has(roomId)).reduce((total, [, values]) => total + Object.keys(asObject(values)).length, 0)
-  return { rooms: byMode, totalRooms: rooms.length, participantRecords, resultRecords, feedbackRecords: Object.values(asObject(feedbackSnap.val())).filter(item => item?.uid === uid).length, activeRooms: rooms.filter(room => room.operationalStatus === 'active').map(room => ({ roomId: room.roomId, roomTitle: room.roomTitle, mode: room.mode })) }
+  const participantRecords = allRooms.reduce((total, room) => total + room.participantCount, 0)
+  const resultRecords = Object.entries(asObject(resultsSnap.val())).filter(([roomId]) => roomIds.has(roomId)).reduce((total, [, values]) => total + Object.keys(asObject(values)).length, 0) + verseRooms.reduce((total, room) => total + (asObject(verseGamesSnap.val())[room.roomId]?.results?.length || 0), 0)
+  return { rooms: byMode, totalRooms: allRooms.length, participantRecords, resultRecords, feedbackRecords: Object.values(asObject(feedbackSnap.val())).filter(item => item?.uid === uid).length, activeRooms: allRooms.filter(room => room.operationalStatus === 'active').map(room => ({ roomId: room.roomId, roomTitle: room.roomTitle, mode: room.mode })) }
 }
 
 exports.prepareLeaderDeletion = onCall(async request => {
@@ -305,7 +313,8 @@ exports.prepareLeaderDeletion = onCall(async request => {
   if (!profile || uid === actorUid) throw new HttpsError('failed-precondition', 'Этот аккаунт нельзя удалить.')
   const summary = await deletionSummary(uid)
   const workspace = profile.workspaceId ? (await db.ref(`workspaces/${profile.workspaceId}`).once('value')).val() : null
-  return { uid, email: profile.email || '', fullName: profile.fullName || '', summary: { ...summary, personalWorkspace: Boolean(workspace?.ownerUid === uid), personalPacks: workspace?.ownerUid === uid ? Object.keys(asObject(workspace.workspacePacks)).length : 0, sharedWorkspacePreserved: Boolean(workspace && workspace.ownerUid !== uid) } }
+  const versePackCount = profile.workspaceId ? Object.keys(asObject((await db.ref(`verseMatchPacks/workspaces/${profile.workspaceId}`).once('value')).val())).length : 0
+  return { uid, email: profile.email || '', fullName: profile.fullName || '', summary: { ...summary, personalWorkspace: Boolean(workspace?.ownerUid === uid), personalPacks: workspace?.ownerUid === uid ? Object.keys(asObject(workspace.workspacePacks)).length + versePackCount : 0, sharedWorkspacePreserved: Boolean(workspace && workspace.ownerUid !== uid) } }
 })
 
 /** Owner-initiated equivalent of the normal room closing operation. It is
@@ -317,9 +326,25 @@ exports.closeLeaderRoomAsOwner = onCall(async request => {
   const uid = typeof input.uid === 'string' ? input.uid : ''
   const roomId = typeof input.roomId === 'string' ? input.roomId : ''
   if (!uid || !roomId) throw new HttpsError('invalid-argument', 'Не выбрана комната для завершения.')
-  const [profileSnap, roomSnap, publicSnap] = await Promise.all([db.ref(`users/${uid}`).once('value'), db.ref(`sessions/${roomId}`).once('value'), db.ref(`publicRooms/${roomId}`).once('value')])
+  const [profileSnap, roomSnap, publicSnap, verseSnap] = await Promise.all([db.ref(`users/${uid}`).once('value'), db.ref(`sessions/${roomId}`).once('value'), db.ref(`publicRooms/${roomId}`).once('value'), db.ref(`verseMatchGames/${roomId}`).once('value')])
   if (!profileSnap.exists()) throw new HttpsError('not-found', 'Пользователь не найден или уже удалён.')
   const room = roomSnap.val()
+  const verseRoom = verseSnap.val()
+  if (!room && verseRoom?.hostUid === uid) {
+    if (!['lobby', 'live'].includes(verseRoom.phase)) return { closed: false, reason: 'Комната уже не активна.' }
+    const closed = finishVerseGame(verseRoom, true)
+    await db.ref().update({
+      [`verseMatchGames/${roomId}`]: closed,
+      [`verseMatchHostViews/${roomId}/phase`]: 'closed',
+      [`verseMatchHostViews/${roomId}/endedEarly`]: true,
+      [`verseMatchHostViews/${roomId}/closedAt`]: closed.closedAt,
+      [`verseMatchPublicViews/${roomId}/phase`]: 'closed',
+      [`verseMatchPublicViews/${roomId}/endedEarly`]: true,
+      [`publicRooms/${roomId}/phase`]: 'closed',
+      [`publicRooms/${roomId}/closedAt`]: closed.closedAt,
+    })
+    return { closed: true, room: { roomId, roomTitle: verseRoom.title || roomId } }
+  }
   if (!room || room.hostUid !== uid) throw new HttpsError('not-found', 'Активная комната не найдена у выбранного ведущего.')
   if (safeAdminRoom(room).operationalStatus !== 'active') return { closed: false, reason: 'Комната уже не активна.' }
   const now = Date.now()
@@ -387,10 +412,11 @@ exports.deleteLeaderAndData = onCall(async request => {
     try { await adminAuth.deleteUser(uid) } catch (error) { if (error?.code !== 'auth/user-not-found') throw new HttpsError('unavailable', 'Доступ ведущего уже приостановлен, но учётную запись пока не удалось удалить. Повторите удаление.') }
 
     stage = 'data_cleanup'
-    const [sessionsSnap, archivesSnap, feedbackSnap, auditSnap] = await Promise.all([
-      db.ref('sessions').once('value'), db.ref('sessionArchives').once('value'), db.ref('feedback').once('value'), db.ref('adminAudit').once('value'),
+    const [sessionsSnap, archivesSnap, feedbackSnap, auditSnap, verseGamesSnap] = await Promise.all([
+      db.ref('sessions').once('value'), db.ref('sessionArchives').once('value'), db.ref('feedback').once('value'), db.ref('adminAudit').once('value'), db.ref('verseMatchGames').once('value'),
     ])
     const rooms = leaderRoomSet(sessionsSnap.val(), archivesSnap.val(), uid)
+    const verseRooms = Object.values(asObject(verseGamesSnap.val())).filter(room => room?.hostUid === uid)
     const workspaceId = typeof profile.workspaceId === 'string' ? profile.workspaceId : ''
     const workspace = workspaceId ? (await db.ref(`workspaces/${workspaceId}`).once('value')).val() : null
     const ownsWorkspace = Boolean(workspace?.ownerUid === uid)
@@ -406,6 +432,11 @@ exports.deleteLeaderAndData = onCall(async request => {
       const roomArchivePath = room.workspaceId ? `workspaceArchives/${room.workspaceId}/${room.roomId}` : ''
       if (roomArchivePath && !(personalArchiveRoot && roomArchivePath.startsWith(`${personalArchiveRoot}/`))) patch[roomArchivePath] = null
     })
+    verseRooms.forEach(room => {
+      patch[`verseMatchGames/${room.roomId}`] = null; patch[`verseMatchHostViews/${room.roomId}`] = null; patch[`verseMatchParticipantViews/${room.roomId}`] = null
+      patch[`verseMatchPublicViews/${room.roomId}`] = null; patch[`publicRooms/${room.roomId}`] = null
+      if (room.workspaceId && !(ownsWorkspace && room.workspaceId === workspaceId)) patch[`verseMatchArchives/${room.workspaceId}/${room.roomId}`] = null
+    })
     Object.entries(asObject(feedbackSnap.val())).forEach(([id, item]) => { if (item?.uid === uid || (ownsWorkspace && item?.workspaceId === workspaceId)) patch[`feedback/${id}`] = null })
     // Keep no historical profile links in the owner feed; retain only the
     // anonymous, minimal deletion audit record and its retry marker.
@@ -414,7 +445,7 @@ exports.deleteLeaderAndData = onCall(async request => {
     })
     patch[`adminAudit/${audit.id}`] = audit
     patch[`adminAudit/${operationKey}`] = { id: operationKey, type: 'leader_delete_operation', actorUid, targetId: uid, result: 'completed', operationId, createdAt: previousOperation?.createdAt || startedAt, updatedAt: now }
-    if (ownsWorkspace && workspaceId) { patch[`workspaces/${workspaceId}`] = null; patch[`workspaceProducts/${workspaceId}`] = null; patch[personalArchiveRoot] = null }
+    if (ownsWorkspace && workspaceId) { patch[`workspaces/${workspaceId}`] = null; patch[`workspaceProducts/${workspaceId}`] = null; patch[personalArchiveRoot] = null; patch[`verseMatchPacks/workspaces/${workspaceId}`] = null; patch[`verseMatchArchives/${workspaceId}`] = null }
     const conflict = Object.keys(patch).find(path => Object.keys(patch).some(otherPath => path !== otherPath && otherPath.startsWith(`${path}/`)))
     if (conflict) {
       logger.error('Leader deletion patch contains conflicting RTDB paths', { operationId, targetUid: uid, conflict })
