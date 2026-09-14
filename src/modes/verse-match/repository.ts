@@ -13,7 +13,7 @@ const call = async <T>(name: string, data: unknown = {}) => {
   try { return (await httpsCallable<unknown, T>(services().functions, name)(data)).data } catch (error) { throw new Error(message(error)) }
 }
 
-export const getVerseMatchLibrary = () => call<{ system: VersePack[]; workspace: VersePack[] }>('getVerseMatchLibrary')
+export const getVerseMatchLibrary = () => call<{ system: VersePack[]; workspace: VersePack[]; archives: VerseHostView[] }>('getVerseMatchLibrary')
 export const saveVerseMatchPack = (scope: 'system' | 'workspace', pack: VersePack) => call<{ pack: VersePack }>('saveVerseMatchPack', { scope, pack })
 export const copyVerseMatchPack = (packId: string) => call<{ pack: VersePack; reused: boolean }>('copyVerseMatchPack', { packId })
 export const deleteVerseMatchPack = (packId: string) => call<{ deleted: boolean }>('deleteVerseMatchPack', { packId })

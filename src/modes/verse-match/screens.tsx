@@ -54,7 +54,11 @@ export function VerseMatchLibraryPanel({ admin = false }: { admin?: boolean }) {
 }
 
 export function VerseLandingScreen({ onSetup }: ModeLandingScreenProps) {
-  return <div className="verse-landing"><Surface className="mode-intro verse-intro"><p className="eyebrow">БИБЛЕЙСКАЯ КОМАНДНАЯ ИГРА</p><h2>Собери стих</h2><p>Участники получают уникальные начала или окончания стихов и на скорость находят пару к фрагменту на общем экране.</p><ol><li>Выберите проверенный набор и сложность.</li><li>Раздача и проверка проходят только на сервере.</li><li>Первое место получают только участники без единой ошибки или пропуска.</li></ol><Button onClick={onSetup}>Создать комнату</Button></Surface><VerseMatchLibraryPanel /></div>
+  const [archives, setArchives] = useState<VerseHostView[]>([])
+  useEffect(() => { void getVerseMatchLibrary().then(value => setArchives(value.archives || [])).catch(() => undefined) }, [])
+  return <div className="verse-landing"><Surface className="mode-intro verse-intro"><p className="eyebrow">БИБЛЕЙСКАЯ КОМАНДНАЯ ИГРА</p><h2>Собери стих</h2><p>Участники получают уникальные начала или окончания стихов и на скорость находят пару к фрагменту на общем экране.</p><ol><li>Выберите проверенный набор и сложность.</li><li>Раздача и проверка проходят только на сервере.</li><li>Первое место получают только участники без единой ошибки или пропуска.</li></ol><Button onClick={onSetup}>Создать комнату</Button></Surface>
+    {archives.length > 0 && <Surface className="verse-archive"><p className="eyebrow">ИСТОРИЯ ИГР</p><h3>Сохранённые результаты</h3><div className="verse-archive-list">{archives.map(item => <button type="button" key={item.roomId} onClick={() => go(`/verse-host?room=${item.roomId}`)}><span><b>{item.title}</b><small>{new Date(item.closedAt || item.completedAt || item.createdAt).toLocaleString('ru-RU')} · {item.participants.length} участников</small></span><strong>Открыть →</strong></button>)}</div></Surface>}
+    <VerseMatchLibraryPanel /></div>
 }
 
 export function VerseSetupScreen({ onBack, defaultTitle, onCreated }: ModeSetupScreenProps) {

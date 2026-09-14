@@ -178,8 +178,14 @@ module.exports = ({ db, logger }) => {
 
   const getVerseMatchLibrary = onCall(async request => {
     const leader = await assertLeader(request)
-    const [system, workspaceSnap] = await Promise.all([systemPack(), db.ref(`verseMatchPacks/workspaces/${leader.workspaceId}`).once('value')])
-    return { system: [system], workspace: Object.values(asObject(workspaceSnap.val())).map(sanitizePack) }
+    const [system, workspaceSnap, archivesSnap] = await Promise.all([
+      systemPack(), db.ref(`verseMatchPacks/workspaces/${leader.workspaceId}`).once('value'), db.ref(`verseMatchArchives/${leader.workspaceId}`).once('value'),
+    ])
+    return {
+      system: [system],
+      workspace: Object.values(asObject(workspaceSnap.val())).map(sanitizePack),
+      archives: Object.values(asObject(archivesSnap.val())).sort((left, right) => Number(right.closedAt || right.completedAt || 0) - Number(left.closedAt || left.completedAt || 0)),
+    }
   })
 
   const saveVerseMatchPack = onCall(async request => {
