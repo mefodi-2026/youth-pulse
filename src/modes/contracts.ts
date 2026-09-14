@@ -28,7 +28,7 @@ export interface ModeSetupScreenProps {
   leaderUid?: string
   workspaceId?: string
   defaultTitle?: string
-  onCreated?: (roomId: string) => void
+  onCreated?: (roomId: string, ownedRoute?: string) => void
 }
 
 export interface ModeParticipantFlowProps { room: string }

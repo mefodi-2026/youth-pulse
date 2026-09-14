@@ -5,6 +5,7 @@ import type { ParticipantQuestionScreenProps } from './participantTypes'
 import { diagnosticManifest } from './diagnostic/manifest'
 import { quizManifest } from './quiz/manifest'
 import { wheelManifest } from './wheel/manifest'
+import { verseMatchManifest } from './verse-match/manifest'
 
 export interface ModeManifest {
   /** Registry ID can be extended in tests before RoomMode is expanded in production. */
@@ -39,7 +40,7 @@ export const createModeRegistry = <T extends ModeManifest>(manifests: readonly T
   return Object.freeze(Object.fromEntries(entries) as Readonly<Record<string, T>>)
 }
 
-const registry = createModeRegistry([diagnosticManifest, quizManifest, wheelManifest] as const)
+const registry = createModeRegistry([diagnosticManifest, quizManifest, wheelManifest, verseMatchManifest] as const)
 
 export const modeRegistry = registry as Readonly<Record<RoomMode, ModeManifest>>
 export const productionModes = Object.values(modeRegistry).filter(manifest => manifest.productionMenu)

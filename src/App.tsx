@@ -29,6 +29,7 @@ import { QuestionPackPreview } from './components/QuestionPackPreview'
 import { feedbackFormUrl } from './lib/feedback'
 import { getHomeAssetsStatus, homeAssets, primeHomeAssets, retryHomeAssets, subscribeHomeAssets, type HomeAssetsStatus } from './lib/homeAssets'
 import { PlatformThemeToggle } from './components/PlatformThemeToggle'
+import { VerseHostPage, VerseStagePage } from './modes/verse-match/screens'
 import { applyPlatformTheme, clearPlatformTheme, readPlatformTheme } from './lib/platformTheme'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
@@ -82,6 +83,8 @@ function App() {
   if (path.endsWith('/login')) return withPlatformTheme(<AuthPage mode="login" />)
   if (path.endsWith('/register')) return withPlatformTheme(<AuthPage mode="register" />)
   if (path.endsWith('/account')) return withPlatformTheme(<LeaderRoute allowInactive>{profile => <AccountPage profile={profile} />}</LeaderRoute>)
+  if (path.endsWith('/verse-host')) return withPlatformTheme(<LeaderRoute>{() => <VerseHostPage room={queryRoom()} />}</LeaderRoute>)
+  if (path.endsWith('/verse-stage')) return withPlatformTheme(<VerseStagePage room={queryRoom()} />)
   if (isHostRoute) {
     return withPlatformTheme(<LeaderRoute waitForHomeAssets={path.endsWith('/host') && hostTab === 'main'}>{profile => <Host leader={profile} initialTab={path.endsWith('/results') ? 'results' : hostTab} initialRoom={queryRoom()} />}</LeaderRoute>)
   }
@@ -355,6 +358,7 @@ function HomePanel({ name, questionCount, onChooseMode, onOpenFeedback, activeSe
     diagnostic: homeAssets.diagnostic,
     quiz: homeAssets.quiz,
     wheel: homeAssets.wheel,
+    'verse-match': homeAssets.quiz,
   }
   const modeDescription = (mode: RoomMode, description: string) => mode === diagnosticMode
     ? `${questionCount || '—'} вопросов · ${Object.keys(categories).length} тем · личные и общие результаты`
@@ -422,7 +426,7 @@ function ProfilePanel({ profile }: { profile: LeaderProfile }) {
 }
 
 /** Legacy tabs remain readable so saved bookmarks keep working. */
-type KnownHostTab = 'main' | 'roomSetup' | 'currentRoom' | 'rooms' | 'diagnostic' | 'quiz' | 'wheel' | 'settings' | 'profile' | 'rules' | 'overview' | 'results' | 'questions' | 'export'
+type KnownHostTab = 'main' | 'roomSetup' | 'currentRoom' | 'rooms' | 'diagnostic' | 'quiz' | 'wheel' | 'verse-match' | 'settings' | 'profile' | 'rules' | 'overview' | 'results' | 'questions' | 'export'
 // The open string branch keeps old bookmarked tabs harmlessly redirectable
 // without letting TypeScript erase their compatibility branches as unreachable.
 type HostTab = KnownHostTab | (string & {})
@@ -562,7 +566,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const finished = participants.filter(p => p.status === 'finished').length
   const answering = participants.filter(p => p.status === 'answering').length
   const allFinished = participants.length > 0 && finished === participants.length
-  const menuIcons: Record<RoomMode, AppIconName> = { diagnostic: 'diagnostic', quiz: 'quiz', wheel: 'wheel' }
+  const menuIcons: Record<RoomMode, AppIconName> = { diagnostic: 'diagnostic', quiz: 'quiz', wheel: 'wheel', 'verse-match': 'quiz' }
   const menu: HostMenuItem[] = [['main', 'Главное', 'dashboard'], ['currentRoom', 'Текущая комната', 'room'], ['rooms', 'История комнат', 'history'], ...productionModes.map(mode => [mode.id as HostTab, mode.menuLabel, menuIcons[mode.mode as RoomMode]] as HostMenuItem), ['settings', 'Настройки', 'settings'], ['profile', 'Профиль', 'profile'], ['rules', 'Правила', 'rules']]
   const archiveEntries = useMemo(() => selectWorkspaceArchives(archives, leader), [archives, leader])
   const filteredArchiveEntries = useMemo(() => archiveEntries.filter(archived => {
@@ -1052,7 +1056,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       leaderUid={leader.uid}
       workspaceId={leader.workspaceId}
       defaultTitle={roomTitleDraft || setupModeManifest.title}
-      onCreated={createdRoom => {
+      onCreated={(createdRoom, ownedRoute) => {
+        if (ownedRoute) { go(ownedRoute); return }
         localStorage.setItem(roomKey, createdRoom)
         localStorage.setItem(lastRoomKey, createdRoom)
         localStorage.removeItem('atmosphere-host-room')
