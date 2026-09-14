@@ -22,6 +22,7 @@ import {
 } from "./repositories/firebaseRepository";
 import type { UserStatus } from "./types";
 import { OwnerProducts } from "./OwnerProducts";
+import { VerseMatchLibraryPanel } from "./modes/verse-match/screens";
 import {
   AppIcon,
   type AppIconName,
@@ -57,6 +58,7 @@ const modeName: Record<string, string> = {
   diagnostic: "Проверь себя",
   quiz: "Библейская викторина",
   wheel: "Колесо фортуны",
+  "verse-match": "Собери стих",
 };
 const roomState: Record<string, string> = {
   active: "Активна сейчас",
@@ -1761,6 +1763,7 @@ export function OwnerAdmin() {
               onSaving={setSaving}
               onError={setError}
             />
+            <VerseMatchLibraryPanel admin />
           </>
         )}
         {data && tab === "feedback" && (
