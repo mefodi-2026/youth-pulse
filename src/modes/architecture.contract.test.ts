@@ -5,6 +5,7 @@ import type { ContentPack } from '../types'
 import './modeRegistry.contract.test'
 import './participantRouting.contract.test'
 import './wheel/contract.test'
+import { normalizeVerseHostView, normalizeVerseParticipantView } from './verse-match/repository'
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(`Architecture contract failed: ${message}`)
@@ -27,6 +28,10 @@ assert(wheel.runtime.getQuestions({}, []).length === 0, 'wheel must not inherit 
 assert(Boolean(wheel.setupScreen && wheel.participantFlow && wheel.hostScreen && wheel.mainScreen), 'wheel Prompt 2 screens must be registered through the manifest')
 assert(Boolean(verseMatch.setupScreen && verseMatch.participantFlow && verseMatch.landingScreen), 'verse-match screens must be registered through the manifest')
 assert(verseMatch.dataContract.roomStateSchema === 'verse-match-server-room-v1', 'verse-match must declare its isolated server state')
+const emptyVerseHost = normalizeVerseHostView({ roomId: 'ROOM', currentRound: null } as never)
+assert(emptyVerseHost.participants.length === 0 && emptyVerseHost.history.length === 0 && emptyVerseHost.results === null, 'RTDB-omitted empty host collections must normalize before render')
+const emptyVerseParticipant = normalizeVerseParticipantView({ roomId: 'ROOM', currentRound: null } as never)
+assert(emptyVerseParticipant.cards.length === 0 && emptyVerseParticipant.result === null, 'RTDB-omitted empty participant cards must normalize before render')
 
 const diagnosticLiveStatus = diagnostic.statusText({ phase: 'live', wheel: undefined })
 const quizLiveStatus = quiz.statusText({ phase: 'live', wheel: undefined })

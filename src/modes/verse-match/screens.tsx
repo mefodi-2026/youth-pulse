@@ -74,12 +74,17 @@ export function VerseSetupScreen({ onBack, defaultTitle, onCreated }: ModeSetupS
 }
 
 export function VerseHostPage({ room }: { room: string }) {
-  const [view, setView] = useState<VerseHostView | null>(null); const [qr, setQr] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('')
+  const [view, setView] = useState<VerseHostView | null>(null); const [qr, setQr] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [loadState, setLoadState] = useState<'loading' | 'open' | 'not-found' | 'forbidden' | 'error'>('loading'); const [retry, setRetry] = useState(0)
   const joinUrl = createJoinUrl(room)
-  useEffect(() => subscribeVerseHost(room, setView, reason => setError(reason.message)), [room])
+  useEffect(() => {
+    if (!room) { setLoadState('not-found'); return }
+    setLoadState('loading'); setError('')
+    return subscribeVerseHost(room, value => { setView(value); setLoadState(value ? 'open' : 'not-found') }, reason => { setError(reason.message); setLoadState(/permission/i.test(reason.message) ? 'forbidden' : 'error') })
+  }, [retry, room])
   useEffect(() => { void QRCode.toDataURL(joinUrl, { width: 320, margin: 1, errorCorrectionLevel: 'M' }).then(setQr) }, [joinUrl])
   const act = (operation: () => Promise<unknown>) => { setBusy(true); setError(''); void operation().catch(reason => setError(errorText(reason))).finally(() => setBusy(false)) }
-  if (!view) return <main className="verse-page"><LoadingState eyebrow="СОБЕРИ СТИХ" title="Подключаем комнату…" description={error} /></main>
+  if (loadState === 'loading') return <main className="verse-page"><LoadingState eyebrow="СОБЕРИ СТИХ" title="Подключаем комнату…" description="Проверяем доступ и загружаем актуальное состояние." /></main>
+  if (!view) return <main className="verse-page"><Surface className="verse-room-state"><p className="eyebrow">СОБЕРИ СТИХ</p><h1>{loadState === 'not-found' ? 'Комната не найдена' : loadState === 'forbidden' ? 'Нет доступа к комнате' : 'Ошибка подключения'}</h1><p>{loadState === 'not-found' ? 'Проверьте код комнаты. Новая комната не создавалась.' : loadState === 'forbidden' ? 'Войдите под ведущим, который создал эту комнату.' : error || 'Не удалось получить данные комнаты.'}</p><div className="verse-inline-actions"><Button onClick={() => setRetry(value => value + 1)}>Повторить</Button><Button secondary onClick={() => go('/host?tab=verse-match')}>Вернуться в режим</Button></div></Surface></main>
   const round = view.currentRound; const canStart = view.participants.length > 0 && view.capacity.available >= view.capacity.required
   return <main className="verse-page verse-host"><header className="verse-page-header"><div><p className="eyebrow">СОБЕРИ СТИХ · DEV PREVIEW</p><h1>{view.title}</h1><p>Код комнаты <strong>{view.roomId}</strong> · {view.pack.title} · {difficultyLabel[view.config.difficulty]}</p></div><div className="verse-inline-actions"><Button secondary onClick={() => window.open(`/verse-stage?room=${room}`, 'verse-stage')}>Экран аудитории</Button><Button secondary onClick={() => go('/host?tab=main')}>В панель</Button></div></header>
     {error && <p className="connection-warning">{error}</p>}

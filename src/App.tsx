@@ -30,6 +30,7 @@ import { feedbackFormUrl } from './lib/feedback'
 import { getHomeAssetsStatus, homeAssets, primeHomeAssets, retryHomeAssets, subscribeHomeAssets, type HomeAssetsStatus } from './lib/homeAssets'
 import { PlatformThemeToggle } from './components/PlatformThemeToggle'
 import { VerseHostPage, VerseStagePage } from './modes/verse-match/screens'
+import { VerseMatchErrorBoundary } from './modes/verse-match/ErrorBoundary'
 import { applyPlatformTheme, clearPlatformTheme, readPlatformTheme } from './lib/platformTheme'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
@@ -83,8 +84,8 @@ function App() {
   if (path.endsWith('/login')) return withPlatformTheme(<AuthPage mode="login" />)
   if (path.endsWith('/register')) return withPlatformTheme(<AuthPage mode="register" />)
   if (path.endsWith('/account')) return withPlatformTheme(<LeaderRoute allowInactive>{profile => <AccountPage profile={profile} />}</LeaderRoute>)
-  if (path.endsWith('/verse-host')) return withPlatformTheme(<LeaderRoute>{() => <VerseHostPage room={queryRoom()} />}</LeaderRoute>)
-  if (path.endsWith('/verse-stage')) return withPlatformTheme(<VerseStagePage room={queryRoom()} />)
+  if (path.endsWith('/verse-host')) return withPlatformTheme(<VerseMatchErrorBoundary><LeaderRoute>{() => <VerseHostPage room={queryRoom()} />}</LeaderRoute></VerseMatchErrorBoundary>)
+  if (path.endsWith('/verse-stage')) return withPlatformTheme(<VerseMatchErrorBoundary><VerseStagePage room={queryRoom()} /></VerseMatchErrorBoundary>)
   if (isHostRoute) {
     return withPlatformTheme(<LeaderRoute waitForHomeAssets={path.endsWith('/host') && hostTab === 'main'}>{profile => <Host leader={profile} initialTab={path.endsWith('/results') ? 'results' : hostTab} initialRoom={queryRoom()} />}</LeaderRoute>)
   }

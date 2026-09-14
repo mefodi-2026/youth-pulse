@@ -36,6 +36,10 @@ const subscribe = <T>(path: string, callback: (value: T | null) => void, onError
   const { db } = services()
   return onValue(ref(db, path), snapshot => callback((snapshot.val() || null) as T | null), error => onError?.(error))
 }
-export const subscribeVerseHost = (roomId: string, callback: (value: VerseHostView | null) => void, onError?: (error: Error) => void) => subscribe(`verseMatchHostViews/${roomId}`, callback, onError)
-export const subscribeVerseParticipant = (roomId: string, participantId: string, callback: (value: VerseParticipantView | null) => void, onError?: (error: Error) => void) => subscribe(`verseMatchParticipantViews/${roomId}/${participantId}`, callback, onError)
-export const subscribeVerseAudience = (roomId: string, callback: (value: VerseAudienceView | null) => void, onError?: (error: Error) => void) => subscribe(`verseMatchPublicViews/${roomId}`, callback, onError)
+const list = <T>(value: T[] | Record<string, T> | null | undefined): T[] => Array.isArray(value) ? value : value && typeof value === 'object' ? Object.values(value) : []
+export const normalizeVerseHostView = (value: VerseHostView): VerseHostView => ({ ...value, participants: list(value.participants), history: list(value.history), results: value.results == null ? null : list(value.results), currentRound: value.currentRound || null })
+export const normalizeVerseParticipantView = (value: VerseParticipantView): VerseParticipantView => ({ ...value, cards: list(value.cards), result: value.result || null, currentRound: value.currentRound || null })
+export const normalizeVerseAudienceView = (value: VerseAudienceView): VerseAudienceView => ({ ...value, results: value.results == null ? null : list(value.results), currentRound: value.currentRound || null })
+export const subscribeVerseHost = (roomId: string, callback: (value: VerseHostView | null) => void, onError?: (error: Error) => void) => subscribe<VerseHostView>(`verseMatchHostViews/${roomId}`, value => callback(value ? normalizeVerseHostView(value) : null), onError)
+export const subscribeVerseParticipant = (roomId: string, participantId: string, callback: (value: VerseParticipantView | null) => void, onError?: (error: Error) => void) => subscribe<VerseParticipantView>(`verseMatchParticipantViews/${roomId}/${participantId}`, value => callback(value ? normalizeVerseParticipantView(value) : null), onError)
+export const subscribeVerseAudience = (roomId: string, callback: (value: VerseAudienceView | null) => void, onError?: (error: Error) => void) => subscribe<VerseAudienceView>(`verseMatchPublicViews/${roomId}`, value => callback(value ? normalizeVerseAudienceView(value) : null), onError)
