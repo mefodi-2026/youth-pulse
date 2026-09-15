@@ -116,12 +116,16 @@ module.exports = ({ db, logger }) => {
   }
 
   const toParticipantView = (game, participant) => {
+    const attempts = Object.values(asObject(participant.attempts))
+    const revealAllCardDetails = ['completed', 'closed'].includes(game.phase)
     const cards = Object.values(asObject(participant.cards)).map(card => {
       const entry = entryForCard(game, card)
       const closed = card.status !== 'available'
+      const attempt = attempts.find(item => item.cardId === card.cardId)
       return {
         cardId: card.cardId, direction: card.direction, fragment: card.fragment, status: card.status,
-        ...(closed && entry ? { fullText: entry.fullText, reference: entry.reference } : {}),
+        ...((closed || revealAllCardDetails) && entry ? { fullText: entry.fullText, reference: entry.reference } : {}),
+        ...(card.status === 'error' && attempt?.promptText ? { attemptPromptText: attempt.promptText, attemptPromptDirection: attempt.promptDirection } : {}),
       }
     })
     return {

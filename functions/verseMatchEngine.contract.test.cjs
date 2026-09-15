@@ -36,6 +36,7 @@ const wrongPlayer = Object.values(started.participants).find(item => item.id !==
 const wrongCard = Object.values(wrongPlayer.cards)[0]
 const wrong = submitVerseCard(started, { participantId: wrongPlayer.id, cardId: wrongCard.cardId, roundId: round.roundId, roundVersion: round.version }, 200)
 assert.equal(wrong.accepted, true); assert.equal(wrong.correct, false); assert.equal(wrong.game.currentRound.status, 'open'); assert.equal(wrong.game.participants[wrongPlayer.id].cards[wrongCard.cardId].status, 'error')
+assert.equal(wrong.game.participants[wrongPlayer.id].attempts[round.roundId].promptText, round.promptText, 'the server must preserve the fragment shown during an incorrect attempt')
 const duplicate = submitVerseCard(wrong.game, { participantId: wrongPlayer.id, cardId: Object.values(wrong.game.participants[wrongPlayer.id].cards)[1].cardId, roundId: round.roundId, roundVersion: wrong.game.currentRound.version }, 201)
 assert.equal(duplicate.accepted, false); assert.equal(duplicate.reason, 'already-attempted')
 const correct = submitVerseCard(wrong.game, { participantId: owner.id, cardId: rightCard.cardId, roundId: round.roundId, roundVersion: wrong.game.currentRound.version }, 202)

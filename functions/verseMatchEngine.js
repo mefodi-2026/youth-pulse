@@ -143,7 +143,13 @@ const submitVerseCard = (source, input, at = Date.now()) => {
   game.history = Array.isArray(game.history) ? game.history : Object.values(asObject(game.history))
   const correct = card.verseId === round.verseId && card.cardId === round.cardId && round.ownerId === input.participantId
   round.attempts[input.participantId] = { cardId: card.cardId, acceptedAt: at, correct }
-  participant.attempts[round.roundId] = { cardId: card.cardId, acceptedAt: at, correct }
+  participant.attempts[round.roundId] = {
+    cardId: card.cardId,
+    acceptedAt: at,
+    correct,
+    promptText: round.promptText,
+    promptDirection: round.promptDirection,
+  }
   if (correct) {
     card.status = 'correct'; card.closedAt = at; participant.correct += 1
     const verse = verseById(game, card.verseId)

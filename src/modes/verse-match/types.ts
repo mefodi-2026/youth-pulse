@@ -42,7 +42,7 @@ export interface VerseHostView {
 
 export interface VerseCard {
   cardId: string; direction: VerseCardDirection; fragment: string; status: 'available' | 'correct' | 'error' | 'missed'
-  fullText?: string; reference?: string
+  fullText?: string; reference?: string; attemptPromptText?: string; attemptPromptDirection?: VerseCardDirection
 }
 
 export interface VerseParticipantView {
