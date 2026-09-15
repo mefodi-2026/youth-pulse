@@ -136,6 +136,11 @@ const submitVerseCard = (source, input, at = Date.now()) => {
   const card = participant.cards?.[input.cardId]
   if (!card || card.ownerId !== input.participantId) return { game, accepted: false, reason: 'not-owner' }
   if (card.status !== 'available') return { game, accepted: false, reason: 'card-closed' }
+  // Realtime Database omits empty arrays/objects. Restore the mutable
+  // collections before recording the first answer in a persisted round.
+  round.attempts = asObject(round.attempts)
+  participant.attempts = asObject(participant.attempts)
+  game.history = Array.isArray(game.history) ? game.history : Object.values(asObject(game.history))
   const correct = card.verseId === round.verseId && card.cardId === round.cardId && round.ownerId === input.participantId
   round.attempts[input.participantId] = { cardId: card.cardId, acceptedAt: at, correct }
   participant.attempts[round.roundId] = { cardId: card.cardId, acceptedAt: at, correct }
@@ -157,6 +162,7 @@ const revealVerseAnswer = (source, at = Date.now()) => {
   const card = findCard(game, round.ownerId, round.cardId)
   if (!card || card.status !== 'available') return { game: openNextRound(game, at), accepted: false, reason: 'card-closed' }
   const owner = game.participants[round.ownerId]; const verse = verseById(game, round.verseId)
+  game.history = Array.isArray(game.history) ? game.history : Object.values(asObject(game.history))
   card.status = 'missed'; card.closedAt = at; owner.missed += 1
   round.status = 'revealed'; round.outcome = 'missed'; round.fullText = verse.fullText; round.reference = verse.reference; round.closedAt = at
   game.history.push(clone(round)); game.version += 1

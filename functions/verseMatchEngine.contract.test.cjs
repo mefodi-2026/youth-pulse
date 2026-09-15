@@ -43,10 +43,24 @@ assert.equal(correct.accepted, true); assert.equal(correct.correct, true); asser
 const late = submitVerseCard(correct.game, { participantId: owner.id, cardId: rightCard.cardId, roundId: round.roundId, roundVersion: round.version }, 203)
 assert.equal(late.accepted, false); assert.equal(late.reason, 'round-closed')
 
+const persisted = JSON.parse(JSON.stringify(started))
+delete persisted.history
+delete persisted.currentRound.attempts
+Object.values(persisted.participants).forEach(participant => { delete participant.attempts })
+const persistedRound = persisted.currentRound
+const persistedOwner = persisted.participants[persistedRound.ownerId]
+const persistedCorrect = submitVerseCard(persisted, { participantId: persistedOwner.id, cardId: persistedRound.cardId, roundId: persistedRound.roundId, roundVersion: persistedRound.version }, 210)
+assert.equal(persistedCorrect.accepted, true, 'first persisted answer must tolerate RTDB-omitted empty collections')
+assert.equal(persistedCorrect.game.history.length, 1)
+
 let missedGame = continueVerseGame(correct.game, 300)
 const missedRound = missedGame.currentRound
 const missed = revealVerseAnswer(missedGame, 301)
 assert.equal(missed.accepted, true); assert.equal(missed.game.participants[missedRound.ownerId].cards[missedRound.cardId].status, 'missed')
+const persistedMiss = JSON.parse(JSON.stringify(started)); delete persistedMiss.history
+const revealedPersisted = revealVerseAnswer(persistedMiss, 302)
+assert.equal(revealedPersisted.accepted, true, 'first persisted miss must tolerate an omitted empty history')
+assert.equal(revealedPersisted.game.history.length, 1)
 
 const resultsGame = JSON.parse(JSON.stringify(started))
 const resultPlayers = Object.values(resultsGame.participants)
