@@ -34,6 +34,7 @@ import { VerseMatchErrorBoundary } from './modes/verse-match/ErrorBoundary'
 import { applyPlatformTheme, clearPlatformTheme, readPlatformTheme } from './lib/platformTheme'
 
 const makeRoom = () => Math.random().toString(36).slice(2, 8).toUpperCase()
+const estimatedParticipantLimit = 30
 const publicAsset = (fileName: string) => `${import.meta.env.BASE_URL}assets/${fileName}`
 
 const createFeedbackUrl = (formUrl: string, session: Session | null) => {
@@ -581,6 +582,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   const copyResetTimer = useRef<number | null>(null)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [roomDetails, setRoomDetails] = useState<RoomPilotDetails>({ groupName: '', city: '', mode: initialTab === 'roomSetup' ? readRoomSetupMode() || 'diagnostic' : 'diagnostic', estimatedParticipants: 30 })
+  const [estimatedParticipantsInput, setEstimatedParticipantsInput] = useState('')
+  const [estimatedParticipantsError, setEstimatedParticipantsError] = useState('')
   const [scoringTemplateId, setScoringTemplateId] = useState<ScoringTemplateId>('standard-v1')
   const creatingRoomRef = useRef(false)
   const [historyFilters, setHistoryFilters] = useState({ query: '', mode: 'all' as 'all' | RoomMode, from: '', to: '' })
@@ -805,6 +808,8 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
       mode,
       estimatedParticipants: 30,
     })
+    setEstimatedParticipantsInput('')
+    setEstimatedParticipantsError('')
     const setupPolicy = getModeDefinition(mode).setupPolicy
     setScoringTemplateId(setupPolicy.defaultScoringTemplateId)
     const selection = setupPolicy.initialSelection(modePackContext(mode))
@@ -813,8 +818,18 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
   }
   const create = async (title = roomTitleDraft) => {
     if (busy || creatingRoomRef.current) return
+    const participantInput = estimatedParticipantsInput.trim()
+    if (!/^[1-9]\d*$/.test(participantInput)) {
+      setEstimatedParticipantsError('Укажите целое число участников от 1 до 30.')
+      return
+    }
+    const estimatedParticipants = Number(participantInput)
+    if (!Number.isSafeInteger(estimatedParticipants) || estimatedParticipants > estimatedParticipantLimit) {
+      setEstimatedParticipantsError(`Количество участников должно быть от 1 до ${estimatedParticipantLimit}.`)
+      return
+    }
     creatingRoomRef.current = true
-    setBusy(true); setActionError(''); setCreateError('')
+    setBusy(true); setActionError(''); setCreateError(''); setEstimatedParticipantsError('')
     const newRoom = makeRoom()
     try {
       const detailsForRoom: RoomPilotDetails = {
@@ -822,6 +837,7 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
         groupName: workspace?.name?.trim() || roomDetails.groupName.trim(),
         city: roomDetails.city.trim() || workspace?.city?.trim() || '',
         mode: roomDetails.mode,
+        estimatedParticipants,
       }
       const selectionForRoom = templateSelection
       const setupPolicy = getModeDefinition(roomDetails.mode).setupPolicy
@@ -1055,10 +1071,11 @@ function Host({ leader, initialTab, initialRoom }: { leader: LeaderProfile; init
     <label className="room-title-input">Название комнаты<input value={roomTitleDraft} onChange={event => setRoomTitleDraft(event.target.value)} placeholder={defaultRoomTitle()} maxLength={80} /></label>
     <div className="room-pilot-fields">
       <label>Формат<select value={roomDetails.mode} onChange={event => { const mode = event.target.value as RoomMode; const policy = getModeDefinition(mode).setupPolicy; setRoomDetails(previous => ({ ...previous, mode })); setScoringTemplateId(policy.defaultScoringTemplateId); const selection = policy.initialSelection(modePackContext(mode)); if (selection) setTemplateSelection(selection) }}><option value="diagnostic">Проверь себя</option><option value="quiz">Библейская викторина</option></select></label>
-      <label>Предполагаемое количество участников<select value={roomDetails.estimatedParticipants} onChange={event => setRoomDetails(previous => ({ ...previous, estimatedParticipants: Number(event.target.value) }))}>{[10, 15, 20, 25, 30].map(count => <option value={count} key={count}>{count} участников</option>)}</select></label>
+      <label>Предполагаемое количество участников<input value={estimatedParticipantsInput} inputMode="numeric" pattern="[0-9]*" aria-invalid={Boolean(estimatedParticipantsError)} aria-describedby="estimated-participants-help" onChange={event => { setEstimatedParticipantsInput(event.target.value); setEstimatedParticipantsError('') }} placeholder="Например, 17" /></label>
       {roomDetails.mode === 'diagnostic' && <label>Подсчёт<select value={scoringTemplateId} onChange={event => setScoringTemplateId(event.target.value as ScoringTemplateId)}><option value="standard-v1">Стандартный</option><option value="strict-v1">Строгий</option></select></label>}
     </div>
-    <p className="room-rules-caption">{roomDetails.mode === 'quiz' ? 'Верный ответ — 1 балл · неверный — 0' : scoringTemplateId === 'strict-v1' ? 'Строгий: A 2 · B 1 · C 0 · D −1 · пропуск −2' : 'Стандартный: A 3 · B 2 · C 1 · D 0 · пропуск −1'}</p>
+    {estimatedParticipantsError && <p className="field-error" role="alert">{estimatedParticipantsError}</p>}
+    <p id="estimated-participants-help" className="room-rules-caption">Укажите от 1 до {estimatedParticipantLimit} участников. Это оценка для комнаты и не ограничивает подключение участников. {roomDetails.mode === 'quiz' ? 'Верный ответ — 1 балл · неверный — 0' : scoringTemplateId === 'strict-v1' ? 'Строгий: A 2 · B 1 · C 0 · D −1 · пропуск −2' : 'Стандартный: A 3 · B 2 · C 1 · D 0 · пропуск −1'}</p>
   </section>
   const packSelectionControl = <section className="room-create-packs">
     <p className="eyebrow">НАБОР ВОПРОСОВ</p>
