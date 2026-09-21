@@ -215,6 +215,7 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
   const [retryAnswer, setRetryAnswer] = useState<ResponseValue | null>(null)
+  const [retryQuestionId, setRetryQuestionId] = useState('')
   const [reportReady, setReportReady] = useState(false)
   const [showReport, setShowReport] = useState(false)
   const [authReady, setAuthReady] = useState(!firebaseReady)
@@ -229,6 +230,7 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
   }
   const isQuiz = mode === 'quiz'
   const introQuestionCount = isQuiz ? (session ? activeQuestions.length : 15) : activeQuestions.length
+  const currentQuestionId = participant ? activeQuestions[participant.currentQuestionIndex]?.id || '' : ''
 
   useEffect(() => {
     let active = true
@@ -262,6 +264,10 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
   // Do not render Firebase's optimistic local answer update. Wait for the
   // server-confirmed write, so a rejected write cannot flash the next question.
   useEffect(() => { if (!saving && participant && session?.participants?.[participant.id]) setParticipant(session.participants[participant.id]) }, [session, participant?.id, saving])
+  // A failed answer can be highlighted only for the exact question that failed.
+  // Realtime room updates may re-render this screen, but must never carry a
+  // previous question's visual state to the next question.
+  useEffect(() => { setRetryAnswer(null); setRetryQuestionId('') }, [currentQuestionId])
   useEffect(() => { if (participant?.status !== 'finished' || reportReady || showReport) return; const timer = window.setTimeout(() => setReportReady(true), 2600); return () => window.clearTimeout(timer) }, [participant?.status, reportReady, showReport])
 
   const join = async () => {
@@ -287,7 +293,7 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
     if (!activeQuestions.length || !question) return setNotice('Не удалось определить текущий вопрос. Обновите страницу или обратитесь к ведущему.')
     const nextIndex = participant.currentQuestionIndex + 1
     answerRequestRef.current = true
-    setRetryAnswer(null); setNotice(''); setSaving(true)
+    setRetryAnswer(null); setRetryQuestionId(''); setNotice(''); setSaving(true)
     try {
       const next = firebaseReady
         ? await saveAnswer(room, participant, question.id, value, nextIndex, activeQuestions.length, mode)
@@ -304,6 +310,7 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
     } catch (error) {
       console.error('participant answer rejected', { room, participantId: participant.id, questionId: question.id, error })
       setRetryAnswer(error instanceof ParticipantAnswerError && !error.retryable ? null : value)
+      setRetryQuestionId(error instanceof ParticipantAnswerError && !error.retryable ? '' : question.id)
       setNotice(error instanceof Error ? error.message : 'Не удалось отправить ответ. Проверьте соединение и повторите попытку.')
     } finally { answerRequestRef.current = false; setSaving(false) }
   }
@@ -327,7 +334,8 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
   const question = activeQuestions[participant.currentQuestionIndex]
   if (!question) return <Shell screen="waiting-screen"><p className="flow-label">ВОПРОС НЕДОСТУПЕН</p><h1>Не удалось открыть текущий вопрос</h1><p>Обновите страницу. Если проблема останется, обратитесь к ведущему.</p>{notice && <p className="flow-error">{notice}</p>}</Shell>
   const ModeParticipantScreen = modeManifest.participantScreen
-  return <Shell screen="question-screen"><ModeParticipantScreen question={question} currentIndex={participant.currentQuestionIndex} total={activeQuestions.length} packTitle={session.packSnapshot?.title} saving={saving} notice={notice} selectedAnswer={retryAnswer} retryable={Boolean(retryAnswer)} onAnswer={value => void answer(value)} onRetry={retryAnswer ? () => void answer(retryAnswer) : undefined} />{syncError && <p className="flow-sync-note" role="status">{syncError}</p>}</Shell>
+  const selectedAnswer = retryQuestionId === question.id ? retryAnswer : null
+  return <Shell screen="question-screen"><ModeParticipantScreen question={question} currentIndex={participant.currentQuestionIndex} total={activeQuestions.length} packTitle={session.packSnapshot?.title} saving={saving} notice={notice} selectedAnswer={selectedAnswer} retryable={Boolean(selectedAnswer)} onAnswer={value => void answer(value)} onRetry={selectedAnswer ? () => void answer(selectedAnswer) : undefined} />{syncError && <p className="flow-sync-note" role="status">{syncError}</p>}</Shell>
 }
 
 export function MobileParticipantFlow({ room }: { room: string }) {
