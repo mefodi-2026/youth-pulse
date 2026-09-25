@@ -25,6 +25,8 @@ try {
   await import(`${pathToFileURL(join(outputDir, 'architecture-contract.mjs')).href}?run=${Date.now()}`)
   require('../functions/quizAnswerPolicy.contract.test.cjs')
   require('../functions/verseMatchEngine.contract.test.cjs')
+  require('../functions/verseMatchLibrary.contract.test.cjs')
+  require('../functions/verseMatchProgress.contract.test.cjs')
   const firebaseSource = await readFile(new URL('../src/lib/firebase.ts', import.meta.url), 'utf8')
   const functionsSource = await readFile(new URL('../functions/index.js', import.meta.url), 'utf8')
   const verseFunctionsSource = await readFile(new URL('../functions/verseMatchFunctions.js', import.meta.url), 'utf8')
@@ -52,6 +54,7 @@ try {
   assert.match(rulesSource, /"verseMatchGames": \{\s*"\.read": false,\s*"\.write": false/s)
   assert.match(rulesSource, /"verseMatchParticipantViews"[\s\S]*auth\.uid === \$participantId/)
   assert.match(rulesSource, /"verseMatchPacks": \{\s*"\.read": false,\s*"\.write": false/s)
+  assert.match(rulesSource, /"verseMatchProgress": \{\s*"\.read": false,\s*"\.write": false/s)
   console.log('Architecture and participant routing contracts passed.')
 } finally {
   await rm(outputDir, { recursive: true, force: true })

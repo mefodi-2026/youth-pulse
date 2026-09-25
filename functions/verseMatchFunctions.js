@@ -171,6 +171,7 @@ module.exports = ({ db, logger }) => {
     return {
       roomId: game.roomId, participantId: participant.id, nickname: participant.nickname, title: game.title,
       environment: 'development', phase: game.phase, version: game.version, config: { cardsPerPlayer: game.config.cardsPerPlayer, direction: game.config.direction },
+      pack: { title: game.packSnapshot.title, translation: game.packSnapshot.translation, translationId: game.packSnapshot.translationId || null },
       currentRound: publicRound(game), cards, stats: participantStats(participant), result: (game.results || []).find(row => row.participantId === participant.id) || null,
       endedEarly: Boolean(game.endedEarly),
     }
@@ -178,6 +179,7 @@ module.exports = ({ db, logger }) => {
 
   const toAudienceView = game => ({
     roomId: game.roomId, title: game.title, environment: 'development', phase: game.phase,
+    pack: { title: game.packSnapshot.title, translation: game.packSnapshot.translation, translationId: game.packSnapshot.translationId || null },
     currentRound: publicRound(game), roundNumber: game.history?.length ? game.history.length + (game.currentRound?.status === 'open' ? 1 : 0) : game.currentRound ? 1 : 0,
     remainingCards: Object.values(asObject(game.participants)).reduce((total, participant) => total + participantStats(participant).remaining, 0),
     participantCount: Object.keys(asObject(game.participants)).length,

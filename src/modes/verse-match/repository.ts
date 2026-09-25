@@ -2,7 +2,7 @@ import { signInAnonymously } from 'firebase/auth'
 import { onValue, ref } from 'firebase/database'
 import { httpsCallable } from 'firebase/functions'
 import { firebaseAuth, firebaseAuthPersistence, firebaseDb, firebaseFunctions } from '../../repositories/firebaseClient'
-import type { VerseAudienceView, VerseHostView, VersePack, VerseParticipantView } from './types'
+import type { VerseAudienceView, VerseDifficulty, VerseDifficultySelection, VerseHostView, VerseLibrary, VersePack, VerseParticipantView } from './types'
 
 const services = () => {
   if (!firebaseAuth || !firebaseDb || !firebaseFunctions) throw new Error('Firebase не настроен для preview-среды.')
@@ -13,16 +13,16 @@ const call = async <T>(name: string, data: unknown = {}) => {
   try { return (await httpsCallable<unknown, T>(services().functions, name)(data)).data } catch (error) { throw new Error(message(error)) }
 }
 
-export const getVerseMatchLibrary = () => call<{ system: VersePack[]; workspace: VersePack[]; archives: VerseHostView[] }>('getVerseMatchLibrary')
+export const getVerseMatchLibrary = () => call<VerseLibrary>('getVerseMatchLibrary')
 export const saveVerseMatchPack = (scope: 'system' | 'workspace', pack: VersePack) => call<{ pack: VersePack }>('saveVerseMatchPack', { scope, pack })
 export const copyVerseMatchPack = (packId: string) => call<{ pack: VersePack; reused: boolean }>('copyVerseMatchPack', { packId })
 export const deleteVerseMatchPack = (packId: string) => call<{ deleted: boolean }>('deleteVerseMatchPack', { packId })
-export const createVerseMatchRoom = (input: { title: string; packId: string; difficulty: string; cardsPerPlayer: number; direction: string }) => call<{ roomId: string }>('createVerseMatchRoom', input)
+export const createVerseMatchRoom = (input: { title: string; packId: string; translationId: string; difficulty: VerseDifficultySelection; difficultyMix?: VerseDifficulty[]; cardsPerPlayer: number; direction: string }) => call<{ roomId: string }>('createVerseMatchRoom', input)
 export const joinVerseMatchRoom = (roomId: string, nickname: string) => call<{ participantId: string; reused: boolean }>('joinVerseMatchRoom', { roomId, nickname })
 export const startVerseMatchGame = (roomId: string) => call('startVerseMatchGame', { roomId })
 export const submitVerseMatchCard = (roomId: string, cardId: string, roundId: string, roundVersion: number) => call<{ accepted: boolean; correct: boolean }>('submitVerseMatchCard', { roomId, cardId, roundId, roundVersion })
 export const revealVerseMatchAnswer = (roomId: string) => call('revealVerseMatchAnswer', { roomId })
-export const nextVerseMatchRound = (roomId: string) => call('nextVerseMatchRound', { roomId })
+export const nextVerseMatchRound = (roomId: string) => call<{ phase: string; version: number; progressUpdated?: boolean }>('nextVerseMatchRound', { roomId })
 export const finishVerseMatchGame = (roomId: string, early: boolean) => call('finishVerseMatchGame', { roomId, early })
 
 export const prepareVerseParticipantAuth = async () => {

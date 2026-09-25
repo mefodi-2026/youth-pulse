@@ -394,6 +394,52 @@
 .verse-join input { width: 100%; min-width: 0; }
 .verse-form-grid textarea { min-height: 96px; resize: vertical; }
 
+.verse-setup-heading { margin-bottom: var(--ds-space-6, 24px); }
+.verse-setup-heading h2 { margin: 4px 0 8px; font-size: clamp(1.55rem, 3vw, 2.35rem); }
+.verse-setup-heading p:last-child { margin: 0; color: var(--muted); }
+
+.verse-difficulty,
+.verse-mix {
+  min-width: 0;
+  margin: var(--ds-space-5, 20px) 0;
+  padding: 0;
+  border: 0;
+}
+
+.verse-difficulty > legend,
+.verse-mix > legend { margin-bottom: var(--ds-space-3, 12px); color: var(--text); font-weight: 750; }
+
+.verse-difficulty-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: var(--ds-space-3, 12px);
+}
+
+.verse-difficulty-grid button {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--ds-border, var(--line));
+  border-radius: var(--ds-radius-md, 14px);
+  color: var(--text);
+  background: var(--ds-surface-subtle, rgba(255, 255, 255, .05));
+  text-align: left;
+}
+
+.verse-difficulty-grid button span { color: var(--mint); font-size: .7rem; font-weight: 800; letter-spacing: .08em; }
+.verse-difficulty-grid button b { font-size: 1.05rem; }
+.verse-difficulty-grid button small { color: var(--muted); line-height: 1.45; }
+.verse-difficulty-grid button.selected { border-color: var(--mint); box-shadow: 0 0 0 2px color-mix(in srgb, var(--mint) 16%, transparent); background: color-mix(in srgb, var(--mint) 10%, transparent); }
+.verse-difficulty-grid button:disabled { cursor: not-allowed; opacity: .62; }
+.verse-difficulty-grid button:disabled span { color: var(--gold); }
+
+.verse-mix { display: flex; flex-wrap: wrap; gap: 12px 20px; padding: 16px; border: 1px solid var(--ds-border, var(--line)); border-radius: var(--ds-radius-md, 14px); }
+.verse-mix legend { width: 100%; }
+.verse-mix label { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.verse-mix input { width: auto; min-height: auto; }
+.verse-mix .connection-warning { flex-basis: 100%; margin: 0; }
+
 .verse-entry-layout {
   display: grid;
   grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
@@ -720,6 +766,8 @@ html[data-platform-theme="light"] .verse-archive-list > button { background: rgb
 html[data-platform-theme="light"] :is(.verse-closed, .verse-counter-row span, .verse-people li, .verse-progress-list > div, .verse-capacity) { border-color: var(--line); background: rgba(7, 138, 85, .055); }
 html[data-platform-theme="light"] .verse-card-list button { color: var(--text); border-color: var(--line); background: #fff; }
 html[data-platform-theme="light"] .verse-card-list button.selected { border-color: var(--mint); background: rgba(7, 138, 85, .09); }
+html[data-platform-theme="light"] .verse-difficulty-grid button,
+html[data-platform-theme="light"] .verse-mix { border-color: var(--line); background: rgba(7, 138, 85, .045); }
 html[data-platform-theme="light"] .host-shell[data-room-mode="verse-match"] .verse-form-grid :is(input, select, textarea),
 html[data-platform-theme="light"] .verse-page .verse-form-grid :is(input, select, textarea),
 html[data-platform-theme="light"] .verse-participant :is(input, select, textarea) { color-scheme: light; }
