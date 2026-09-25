@@ -3,6 +3,7 @@ const asObject = value => value && typeof value === 'object' ? value : {}
 const normalizeText = value => String(value || '').replace(/\s+/g, ' ').trim()
 const allowedDifficulties = new Set(['easy', 'medium', 'hard'])
 const allowedDirections = new Set(['starts', 'ends', 'mixed'])
+const { difficultyLevels } = require('./verseMatchProgress')
 
 const validateVerseEntry = entry => {
   const errors = []
@@ -69,7 +70,8 @@ const startVerseGame = (source, random = Math.random, at = Date.now()) => {
   const cardsPerPlayer = Number(game.config.cardsPerPlayer)
   if (![5, 7, 10].includes(cardsPerPlayer)) throw new Error('Количество карточек должно быть 5, 7 или 10.')
   if (!allowedDirections.has(game.config.direction)) throw new Error('Неизвестное направление фрагментов.')
-  const eligible = game.packSnapshot.entries.filter(entry => entry.enabled && entry.verificationStatus === 'verified' && entry.difficulty === game.config.difficulty)
+  const selectedDifficulties = difficultyLevels(game.config)
+  const eligible = game.packSnapshot.entries.filter(entry => entry.enabled && entry.verificationStatus === 'verified' && selectedDifficulties.includes(entry.difficulty))
   const required = participants.length * cardsPerPlayer
   if (eligible.length < required) throw new Error(`Недостаточно стихов: доступно ${eligible.length}, требуется ${required}.`)
   const selected = shuffle(eligible, random).slice(0, required)

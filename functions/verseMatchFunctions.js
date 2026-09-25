@@ -3,6 +3,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https')
 const builtInProverbsPack = require('./data/proverbs-pack-v2.json')
 const legacyProverbsPack = require('./data/proverbs-pack-v1.json')
 const verseMatchCatalog = require('./data/verse-match-catalog.json')
+const { selections, normalizeProgress, isDifficultyUnlocked, difficultyLevels, isCredibleOfficialCompletion, unlockForCompletion } = require('./verseMatchProgress')
 const {
   validateVersePack,
   startVerseGame,
@@ -15,7 +16,7 @@ const {
 const asObject = value => value && typeof value === 'object' ? value : {}
 const clean = (value, max = 200) => String(value || '').trim().slice(0, max)
 const roomIdPattern = /^[A-Z0-9]{6,16}$/
-const allowedDifficulties = new Set(['easy', 'medium', 'hard'])
+const allowedDifficulties = new Set(selections)
 const allowedDirections = new Set(['starts', 'ends', 'mixed'])
 
 const publicPhase = phase => phase === 'lobby' ? 'lobby' : phase === 'closed' ? 'closed' : phase === 'completed' ? 'resultsReal' : 'live'
@@ -82,6 +83,30 @@ module.exports = ({ db, logger }) => {
     return pack ? sanitizePack(pack) : null
   }
 
+  const progressFor = async (uid, bookId) => normalizeProgress((await db.ref(`verseMatchProgress/${uid}/${bookId}`).once('value')).val(), bookId)
+
+  const assertDifficultyAccess = async (uid, gameOrInput) => {
+    if (!gameOrInput?.progression?.official) return
+    const difficulty = gameOrInput.config?.difficulty
+    const progress = await progressFor(uid, gameOrInput.progression.bookId)
+    if (!isDifficultyUnlocked(progress, difficulty)) {
+      const requirement = difficulty === 'medium' ? 'лёгкого' : 'среднего'
+      throw new HttpsError('failed-precondition', `Завершите игру ${requirement} уровня.`)
+    }
+  }
+
+  const recordOfficialCompletion = async game => {
+    if (!isCredibleOfficialCompletion(game)) return false
+    const progressRef = db.ref(`verseMatchProgress/${game.hostUid}/${game.progression.bookId}`)
+    let changed = false
+    await progressRef.transaction(current => {
+      const next = unlockForCompletion(current, game)
+      changed = !next.completedRoomIds?.[game.roomId] || !current?.completedRoomIds?.[game.roomId]
+      return next
+    })
+    return changed
+  }
+
   const entryForCard = (game, card) => game.packSnapshot.entries.find(entry => entry.id === card.verseId)
   const participantStats = participant => {
     const cards = Object.values(asObject(participant.cards))
@@ -113,7 +138,8 @@ module.exports = ({ db, logger }) => {
   }
 
   const toHostView = game => {
-    const eligibleCount = game.packSnapshot.entries.filter(entry => entry.enabled && entry.verificationStatus === 'verified' && entry.difficulty === game.config.difficulty).length
+    const selectedDifficulties = difficultyLevels(game.config)
+    const eligibleCount = game.packSnapshot.entries.filter(entry => entry.enabled && entry.verificationStatus === 'verified' && selectedDifficulties.includes(entry.difficulty)).length
     const participants = Object.values(asObject(game.participants)).map(participant => ({ id: participant.id, nickname: participant.nickname, joinedAt: participant.joinedAt, ...participantStats(participant) }))
     return {
       roomId: game.roomId, hostUid: game.hostUid, workspaceId: game.workspaceId, title: game.title,
@@ -199,9 +225,11 @@ module.exports = ({ db, logger }) => {
     const [system, workspaceSnap, archivesSnap] = await Promise.all([
       systemPack(), db.ref(`verseMatchPacks/workspaces/${leader.workspaceId}`).once('value'), db.ref(`verseMatchArchives/${leader.workspaceId}`).once('value'),
     ])
+    const progress = Object.fromEntries(await Promise.all(verseMatchCatalog.books.map(async book => [book.bookId, await progressFor(leader.uid, book.bookId)])))
     return {
       system: [system],
       catalog: verseMatchCatalog,
+      progress,
       workspace: Object.values(asObject(workspaceSnap.val())).map(sanitizePack),
       archives: Object.values(asObject(archivesSnap.val())).sort((left, right) => Number(right.closedAt || right.completedAt || 0) - Number(left.closedAt || left.completedAt || 0)),
     }
@@ -230,11 +258,12 @@ module.exports = ({ db, logger }) => {
     const leader = await assertLeader(request)
     const source = await systemPack(clean(request.data?.packId, 100))
     if (clean(request.data?.packId, 100) !== source.packId) throw new HttpsError('not-found', 'Опубликованный набор не найден.')
-    const path = `verseMatchPacks/workspaces/${leader.workspaceId}/${source.packId}`
+    const copyId = `${source.packId}-copy-${leader.uid.slice(0, 8).toLowerCase()}`
+    const path = `verseMatchPacks/workspaces/${leader.workspaceId}/${copyId}`
     const existing = (await db.ref(path).once('value')).val()
     if (existing) return { pack: sanitizePack(existing), reused: true }
     const now = Date.now()
-    const copy = { ...source, status: 'published', workspaceId: leader.workspaceId, sourcePackId: source.packId, createdBy: leader.uid, createdAt: now, updatedAt: now }
+    const copy = { ...source, packId: copyId, title: `${source.title} · моя копия`, official: false, status: 'published', workspaceId: leader.workspaceId, sourcePackId: source.packId, createdBy: leader.uid, createdAt: now, updatedAt: now }
     await db.ref(path).set(copy)
     return { pack: copy, reused: false }
   })
@@ -258,6 +287,8 @@ module.exports = ({ db, logger }) => {
     const validation = validateVersePack(pack)
     if (!validation.valid) throw new HttpsError('failed-precondition', 'В выбранном наборе есть ошибки.', { issues: validation.issues })
     const difficulty = allowedDifficulties.has(input.difficulty) ? input.difficulty : 'easy'
+    const difficultyMix = difficulty === 'mixed' ? [...new Set((Array.isArray(input.difficultyMix) ? input.difficultyMix : []).filter(level => ['easy', 'medium', 'hard'].includes(level)))] : []
+    if (difficulty === 'mixed' && difficultyMix.length < 2) throw new HttpsError('invalid-argument', 'Для смешанного уровня выберите минимум две сложности.')
     const translationId = clean(input.translationId, 50) || pack.translationId || pack.entries?.[0]?.translationId || 'russyn-1876'
     if (pack.translationId && pack.translationId !== translationId) throw new HttpsError('failed-precondition', 'Выбранный перевод не соответствует набору.')
     const cardsPerPlayer = [5, 7, 10].includes(Number(input.cardsPerPlayer)) ? Number(input.cardsPerPlayer) : 5
@@ -269,12 +300,15 @@ module.exports = ({ db, logger }) => {
     }
     if (!roomId) throw new HttpsError('resource-exhausted', 'Не удалось подобрать код комнаты. Повторите попытку.')
     const now = Date.now()
+    const official = pack.packId === builtInProverbsPack.packId && pack.official === true
     const game = {
       roomId, hostUid: leader.uid, workspaceId: leader.workspaceId, environment: 'development',
       title: clean(input.title, 80) || 'Собери стих', createdAt: now, updatedAt: now, phase: 'lobby', version: 1,
-      config: { packId, bookId: pack.bookId || 'PRO', translationId, difficulty, cardsPerPlayer, direction }, packSnapshot: { ...pack, capturedAt: now },
+      config: { packId, bookId: pack.bookId || 'PRO', translationId, difficulty, ...(difficultyMix.length ? { difficultyMix } : {}), cardsPerPlayer, direction },
+      progression: { official, bookId: pack.bookId || 'PRO' }, packSnapshot: { ...pack, capturedAt: now },
       participants: {}, queue: [], queueCursor: 0, history: [], results: null,
     }
+    await assertDifficultyAccess(leader.uid, game)
     await db.ref(`verseMatchGames/${roomId}`).set(game)
     await syncViews(game)
     return { roomId }
@@ -301,6 +335,9 @@ module.exports = ({ db, logger }) => {
 
   const startVerseMatchGame = onCall(async request => {
     const leader = await assertLeader(request); const roomId = clean(request.data?.roomId, 16).toUpperCase()
+    const current = (await db.ref(`verseMatchGames/${roomId}`).once('value')).val()
+    if (!current) throw new HttpsError('not-found', 'Комната «Собери стих» не найдена.')
+    await assertDifficultyAccess(leader.uid, current)
     const result = await roomTransaction(roomId, game => {
       if (game.hostUid !== leader.uid) throw new HttpsError('permission-denied', 'Запустить игру может только ведущий комнаты.')
       try { return { ...startVerseGame(game), accepted: true } } catch (error) { throw new HttpsError('failed-precondition', error.message) }
@@ -325,7 +362,8 @@ module.exports = ({ db, logger }) => {
       if (game.hostUid !== leader.uid) throw new HttpsError('permission-denied', 'Комната принадлежит другому ведущему.')
       return transition(game, request)
     })
-    return { phase: result.game.phase, version: result.game.version }
+    const progressUpdated = await recordOfficialCompletion(result.game)
+    return { phase: result.game.phase, version: result.game.version, progressUpdated }
   })
 
   const revealVerseMatchAnswer = hostTransition(game => revealVerseAnswer(game))

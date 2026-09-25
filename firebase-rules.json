@@ -124,6 +124,10 @@
       ".read": false,
       ".write": false
     },
+    "verseMatchProgress": {
+      ".read": false,
+      ".write": false
+    },
     "verseMatchHostViews": {
       "$roomId": {
         ".read": "auth != null && (auth.token.platformAdmin === true || data.child('hostUid').val() === auth.uid)",
