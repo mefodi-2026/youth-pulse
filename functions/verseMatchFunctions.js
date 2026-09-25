@@ -1,6 +1,8 @@
 const { randomBytes } = require('node:crypto')
 const { onCall, HttpsError } = require('firebase-functions/v2/https')
-const builtInProverbsPack = require('./data/proverbs-pack-v1.json')
+const builtInProverbsPack = require('./data/proverbs-pack-v2.json')
+const legacyProverbsPack = require('./data/proverbs-pack-v1.json')
+const verseMatchCatalog = require('./data/verse-match-catalog.json')
 const {
   validateVersePack,
   startVerseGame,
@@ -25,13 +27,16 @@ const sanitizeEntry = value => ({
   chapter: Math.max(1, Math.floor(Number(value?.chapter) || 1)),
   verse: clean(value?.verse, 20),
   reference: clean(value?.reference, 100),
+  translationId: clean(value?.translationId, 50),
   translation: clean(value?.translation, 100),
+  contentVersion: clean(value?.contentVersion, 100),
   fullText: clean(value?.fullText, 1000),
   start: clean(value?.start, 700),
   end: clean(value?.end, 700),
   difficulty: allowedDifficulties.has(value?.difficulty) ? value.difficulty : 'medium',
   enabled: value?.enabled !== false,
   verificationStatus: ['draft', 'verified', 'rejected'].includes(value?.verificationStatus) ? value.verificationStatus : 'draft',
+  ...(value?.exclusionReason ? { exclusionReason: clean(value.exclusionReason, 100) } : {}),
 })
 
 const sanitizePack = (value, fallback = {}) => ({
@@ -39,11 +44,19 @@ const sanitizePack = (value, fallback = {}) => ({
   version: Math.max(1, Math.floor(Number(value?.version || fallback.version) || 1)),
   title: clean(value?.title || fallback.title, 120),
   description: clean(value?.description || fallback.description, 500),
+  schemaVersion: Math.max(1, Math.floor(Number(value?.schemaVersion || fallback.schemaVersion) || 1)),
+  bookId: clean(value?.bookId || fallback.bookId, 20).toUpperCase(),
+  translationId: clean(value?.translationId || fallback.translationId, 50),
   translation: clean(value?.translation || fallback.translation, 100),
   sourceUrl: clean(value?.sourceUrl || fallback.sourceUrl, 500),
+  sourceEdition: clean(value?.sourceEdition || fallback.sourceEdition, 200),
   license: clean(value?.license || fallback.license, 100),
+  contentVersion: clean(value?.contentVersion || fallback.contentVersion, 100),
   status: ['draft', 'published', 'archived'].includes(value?.status) ? value.status : 'draft',
-  entries: (Array.isArray(value?.entries) ? value.entries : []).slice(0, 500).map(sanitizeEntry),
+  official: value?.official === true || fallback.official === true,
+  editorialMethod: clean(value?.editorialMethod || fallback.editorialMethod, 160),
+  unavailableEntries: (Array.isArray(value?.unavailableEntries) ? value.unavailableEntries : []).slice(0, 100).map(item => ({ id: clean(item?.id, 80), reference: clean(item?.reference, 100), reason: clean(item?.reason, 100) })),
+  entries: (Array.isArray(value?.entries) ? value.entries : []).slice(0, 1500).map(sanitizeEntry),
 })
 
 module.exports = ({ db, logger }) => {
@@ -57,13 +70,14 @@ module.exports = ({ db, logger }) => {
     return { uid, user, workspaceId: user.workspaceId, workspace }
   }
 
-  const systemPack = async () => {
-    const override = (await db.ref(`verseMatchPacks/system/${builtInProverbsPack.packId}`).once('value')).val()
-    return override ? sanitizePack(override, builtInProverbsPack) : builtInProverbsPack
+  const systemPack = async (packId = builtInProverbsPack.packId) => {
+    const fallback = packId === legacyProverbsPack.packId ? legacyProverbsPack : builtInProverbsPack
+    const override = (await db.ref(`verseMatchPacks/system/${packId}`).once('value')).val()
+    return override ? sanitizePack(override, fallback) : sanitizePack(fallback)
   }
 
   const resolvePack = async (workspaceId, packId) => {
-    if (packId === builtInProverbsPack.packId) return systemPack()
+    if (packId === builtInProverbsPack.packId || packId === legacyProverbsPack.packId) return systemPack(packId)
     const pack = (await db.ref(`verseMatchPacks/workspaces/${workspaceId}/${packId}`).once('value')).val()
     return pack ? sanitizePack(pack) : null
   }
@@ -106,7 +120,7 @@ module.exports = ({ db, logger }) => {
       environment: 'development', phase: game.phase, version: game.version, createdAt: game.createdAt,
       startedAt: game.startedAt || null, completedAt: game.completedAt || null, closedAt: game.closedAt || null,
       endedEarly: Boolean(game.endedEarly), config: game.config,
-      pack: { packId: game.packSnapshot.packId, version: game.packSnapshot.version, title: game.packSnapshot.title, translation: game.packSnapshot.translation },
+      pack: { packId: game.packSnapshot.packId, version: game.packSnapshot.version, title: game.packSnapshot.title, bookId: game.packSnapshot.bookId || game.packSnapshot.entries?.[0]?.bookId || 'PRO', translationId: game.packSnapshot.translationId || game.packSnapshot.entries?.[0]?.translationId || 'russyn-1876', translation: game.packSnapshot.translation },
       capacity: { available: eligibleCount, required: participants.length * game.config.cardsPerPlayer, maxPlayers: Math.floor(eligibleCount / game.config.cardsPerPlayer), maxRounds: participants.length * game.config.cardsPerPlayer },
       participants, currentRound: publicRound(game), roundNumber: game.history?.length ? game.history.length + (game.currentRound?.status === 'open' ? 1 : 0) : game.currentRound ? 1 : 0,
       remainingCards: participants.reduce((total, participant) => total + participant.remaining, 0),
@@ -187,6 +201,7 @@ module.exports = ({ db, logger }) => {
     ])
     return {
       system: [system],
+      catalog: verseMatchCatalog,
       workspace: Object.values(asObject(workspaceSnap.val())).map(sanitizePack),
       archives: Object.values(asObject(archivesSnap.val())).sort((left, right) => Number(right.closedAt || right.completedAt || 0) - Number(left.closedAt || left.completedAt || 0)),
     }
@@ -213,7 +228,7 @@ module.exports = ({ db, logger }) => {
 
   const copyVerseMatchPack = onCall(async request => {
     const leader = await assertLeader(request)
-    const source = await systemPack()
+    const source = await systemPack(clean(request.data?.packId, 100))
     if (clean(request.data?.packId, 100) !== source.packId) throw new HttpsError('not-found', 'Опубликованный набор не найден.')
     const path = `verseMatchPacks/workspaces/${leader.workspaceId}/${source.packId}`
     const existing = (await db.ref(path).once('value')).val()
@@ -243,6 +258,8 @@ module.exports = ({ db, logger }) => {
     const validation = validateVersePack(pack)
     if (!validation.valid) throw new HttpsError('failed-precondition', 'В выбранном наборе есть ошибки.', { issues: validation.issues })
     const difficulty = allowedDifficulties.has(input.difficulty) ? input.difficulty : 'easy'
+    const translationId = clean(input.translationId, 50) || pack.translationId || pack.entries?.[0]?.translationId || 'russyn-1876'
+    if (pack.translationId && pack.translationId !== translationId) throw new HttpsError('failed-precondition', 'Выбранный перевод не соответствует набору.')
     const cardsPerPlayer = [5, 7, 10].includes(Number(input.cardsPerPlayer)) ? Number(input.cardsPerPlayer) : 5
     const direction = allowedDirections.has(input.direction) ? input.direction : 'ends'
     let roomId = ''
@@ -255,7 +272,7 @@ module.exports = ({ db, logger }) => {
     const game = {
       roomId, hostUid: leader.uid, workspaceId: leader.workspaceId, environment: 'development',
       title: clean(input.title, 80) || 'Собери стих', createdAt: now, updatedAt: now, phase: 'lobby', version: 1,
-      config: { packId, difficulty, cardsPerPlayer, direction }, packSnapshot: { ...pack, capturedAt: now },
+      config: { packId, bookId: pack.bookId || 'PRO', translationId, difficulty, cardsPerPlayer, direction }, packSnapshot: { ...pack, capturedAt: now },
       participants: {}, queue: [], queueCursor: 0, history: [], results: null,
     }
     await db.ref(`verseMatchGames/${roomId}`).set(game)

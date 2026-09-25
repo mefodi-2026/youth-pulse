@@ -12,6 +12,8 @@ const validateVerseEntry = entry => {
   if (!Number.isInteger(Number(entry.chapter)) || Number(entry.chapter) < 1) errors.push('Укажите корректную главу.')
   if (!/^\d+(?:-\d+)?$/.test(String(entry.verse || ''))) errors.push('Укажите стих или диапазон.')
   if (!String(entry.translation || '').trim()) errors.push('Укажите перевод.')
+  if (entry.translationId != null && !String(entry.translationId || '').trim()) errors.push('Укажите устойчивый ID перевода.')
+  if (entry.contentVersion != null && !String(entry.contentVersion || '').trim()) errors.push('Укажите версию текста.')
   const full = normalizeText(entry.fullText)
   const start = normalizeText(entry.start)
   const end = normalizeText(entry.end)

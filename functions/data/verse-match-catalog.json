@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "books": [
+    {
+      "bookId": "PRO",
+      "title": "Притчи Соломона",
+      "translations": [
+        {
+          "translationId": "russyn-1876",
+          "title": "Синодальный перевод",
+          "status": "available",
+          "packId": "proverbs-synodal-v2",
+          "sourceUrl": "https://ebible.org/bible/details.php?id=russyn",
+          "sourceEdition": "eBible.org RUSSYN USFM, 2022-11-25",
+          "license": "Public Domain"
+        },
+        {
+          "translationId": "nrt",
+          "title": "Новый русский перевод",
+          "status": "license-required",
+          "packId": null,
+          "sourceUrl": "https://www.biblica.com/permissions/",
+          "sourceEdition": "Требуется лицензия на актуальное издание",
+          "license": "Полная книга требует письменного разрешения Biblica"
+        }
+      ]
+    }
+  ]
+}
