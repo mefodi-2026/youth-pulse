@@ -6,6 +6,7 @@ import { resolveLegacyParticipantRoomMode, resolveParticipantRoomMode } from './
 import { downloadWishPng, printWish } from './lib/export'
 import { type Answer, type Participant, type ParticipantQuestionSet, type ParticipantQuizResult, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type RoomMode, type Scores, type Session } from './types'
 import { isSessionExpired } from './core/sessionLifecycle'
+import { gameDiagnostic, traceGameOperation } from './lib/gameDiagnostics'
 
 const demoKey = (room: string) => `atmosphere-demo-${room}`
 const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
@@ -62,7 +63,7 @@ function useParticipantSession(room: string, participantId: string | undefined, 
           }
           setLobby(legacy); setRoomError('')
         }, () => { if (active) { setLobby(null); setRoomError('Не удалось загрузить данные комнаты.') } })
-      }, () => { if (active) { setPublicRoom(null); setRoomError('Не удалось загрузить данные комнаты.') } })
+      }, error => { gameDiagnostic('subscription', 'error', error); if (active) { setPublicRoom(null); setRoomError('Не удалось загрузить данные комнаты.') } })
       stopQuestions = subscribeParticipantQuestionSet(room, value => {
         if (!active) return
         const resolution = value ? resolveParticipantRoomMode(value) : null
@@ -72,13 +73,13 @@ function useParticipantSession(room: string, participantId: string | undefined, 
           return
         }
         setQuestionSet(value); setSyncError('')
-      }, () => { if (active) { setQuestionSet(null); setSyncError('Не удалось загрузить материалы комнаты. Подключение будет восстановлено автоматически.') } })
+      }, error => { gameDiagnostic('subscription', 'error', error); if (active) { setQuestionSet(null); setSyncError('Не удалось загрузить материалы комнаты. Подключение будет восстановлено автоматически.') } })
       if (participantId) {
         stopParticipant = subscribeParticipantRecord(room, participantId, value => {
           if (!active) return
           setParticipantRecord(value)
           if (value) setSyncError('')
-        }, () => { if (active) setSyncError('Не удалось синхронизировать данные участника. Подключение будет восстановлено автоматически.') })
+        }, error => { gameDiagnostic('subscription', 'error', error); if (active) setSyncError('Не удалось синхронизировать данные участника. Подключение будет восстановлено автоматически.') })
         stopQuizResult = subscribeParticipantQuizResult(room, participantId, value => { if (active) setQuizResult(value) }, () => { if (active) setQuizResult(null) })
       }
     }).catch(() => { if (active) setRoomError('Не удалось подтвердить подключение к комнате.') })
@@ -231,6 +232,13 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
   const isQuiz = mode === 'quiz'
   const introQuestionCount = isQuiz ? (session ? activeQuestions.length : 15) : activeQuestions.length
   const currentQuestionId = participant ? activeQuestions[participant.currentQuestionIndex]?.id || '' : ''
+  const firstQuestionTraceRef = useRef('')
+  useEffect(() => {
+    if (session?.phase === 'live' && participant?.currentQuestionIndex === 0 && currentQuestionId && firstQuestionTraceRef.current !== room) {
+      firstQuestionTraceRef.current = room
+      gameDiagnostic('first-question', 'confirmed')
+    }
+  }, [room, session?.phase, participant?.currentQuestionIndex, currentQuestionId])
 
   useEffect(() => {
     let active = true
@@ -241,7 +249,7 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
       setAuthUid(user?.uid || '')
       setAuthReady(true)
     }).catch(error => {
-      console.error('participant auth persistence failed', { room, error })
+      gameDiagnostic('guest-auth', 'error', error)
       if (active) { setNotice('Не удалось восстановить подключение. Обновите страницу.'); setAuthReady(true) }
     })
     return () => { active = false }
@@ -279,7 +287,7 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
       const user = firebaseReady ? await ensureAuth() : null
       const next: Participant = { id: user?.uid || crypto.randomUUID(), nickname: name.trim().slice(0, 20), joinedAt: Date.now(), status: 'waiting', currentQuestionIndex: 0, answers: {} }
       const restored = firebaseReady
-        ? await joinSession(room, next)
+        ? await traceGameOperation('guest-join', () => joinSession(room, next))
         : (() => { const demo = getDemo(room); if (!demo) throw new Error('Комната не найдена'); setDemo({ ...demo, participants: { ...demo.participants, [next.id]: next } }); return next })()
       localStorage.setItem(`atmosphere-participant-${room}`, JSON.stringify(restored)); setParticipant(restored)
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Не удалось подключиться') }
@@ -308,7 +316,7 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
       localStorage.setItem(`atmosphere-participant-${room}`, JSON.stringify(next))
       setParticipant(next)
     } catch (error) {
-      console.error('participant answer rejected', { room, participantId: participant.id, questionId: question.id, error })
+      gameDiagnostic('answer-write', 'error', error)
       setRetryAnswer(error instanceof ParticipantAnswerError && !error.retryable ? null : value)
       setRetryQuestionId(error instanceof ParticipantAnswerError && !error.retryable ? '' : question.id)
       setNotice(error instanceof Error ? error.message : 'Не удалось отправить ответ. Проверьте соединение и повторите попытку.')

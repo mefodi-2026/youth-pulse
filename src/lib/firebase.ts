@@ -1,6 +1,7 @@
 import { createUserWithEmailAndPassword, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
 import { equalTo, get, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
 import { httpsCallable } from 'firebase/functions'
+import { gameDiagnostic, traceGameOperation } from './gameDiagnostics'
 import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
 import { bibleQuizGameModule, diagnosticGameModule, getGameModule } from './gameRegistry'
@@ -1256,7 +1257,8 @@ export const joinSession = async (roomId: string, participant: Participant): Pro
     // The participant root is deliberately not writable by a browser. The
     // callable verifies the anonymous identity and atomically creates (or
     // restores) this exact record before returning its server-confirmed data.
-    const result = await httpsCallable(functions, 'joinRoomAsGuest')({ roomId, nickname: participant.nickname })
+    const register = httpsCallable(functions, 'joinRoomAsGuest')
+    const result = await traceGameOperation('guest-callable', () => register({ roomId, nickname: participant.nickname }))
     const registered = (result.data as { participant?: Participant }).participant
     if (!registered || registered.id !== participant.id) throw new ParticipantJoinError('Сервер не подтвердил регистрацию участника.')
     return registered
@@ -1268,7 +1270,7 @@ export const joinSession = async (roomId: string, participant: Participant): Pro
     if (reconciled?.exists()) return reconciled.val() as Participant
     if (reason instanceof ParticipantJoinError) throw reason
     const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code) : ''
-    console.error('participant join rejected', { roomId, participantId: participant.id, code, reason })
+    gameDiagnostic('guest-join', 'error', {code})
     throw participantJoinFailure(reason)
   }
 }
@@ -1285,7 +1287,7 @@ const assertCurrentUserIsRoomHost = async (roomId: string, expectedHostUid?: str
   return { db: services.db, session }
 }
 
-export const updatePhase = async (roomId: string, phase: SessionPhase, expectedHostUid?: string) => {
+const updatePhaseConfirmed = async (roomId: string, phase: SessionPhase, expectedHostUid?: string) => {
   const services = await assertCurrentUserIsRoomHost(roomId, expectedHostUid)
   if (services.session.phase === 'closed') {
     if (phase === 'closed') return
@@ -1307,6 +1309,10 @@ export const updatePhase = async (roomId: string, phase: SessionPhase, expectedH
         : { ...activityPatch, [`sessions/${roomId}/phase`]: phase, [`sessions/${roomId}/status`]: phase, [`${publicRoomPath(roomId)}/phase`]: phase }
   await update(ref(services.db), patch)
 }
+
+export const updatePhase = (roomId: string, phase: SessionPhase, expectedHostUid?: string) => phase === 'live'
+  ? traceGameOperation('start', () => updatePhaseConfirmed(roomId, phase, expectedHostUid))
+  : updatePhaseConfirmed(roomId, phase, expectedHostUid)
 
 /** A deliberate host operation extends a room. Passive page views never call this. */
 export const touchSessionActivity = async (roomId: string, expectedHostUid?: string) => {
@@ -1421,7 +1427,8 @@ const saveQuizAnswer = async (roomId: string, participant: Participant, question
     // A callable result is sent only after its multi-location write commits.
     // Do not follow it with another client-side get(): that extra read can be
     // stale or fail after a successful write and used to create a false error.
-    const result = await httpsCallable(functions, 'submitQuizAnswer')({ roomId, questionId, answer })
+    const submit = httpsCallable(functions, 'submitQuizAnswer')
+    const result = await traceGameOperation('answer-callable', () => submit({ roomId, questionId, answer }))
     const data = result.data as { questionId?: string; answer?: Exclude<ResponseValue, 'SKIP'>; nextIndex?: number; status?: Participant['status'] }
     const resolvedNextIndex = Number(data.nextIndex)
     const resolvedStatus = data.status === 'finished' ? 'finished' : data.status === 'answering' ? 'answering' : null
@@ -1435,7 +1442,7 @@ const saveQuizAnswer = async (roomId: string, participant: Participant, question
     // retry. This is also what makes a repeated tap idempotent.
     const persisted = await readSavedAnswer(roomId, participant.id, questionId, answer)
     if (persisted) return persisted
-    console.error('quiz answer was not confirmed', { roomId, participantId: participant.id, questionId, reason })
+    gameDiagnostic('answer-callable', 'error', reason)
     throw reason instanceof ParticipantAnswerError ? reason : answerFailure(reason)
   }
 }
@@ -1447,17 +1454,17 @@ const saveDiagnosticAnswer = async (roomId: string, participant: Participant, qu
   try {
     // The Rules acknowledge this atomic write. Reading the room first added
     // two round trips to every answer without strengthening server authority.
-    await update(ref(services.db), {
+    await traceGameOperation('answer-write', () => update(ref(services.db), {
       [`sessions/${roomId}/participants/${participant.id}/answers/${questionId}`]: answer,
       [`sessions/${roomId}/participants/${participant.id}/currentQuestionIndex`]: next.currentQuestionIndex,
       [`sessions/${roomId}/participants/${participant.id}/status`]: next.status,
       ...(next.completedAt ? { [`sessions/${roomId}/participants/${participant.id}/completedAt`]: next.completedAt } : {}),
       [`sessions/${roomId}/lastActivityAt`]: Date.now(),
-    })
+    }))
   } catch (reason) {
     const persisted = await readSavedAnswer(roomId, participant.id, questionId, answer)
     if (persisted) return persisted
-    console.error('diagnostic answer was not confirmed', { roomId, participantId: participant.id, questionId, reason })
+    gameDiagnostic('answer-write', 'error', reason)
     throw answerFailure(reason)
   }
   // Analytics is deliberately non-blocking: it must never delay the last
