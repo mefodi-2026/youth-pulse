@@ -1,0 +1,134 @@
+{
+  "environment": "local Firebase Auth/RTDB; real callable HTTP handlers; SDK clients, not browser load",
+  "functionsPort": 5003,
+  "source": "a3ff1ed",
+  "capacity": 100,
+  "node": "v24.19.0",
+  "quizFixture": "Библейская викторина — лёгкий уровень",
+  "results": [
+    {
+      "mode": "diagnostic",
+      "strategy": "gradual",
+      "size": 50,
+      "capacity": 100,
+      "joined": 50,
+      "rejections": [],
+      "firstQuestion": 50,
+      "finished": 50,
+      "answerCount": 3500,
+      "expectedAnswers": 3500,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "answerReplay": null,
+      "join": {
+        "count": 50,
+        "medianMs": 115,
+        "p95Ms": 165
+      },
+      "start": {
+        "count": 50,
+        "medianMs": 184,
+        "p95Ms": 190
+      },
+      "firstAnswer": {
+        "count": 50,
+        "medianMs": 463,
+        "p95Ms": 495
+      },
+      "answer": {
+        "count": 3500,
+        "medianMs": 154,
+        "p95Ms": 224
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 4925,
+      "subscriptionPayloadBytes": 4755111,
+      "rssMb": 177
+    },
+    {
+      "mode": "diagnostic",
+      "strategy": "gradual",
+      "size": 100,
+      "capacity": 100,
+      "joined": 100,
+      "rejections": [],
+      "firstQuestion": 100,
+      "finished": 100,
+      "answerCount": 7000,
+      "expectedAnswers": 7000,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "answerReplay": null,
+      "join": {
+        "count": 100,
+        "medianMs": 116,
+        "p95Ms": 239
+      },
+      "start": {
+        "count": 100,
+        "medianMs": 428,
+        "p95Ms": 443
+      },
+      "firstAnswer": {
+        "count": 100,
+        "medianMs": 898,
+        "p95Ms": 1132
+      },
+      "answer": {
+        "count": 7000,
+        "medianMs": 755,
+        "p95Ms": 1648
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 12350,
+      "subscriptionPayloadBytes": 9861182,
+      "rssMb": 117
+    },
+    {
+      "mode": "diagnostic",
+      "strategy": "simultaneous",
+      "size": 50,
+      "capacity": 100,
+      "joined": 50,
+      "rejections": [],
+      "firstQuestion": 50,
+      "finished": 50,
+      "answerCount": 3500,
+      "expectedAnswers": 3500,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "answerReplay": null,
+      "join": {
+        "count": 50,
+        "medianMs": 5721,
+        "p95Ms": 5810
+      },
+      "start": {
+        "count": 50,
+        "medianMs": 1177,
+        "p95Ms": 1184
+      },
+      "firstAnswer": {
+        "count": 50,
+        "medianMs": 566,
+        "p95Ms": 589
+      },
+      "answer": {
+        "count": 3500,
+        "medianMs": 413,
+        "p95Ms": 971
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 3742,
+      "subscriptionPayloadBytes": 4592049,
+      "rssMb": 153
+    }
+  ],
+  "errors": []
+}

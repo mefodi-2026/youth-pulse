@@ -1,0 +1,57 @@
+{
+  "environment": "local Firebase Auth/RTDB; real callable HTTP handlers; SDK clients, not browser load",
+  "functionsPort": 5003,
+  "source": "a3ff1ed",
+  "capacity": 100,
+  "node": "v24.19.0",
+  "quizFixture": "Библейская викторина — лёгкий уровень",
+  "results": [
+    {
+      "mode": "diagnostic",
+      "strategy": "gradual",
+      "size": 50,
+      "capacity": 100,
+      "joined": 50,
+      "rejections": [],
+      "firstQuestion": 50,
+      "finished": 0,
+      "answerCount": 899,
+      "expectedAnswers": 3500,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "answerReplay": null,
+      "join": {
+        "count": 50,
+        "medianMs": 103,
+        "p95Ms": 1513
+      },
+      "start": {
+        "count": 50,
+        "medianMs": 76,
+        "p95Ms": 82
+      },
+      "firstAnswer": {
+        "count": 50,
+        "medianMs": 1718,
+        "p95Ms": 2978
+      },
+      "answer": {
+        "count": 899,
+        "medianMs": 3012,
+        "p95Ms": 15530
+      },
+      "answerFailures": [
+        {
+          "question": 18,
+          "code": "INTERNAL_ERROR"
+        }
+      ],
+      "subscriptionEvents": 2326,
+      "subscriptionPayloadBytes": 2115475,
+      "rssMb": 54
+    }
+  ],
+  "errors": []
+}

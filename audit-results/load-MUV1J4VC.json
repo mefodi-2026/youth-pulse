@@ -1,0 +1,298 @@
+{
+  "environment": "local Firebase Auth/RTDB; real callable HTTP handlers; SDK clients, not browser load",
+  "functionsPort": 5003,
+  "source": "a3ff1ed",
+  "capacity": 100,
+  "node": "v24.19.0",
+  "quizFixture": "Библейская викторина — лёгкий уровень",
+  "results": [
+    {
+      "mode": "diagnostic",
+      "strategy": "gradual",
+      "size": 50,
+      "capacity": 100,
+      "joined": 50,
+      "rejections": [],
+      "firstQuestion": 50,
+      "finished": 50,
+      "answerCount": 3500,
+      "expectedAnswers": 3500,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 50,
+        "medianMs": 117,
+        "p95Ms": 152
+      },
+      "start": {
+        "count": 50,
+        "medianMs": 160,
+        "p95Ms": 164
+      },
+      "answer": {
+        "count": 3500,
+        "medianMs": 230,
+        "p95Ms": 1672
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 4925,
+      "subscriptionPayloadBytes": 4755111,
+      "rssMb": 85
+    },
+    {
+      "mode": "diagnostic",
+      "strategy": "gradual",
+      "size": 100,
+      "capacity": 100,
+      "joined": 100,
+      "rejections": [],
+      "firstQuestion": 100,
+      "finished": 100,
+      "answerCount": 7000,
+      "expectedAnswers": 7000,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 100,
+        "medianMs": 110,
+        "p95Ms": 177
+      },
+      "start": {
+        "count": 100,
+        "medianMs": 21,
+        "p95Ms": 25
+      },
+      "answer": {
+        "count": 7000,
+        "medianMs": 332,
+        "p95Ms": 1298
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 12350,
+      "subscriptionPayloadBytes": 9861182,
+      "rssMb": 181
+    },
+    {
+      "mode": "diagnostic",
+      "strategy": "simultaneous",
+      "size": 50,
+      "capacity": 100,
+      "joined": 50,
+      "rejections": [],
+      "firstQuestion": 50,
+      "finished": 50,
+      "answerCount": 3500,
+      "expectedAnswers": 3500,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 50,
+        "medianMs": 1382,
+        "p95Ms": 1408
+      },
+      "start": {
+        "count": 50,
+        "medianMs": 11,
+        "p95Ms": 14
+      },
+      "answer": {
+        "count": 3500,
+        "medianMs": 196,
+        "p95Ms": 322
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 4324,
+      "subscriptionPayloadBytes": 4672947,
+      "rssMb": 207
+    },
+    {
+      "mode": "diagnostic",
+      "strategy": "simultaneous",
+      "size": 100,
+      "capacity": 100,
+      "joined": 100,
+      "rejections": [],
+      "firstQuestion": 100,
+      "finished": 0,
+      "answerCount": 4399,
+      "expectedAnswers": 7000,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 100,
+        "medianMs": 2824,
+        "p95Ms": 3340
+      },
+      "start": {
+        "count": 100,
+        "medianMs": 19,
+        "p95Ms": 25
+      },
+      "answer": {
+        "count": 4399,
+        "medianMs": 1518,
+        "p95Ms": 10089
+      },
+      "answerFailures": [
+        {
+          "question": 44,
+          "code": "INTERNAL_ERROR"
+        }
+      ],
+      "subscriptionEvents": 6522,
+      "subscriptionPayloadBytes": 6233742,
+      "rssMb": 87
+    },
+    {
+      "mode": "quiz",
+      "strategy": "gradual",
+      "size": 50,
+      "capacity": 100,
+      "joined": 49,
+      "rejections": [
+        "functions/internal"
+      ],
+      "firstQuestion": 49,
+      "finished": 49,
+      "answerCount": 735,
+      "expectedAnswers": 735,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 49,
+        "medianMs": 61,
+        "p95Ms": 101
+      },
+      "start": {
+        "count": 49,
+        "medianMs": 12,
+        "p95Ms": 16
+      },
+      "answer": {
+        "count": 735,
+        "medianMs": 304,
+        "p95Ms": 2499
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 36750,
+      "subscriptionPayloadBytes": 5137261,
+      "rssMb": 159
+    },
+    {
+      "mode": "quiz",
+      "strategy": "gradual",
+      "size": 100,
+      "capacity": 100,
+      "joined": 100,
+      "rejections": [],
+      "firstQuestion": 100,
+      "finished": 100,
+      "answerCount": 1500,
+      "expectedAnswers": 1500,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 100,
+        "medianMs": 66,
+        "p95Ms": 1527
+      },
+      "start": {
+        "count": 100,
+        "medianMs": 26,
+        "p95Ms": 33
+      },
+      "answer": {
+        "count": 1500,
+        "medianMs": 2533,
+        "p95Ms": 12706
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 155150,
+      "subscriptionPayloadBytes": 21066722,
+      "rssMb": 220
+    },
+    {
+      "mode": "quiz",
+      "strategy": "simultaneous",
+      "size": 50,
+      "capacity": 100,
+      "joined": 50,
+      "rejections": [],
+      "firstQuestion": 50,
+      "finished": 50,
+      "answerCount": 750,
+      "expectedAnswers": 750,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 50,
+        "medianMs": 1059,
+        "p95Ms": 1174
+      },
+      "start": {
+        "count": 50,
+        "medianMs": 19,
+        "p95Ms": 24
+      },
+      "answer": {
+        "count": 750,
+        "medianMs": 318,
+        "p95Ms": 1847
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 38088,
+      "subscriptionPayloadBytes": 5319110,
+      "rssMb": 220
+    },
+    {
+      "mode": "quiz",
+      "strategy": "simultaneous",
+      "size": 100,
+      "capacity": 100,
+      "joined": 100,
+      "rejections": [],
+      "firstQuestion": 100,
+      "finished": 100,
+      "answerCount": 1500,
+      "expectedAnswers": 1500,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 100,
+        "medianMs": 1757,
+        "p95Ms": 1808
+      },
+      "start": {
+        "count": 100,
+        "medianMs": 24,
+        "p95Ms": 29
+      },
+      "answer": {
+        "count": 1500,
+        "medianMs": 2309,
+        "p95Ms": 4046
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 149547,
+      "subscriptionPayloadBytes": 20324723,
+      "rssMb": 213
+    }
+  ],
+  "errors": []
+}
