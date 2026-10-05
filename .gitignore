@@ -22,3 +22,9 @@ ui-debug.log
 *.log
 .DS_Store
 Thumbs.db
+
+# Isolated audit tooling caches (never publication inputs)
+.npm-cache/
+.config/
+.pnpm-store/
+audit-results/browser-fixtures.json
