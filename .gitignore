@@ -28,3 +28,6 @@ Thumbs.db
 .config/
 .pnpm-store/
 audit-results/browser-fixtures.json
+
+# Generated isolated Functions input; never included in production commits.
+functions-audit-staging/

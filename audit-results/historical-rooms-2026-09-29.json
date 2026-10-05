@@ -1,0 +1,377 @@
+{
+  "capturedAt": "2026-10-05T14:23:30.501Z",
+  "environment": "production; historical rooms; read-only",
+  "timezone": {
+    "admin": "Asia/Almaty",
+    "displayOffset": "+05:00",
+    "evidence": "OwnerAdmin.tsx date formatter; no browser timezone dependency"
+  },
+  "rooms": [
+    {
+      "room": "ME56NL",
+      "exists": true,
+      "mode": "diagnostic",
+      "phase": "closed",
+      "createdAt": "2026-09-29T15:37:22.225Z",
+      "startedAt": "2026-09-29T15:39:29.915Z",
+      "endedAt": "2026-09-29T15:39:36.095Z",
+      "closedAt": "2026-09-29T15:39:36.095Z",
+      "lastActivityAt": "2026-09-29T15:39:36.095Z",
+      "storedParticipantCount": 30,
+      "storedCompletedCount": 0,
+      "uniqueParticipantKeys": 30,
+      "identityKeyMatches": 30,
+      "statuses": {
+        "waiting": 28,
+        "answering": 2
+      },
+      "indices": {
+        "0": 28,
+        "1": 2
+      },
+      "answers": {
+        "total": 2,
+        "withAny": 2,
+        "histogram": {
+          "0": 28,
+          "1": 2
+        }
+      },
+      "joinedAt": {
+        "first": "2026-09-29T15:38:10.760Z",
+        "last": "2026-09-29T15:38:43.813Z",
+        "afterStart": 0
+      },
+      "events": [
+        {
+          "type": "room_closed",
+          "time": "2026-09-29T15:39:36.095Z",
+          "actorIsHost": true,
+          "participantReferencePresent": false
+        },
+        {
+          "type": "room_created",
+          "time": "2026-09-29T15:37:22.225Z",
+          "actorIsHost": true,
+          "participantReferencePresent": false
+        },
+        {
+          "type": "room_started",
+          "time": "2026-09-29T15:39:29.915Z",
+          "actorIsHost": true,
+          "participantReferencePresent": false
+        }
+      ],
+      "questionSnapshot": null,
+      "sessionKeys": [
+        "city",
+        "closedAt",
+        "completedCount",
+        "createdAt",
+        "createdBy",
+        "displayCode",
+        "endedAt",
+        "estimatedParticipants",
+        "events",
+        "gameTypeId",
+        "groupName",
+        "hostUid",
+        "lastActivityAt",
+        "maxParticipants",
+        "mode",
+        "packId",
+        "packSnapshot",
+        "packUpdatedAt",
+        "packVersion",
+        "participantCount",
+        "participants",
+        "phase",
+        "productId",
+        "questions",
+        "roomId",
+        "roomTitle",
+        "scoringMap",
+        "scoringTemplateId",
+        "scoringTemplateVersion",
+        "selectedPackId",
+        "settings",
+        "snapshotId",
+        "sourcePackId",
+        "startedAt",
+        "status",
+        "templateOrigin",
+        "templateSnapshot",
+        "templateSource",
+        "workspaceId"
+      ]
+    },
+    {
+      "room": "TYFRN7",
+      "exists": true,
+      "mode": "diagnostic",
+      "phase": "closed",
+      "createdAt": "2026-09-29T15:39:52.205Z",
+      "startedAt": "2026-09-29T15:40:58.076Z",
+      "endedAt": "2026-09-29T15:41:01.508Z",
+      "closedAt": "2026-09-29T15:41:01.508Z",
+      "lastActivityAt": "2026-09-29T15:41:01.508Z",
+      "storedParticipantCount": 30,
+      "storedCompletedCount": 0,
+      "uniqueParticipantKeys": 30,
+      "identityKeyMatches": 30,
+      "statuses": {
+        "waiting": 28,
+        "answering": 2
+      },
+      "indices": {
+        "0": 28,
+        "1": 2
+      },
+      "answers": {
+        "total": 2,
+        "withAny": 2,
+        "histogram": {
+          "0": 28,
+          "1": 2
+        }
+      },
+      "joinedAt": {
+        "first": "2026-09-29T15:40:11.310Z",
+        "last": "2026-09-29T15:40:20.679Z",
+        "afterStart": 0
+      },
+      "events": [
+        {
+          "type": "room_closed",
+          "time": "2026-09-29T15:41:01.508Z",
+          "actorIsHost": true,
+          "participantReferencePresent": false
+        },
+        {
+          "type": "room_created",
+          "time": "2026-09-29T15:39:52.205Z",
+          "actorIsHost": true,
+          "participantReferencePresent": false
+        },
+        {
+          "type": "room_started",
+          "time": "2026-09-29T15:40:58.076Z",
+          "actorIsHost": true,
+          "participantReferencePresent": false
+        }
+      ],
+      "questionSnapshot": null,
+      "sessionKeys": [
+        "city",
+        "closedAt",
+        "completedCount",
+        "createdAt",
+        "createdBy",
+        "displayCode",
+        "endedAt",
+        "estimatedParticipants",
+        "events",
+        "gameTypeId",
+        "groupName",
+        "hostUid",
+        "lastActivityAt",
+        "maxParticipants",
+        "mode",
+        "packId",
+        "packSnapshot",
+        "packUpdatedAt",
+        "packVersion",
+        "participantCount",
+        "participants",
+        "phase",
+        "productId",
+        "questions",
+        "roomId",
+        "roomTitle",
+        "scoringMap",
+        "scoringTemplateId",
+        "scoringTemplateVersion",
+        "selectedPackId",
+        "settings",
+        "snapshotId",
+        "sourcePackId",
+        "startedAt",
+        "status",
+        "templateOrigin",
+        "templateSnapshot",
+        "templateSource",
+        "workspaceId"
+      ]
+    },
+    {
+      "room": "3HD0YF",
+      "exists": true,
+      "mode": "diagnostic",
+      "phase": "closed",
+      "createdAt": "2026-09-29T15:41:26.651Z",
+      "startedAt": "2026-09-29T15:42:13.515Z",
+      "endedAt": "2026-09-29T15:42:19.198Z",
+      "closedAt": "2026-09-29T15:42:19.198Z",
+      "lastActivityAt": "2026-09-29T15:42:19.198Z",
+      "storedParticipantCount": 30,
+      "storedCompletedCount": 0,
+      "uniqueParticipantKeys": 30,
+      "identityKeyMatches": 30,
+      "statuses": {
+        "answering": 5,
+        "waiting": 25
+      },
+      "indices": {
+        "0": 25,
+        "1": 5
+      },
+      "answers": {
+        "total": 5,
+        "withAny": 5,
+        "histogram": {
+          "0": 25,
+          "1": 5
+        }
+      },
+      "joinedAt": {
+        "first": "2026-09-29T15:41:43.219Z",
+        "last": "2026-09-29T15:41:53.212Z",
+        "afterStart": 0
+      },
+      "events": [
+        {
+          "type": "room_closed",
+          "time": "2026-09-29T15:42:19.198Z",
+          "actorIsHost": true,
+          "participantReferencePresent": false
+        },
+        {
+          "type": "room_created",
+          "time": "2026-09-29T15:41:26.651Z",
+          "actorIsHost": true,
+          "participantReferencePresent": false
+        },
+        {
+          "type": "room_started",
+          "time": "2026-09-29T15:42:13.515Z",
+          "actorIsHost": true,
+          "participantReferencePresent": false
+        }
+      ],
+      "questionSnapshot": null,
+      "sessionKeys": [
+        "city",
+        "closedAt",
+        "completedCount",
+        "createdAt",
+        "createdBy",
+        "displayCode",
+        "endedAt",
+        "estimatedParticipants",
+        "events",
+        "gameTypeId",
+        "groupName",
+        "hostUid",
+        "lastActivityAt",
+        "maxParticipants",
+        "mode",
+        "packId",
+        "packSnapshot",
+        "packUpdatedAt",
+        "packVersion",
+        "participantCount",
+        "participants",
+        "phase",
+        "productId",
+        "questions",
+        "roomId",
+        "roomTitle",
+        "scoringMap",
+        "scoringTemplateId",
+        "scoringTemplateVersion",
+        "selectedPackId",
+        "settings",
+        "snapshotId",
+        "sourcePackId",
+        "startedAt",
+        "status",
+        "templateOrigin",
+        "templateSnapshot",
+        "templateSource",
+        "workspaceId"
+      ]
+    }
+  ],
+  "projections": [
+    {
+      "room": "ME56NL",
+      "savedSessionQuestions": 70,
+      "packSnapshotQuestions": 70,
+      "publicQuestionSetExists": true,
+      "publicQuestionCount": 70,
+      "recordedAnswersReferencePublicQuestions": true,
+      "publicMode": "diagnostic",
+      "publicPhase": "closed",
+      "maxParticipants": 30,
+      "publicMaxParticipants": 30,
+      "createdByEqualsHost": true,
+      "secondsLive": 6.18
+    },
+    {
+      "room": "TYFRN7",
+      "savedSessionQuestions": 70,
+      "packSnapshotQuestions": 70,
+      "publicQuestionSetExists": true,
+      "publicQuestionCount": 70,
+      "recordedAnswersReferencePublicQuestions": true,
+      "publicMode": "diagnostic",
+      "publicPhase": "closed",
+      "maxParticipants": 30,
+      "publicMaxParticipants": 30,
+      "createdByEqualsHost": true,
+      "secondsLive": 3.432
+    },
+    {
+      "room": "3HD0YF",
+      "savedSessionQuestions": 70,
+      "packSnapshotQuestions": 70,
+      "publicQuestionSetExists": true,
+      "publicQuestionCount": 70,
+      "recordedAnswersReferencePublicQuestions": true,
+      "publicMode": "diagnostic",
+      "publicPhase": "closed",
+      "maxParticipants": 30,
+      "publicMaxParticipants": 30,
+      "createdByEqualsHost": true,
+      "secondsLive": 5.683
+    }
+  ],
+  "overlap": [
+    {
+      "rooms": [
+        "ME56NL",
+        "TYFRN7"
+      ],
+      "sharedIdentities": 14
+    },
+    {
+      "rooms": [
+        "TYFRN7",
+        "3HD0YF"
+      ],
+      "sharedIdentities": 20
+    },
+    {
+      "rooms": [
+        "ME56NL",
+        "3HD0YF"
+      ],
+      "sharedIdentities": 14
+    }
+  ],
+  "limits": [
+    "Current question projection does not prove a particular browser received it at incident time.",
+    "Answers do not retain submission timestamps; HTTP logs do not carry room IDs or callable response bodies.",
+    "room_closed event identifies host context, not which user clicked or whether owner forced closure."
+  ]
+}

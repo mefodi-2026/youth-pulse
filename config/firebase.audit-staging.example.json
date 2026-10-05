@@ -3,7 +3,7 @@
     "rules": "../firebase-rules.json"
   },
   "functions": [{
-    "source": "../functions-audit-staging-NOT-YET-PREPARED",
+    "source": "../functions-audit-staging",
     "codebase": "audit-old-modes-only",
     "runtime": "nodejs20"
   }]

@@ -1,0 +1,22 @@
+{
+  "capturedAt": "2026-10-05T14:30:02.000Z",
+  "readOnly": true,
+  "source": "Participant-safe projection Object.values order; not host snapshot array. Orders differ in all three rooms.",
+  "checks": [
+    {
+      "room": "ME56NL",
+      "firstQuestionAnswers": 2,
+      "otherQuestionAnswers": 0
+    },
+    {
+      "room": "TYFRN7",
+      "firstQuestionAnswers": 2,
+      "otherQuestionAnswers": 0
+    },
+    {
+      "room": "3HD0YF",
+      "firstQuestionAnswers": 5,
+      "otherQuestionAnswers": 0
+    }
+  ]
+}
