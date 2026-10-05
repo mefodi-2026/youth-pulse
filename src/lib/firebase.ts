@@ -1,5 +1,5 @@
 import { createUserWithEmailAndPassword, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
-import { equalTo, get, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
+import { equalTo, get, onValue, orderByChild, push, query, ref, serverTimestamp, set, update } from 'firebase/database'
 import { httpsCallable } from 'firebase/functions'
 import { questions as builtInQuestions } from '../data/questions'
 import { canUseFeature } from './access'
@@ -1452,7 +1452,8 @@ const saveDiagnosticAnswer = async (roomId: string, participant: Participant, qu
       [`sessions/${roomId}/participants/${participant.id}/currentQuestionIndex`]: next.currentQuestionIndex,
       [`sessions/${roomId}/participants/${participant.id}/status`]: next.status,
       ...(next.completedAt ? { [`sessions/${roomId}/participants/${participant.id}/completedAt`]: next.completedAt } : {}),
-      [`sessions/${roomId}/lastActivityAt`]: Date.now(),
+      // Shared expiry must not depend on the clock of an anonymous guest.
+      [`sessions/${roomId}/lastActivityAt`]: serverTimestamp(),
     })
   } catch (reason) {
     const persisted = await readSavedAnswer(roomId, participant.id, questionId, answer)
