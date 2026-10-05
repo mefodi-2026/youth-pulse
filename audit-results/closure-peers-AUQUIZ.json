@@ -1,0 +1,17 @@
+{
+  "environment": "LOCAL demo Auth/RTDB only; actual c56b6d2 host UI; SDK guests",
+  "room": "AUQUIZ",
+  "requested": 30,
+  "registered": 0,
+  "firstQuestion": 0,
+  "firstAnswerConfirmed": 0,
+  "secondQuestion": 0,
+  "finished": 0,
+  "errors": [
+    {
+      "stage": "test",
+      "code": "functions/failed-precondition"
+    }
+  ],
+  "phaseObservations": []
+}

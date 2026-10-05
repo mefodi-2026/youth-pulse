@@ -1,0 +1,25 @@
+{
+  "environment": "LOCAL demo Auth/RTDB only; actual c56b6d2 host UI; SDK guests",
+  "room": "CLKFIX",
+  "requested": 29,
+  "registered": 29,
+  "firstQuestion": 29,
+  "firstAnswerConfirmed": 29,
+  "secondQuestion": 29,
+  "finished": 29,
+  "errors": [],
+  "phaseObservations": [
+    {
+      "time": "2026-10-05T15:17:11.242Z",
+      "phase": "lobby"
+    },
+    {
+      "time": "2026-10-05T15:18:14.723Z",
+      "phase": "lobby"
+    },
+    {
+      "time": "2026-10-05T15:18:44.451Z",
+      "phase": "live"
+    }
+  ]
+}

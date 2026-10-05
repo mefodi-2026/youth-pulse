@@ -1,0 +1,56 @@
+{
+  "environment": "LOCAL emulator; read-only aggregate",
+  "room": "CLKSKE",
+  "phase": "closed",
+  "registered": 30,
+  "distinctKeys": 30,
+  "answerCounts": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1
+  ],
+  "finished": 0,
+  "startedAt": 1791213344974,
+  "closedAt": 1791213352835,
+  "liveMs": 7861,
+  "lastActivityAt": 1791213352835,
+  "events": [
+    {
+      "type": "room_closed",
+      "createdAt": 1791213352835,
+      "actorIsHost": true
+    },
+    {
+      "type": "room_started",
+      "createdAt": 1791213344974,
+      "actorIsHost": true
+    }
+  ]
+}

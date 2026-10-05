@@ -1,0 +1,29 @@
+{
+  "environment": "LOCAL demo Auth/RTDB only; actual c56b6d2 host UI; SDK guests",
+  "room": "CLKSKE",
+  "requested": 29,
+  "registered": 29,
+  "firstQuestion": 29,
+  "firstAnswerConfirmed": 0,
+  "secondQuestion": 0,
+  "finished": 0,
+  "errors": [],
+  "phaseObservations": [
+    {
+      "time": "2026-10-05T15:14:29.134Z",
+      "phase": "lobby"
+    },
+    {
+      "time": "2026-10-05T15:15:20.850Z",
+      "phase": "lobby"
+    },
+    {
+      "time": "2026-10-05T15:15:45.112Z",
+      "phase": "live"
+    },
+    {
+      "time": "2026-10-05T15:15:52.934Z",
+      "phase": "closed"
+    }
+  ]
+}

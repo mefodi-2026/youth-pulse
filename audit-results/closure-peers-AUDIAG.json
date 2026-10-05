@@ -1,0 +1,21 @@
+{
+  "environment": "LOCAL demo Auth/RTDB only; actual c56b6d2 host UI; SDK guests",
+  "room": "AUDIAG",
+  "requested": 30,
+  "registered": 30,
+  "firstQuestion": 30,
+  "firstAnswerConfirmed": 30,
+  "secondQuestion": 30,
+  "finished": 30,
+  "errors": [],
+  "phaseObservations": [
+    {
+      "time": "2026-10-05T15:04:44.804Z",
+      "phase": "lobby"
+    },
+    {
+      "time": "2026-10-05T15:12:18.077Z",
+      "phase": "live"
+    }
+  ]
+}
