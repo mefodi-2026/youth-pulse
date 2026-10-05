@@ -1,0 +1,29 @@
+{
+  "capturedAt": "2026-10-05T13:35:32.314Z",
+  "environment": "production; read-only named smoke-test room, not load test",
+  "room": "MFC5QS",
+  "mode": "diagnostic",
+  "phase": "resultsReal",
+  "participants": [
+    {
+      "participant": 1,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "computedCorrect": null,
+      "quizResultCorrect": null,
+      "diagnosticPoints": 210
+    },
+    {
+      "participant": 2,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "computedCorrect": null,
+      "quizResultCorrect": null,
+      "diagnosticPoints": 137
+    }
+  ]
+}

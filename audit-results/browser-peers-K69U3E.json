@@ -1,0 +1,9 @@
+{
+  "environment": "local only; UI host and one browser guest + SDK companion guests",
+  "room": "K69U3E",
+  "requested": 29,
+  "joined": 29,
+  "firstQuestion": 29,
+  "finished": 29,
+  "errors": []
+}

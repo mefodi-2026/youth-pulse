@@ -1,0 +1,79 @@
+{
+  "environment": "local Firebase emulators; SDK clients, not browser load",
+  "source": "a3ff1ed",
+  "node": "v24.19.0",
+  "quizFixture": "Библейская викторина — лёгкий уровень",
+  "results": [
+    {
+      "mode": "diagnostic",
+      "strategy": "simultaneous",
+      "size": 30,
+      "capacity": 30,
+      "joined": 30,
+      "rejections": [],
+      "firstQuestion": 30,
+      "finished": 30,
+      "answerCount": 2100,
+      "expectedAnswers": 2100,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 30,
+        "medianMs": 30895,
+        "p95Ms": 33789
+      },
+      "start": {
+        "count": 30,
+        "medianMs": 128,
+        "p95Ms": 133
+      },
+      "answer": {
+        "count": 2100,
+        "medianMs": 107,
+        "p95Ms": 184
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 2642,
+      "subscriptionPayloadBytes": 2809135,
+      "rssMb": 87
+    },
+    {
+      "mode": "quiz",
+      "strategy": "simultaneous",
+      "size": 30,
+      "capacity": 30,
+      "joined": 30,
+      "rejections": [],
+      "firstQuestion": 30,
+      "finished": 30,
+      "answerCount": 450,
+      "expectedAnswers": 450,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 30,
+        "medianMs": 4057,
+        "p95Ms": 4645
+      },
+      "start": {
+        "count": 30,
+        "medianMs": 14,
+        "p95Ms": 15
+      },
+      "answer": {
+        "count": 450,
+        "medianMs": 434,
+        "p95Ms": 29335
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 13592,
+      "subscriptionPayloadBytes": 1942828,
+      "rssMb": 86
+    }
+  ],
+  "errors": []
+}

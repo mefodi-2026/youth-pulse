@@ -1,0 +1,29 @@
+{
+  "capturedAt": "2026-10-05T13:25:51.901Z",
+  "environment": "production; read-only named smoke-test room, not load test",
+  "room": "MZVCPD",
+  "mode": "quiz",
+  "phase": "resultsReal",
+  "participants": [
+    {
+      "participant": 1,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 15,
+      "answers": 15,
+      "computedCorrect": 6,
+      "quizResultCorrect": null,
+      "storedResult": 6
+    },
+    {
+      "participant": 2,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 15,
+      "answers": 15,
+      "computedCorrect": 4,
+      "quizResultCorrect": null,
+      "storedResult": 4
+    }
+  ]
+}

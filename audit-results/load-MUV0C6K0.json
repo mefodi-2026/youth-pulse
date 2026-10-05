@@ -1,0 +1,81 @@
+{
+  "environment": "local Firebase emulators; SDK clients, not browser load",
+  "source": "a3ff1ed",
+  "node": "v24.19.0",
+  "quizFixture": "synthetic 15 questions",
+  "results": [
+    {
+      "mode": "diagnostic",
+      "strategy": "simultaneous",
+      "size": 30,
+      "capacity": 30,
+      "joined": 30,
+      "rejections": [],
+      "firstQuestion": 30,
+      "finished": 30,
+      "answerCount": 2100,
+      "expectedAnswers": 2100,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 30,
+        "medianMs": 4900,
+        "p95Ms": 6441
+      },
+      "start": {
+        "count": 30,
+        "medianMs": 90,
+        "p95Ms": 96
+      },
+      "answer": {
+        "count": 2100,
+        "medianMs": 114,
+        "p95Ms": 148
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 2635,
+      "subscriptionPayloadBytes": 2808176,
+      "rssMb": 126
+    },
+    {
+      "mode": "quiz",
+      "strategy": "simultaneous",
+      "size": 30,
+      "capacity": 30,
+      "joined": 29,
+      "rejections": [
+        "functions/internal"
+      ],
+      "firstQuestion": 29,
+      "finished": 29,
+      "answerCount": 435,
+      "expectedAnswers": 435,
+      "mismatchedScores": 0,
+      "restored": true,
+      "reused": true,
+      "privateDenied": true,
+      "join": {
+        "count": 29,
+        "medianMs": 1319,
+        "p95Ms": 1790
+      },
+      "start": {
+        "count": 29,
+        "medianMs": 11,
+        "p95Ms": 13
+      },
+      "answer": {
+        "count": 435,
+        "medianMs": 452,
+        "p95Ms": 21765
+      },
+      "answerFailures": [],
+      "subscriptionEvents": 12459,
+      "subscriptionPayloadBytes": 1701005,
+      "rssMb": 90
+    }
+  ],
+  "errors": []
+}

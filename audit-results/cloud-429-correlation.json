@@ -1,0 +1,1410 @@
+{
+  "capturedAt": "2026-10-05T12:59:26.659Z",
+  "window": {
+    "from": "2026-09-29T15:38:00Z",
+    "to": "2026-09-29T15:43:00Z"
+  },
+  "entries": 581,
+  "truncated": false,
+  "histogram": {
+    "OPTIONS:204": 161,
+    "POST:200": 90,
+    "POST:429": 116,
+    "POST:400": 3
+  },
+  "failures": [
+    {
+      "requestId": "window-429-1",
+      "time": "2026-09-29T15:38:44.587924Z",
+      "status": 429,
+      "latency": "0.025036887s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-2",
+      "time": "2026-09-29T15:38:46.533307Z",
+      "status": 429,
+      "latency": "0.033938698s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-3",
+      "time": "2026-09-29T15:38:47.700255Z",
+      "status": 429,
+      "latency": "0.034905047s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-4",
+      "time": "2026-09-29T15:38:51.326248Z",
+      "status": 429,
+      "latency": "0.031221756s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-5",
+      "time": "2026-09-29T15:38:54.802929Z",
+      "status": 429,
+      "latency": "0.026445708s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-6",
+      "time": "2026-09-29T15:38:55.630703Z",
+      "status": 429,
+      "latency": "0.028080217s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-7",
+      "time": "2026-09-29T15:38:55.705428Z",
+      "status": 429,
+      "latency": "0.027844848s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-8",
+      "time": "2026-09-29T15:38:56.386417Z",
+      "status": 429,
+      "latency": "0.027261747s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-9",
+      "time": "2026-09-29T15:38:58.601975Z",
+      "status": 429,
+      "latency": "0.027265486s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-10",
+      "time": "2026-09-29T15:39:01.892996Z",
+      "status": 429,
+      "latency": "0.025455934s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-11",
+      "time": "2026-09-29T15:39:02.235659Z",
+      "status": 429,
+      "latency": "0.027282055s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-12",
+      "time": "2026-09-29T15:39:02.997373Z",
+      "status": 429,
+      "latency": "0.030318289s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-13",
+      "time": "2026-09-29T15:39:03.178516Z",
+      "status": 429,
+      "latency": "0.030043189s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-14",
+      "time": "2026-09-29T15:39:04.166714Z",
+      "status": 429,
+      "latency": "0.025652900s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-15",
+      "time": "2026-09-29T15:39:04.329641Z",
+      "status": 429,
+      "latency": "0.028142539s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-16",
+      "time": "2026-09-29T15:39:04.698296Z",
+      "status": 429,
+      "latency": "0.027027700s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-17",
+      "time": "2026-09-29T15:39:05.339296Z",
+      "status": 429,
+      "latency": "0.035871911s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-18",
+      "time": "2026-09-29T15:39:06.472230Z",
+      "status": 429,
+      "latency": "0.035349561s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-19",
+      "time": "2026-09-29T15:39:06.635261Z",
+      "status": 429,
+      "latency": "0.023815104s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-20",
+      "time": "2026-09-29T15:39:06.762956Z",
+      "status": 429,
+      "latency": "0.025447363s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-21",
+      "time": "2026-09-29T15:39:07.621466Z",
+      "status": 429,
+      "latency": "0.030688224s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-22",
+      "time": "2026-09-29T15:39:08.195478Z",
+      "status": 429,
+      "latency": "0.021809435s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-23",
+      "time": "2026-09-29T15:39:12.767584Z",
+      "status": 429,
+      "latency": "0.030329534s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-24",
+      "time": "2026-09-29T15:39:16.167634Z",
+      "status": 429,
+      "latency": "0.034300148s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-25",
+      "time": "2026-09-29T15:39:21.327294Z",
+      "status": 429,
+      "latency": "0.029887508s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-26",
+      "time": "2026-09-29T15:39:21.823114Z",
+      "status": 429,
+      "latency": "0.024487511s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-27",
+      "time": "2026-09-29T15:39:28.093157Z",
+      "status": 429,
+      "latency": "0.032222342s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-28",
+      "time": "2026-09-29T15:39:29.127684Z",
+      "status": 429,
+      "latency": "0.031225662s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-29",
+      "time": "2026-09-29T15:39:29.439321Z",
+      "status": 429,
+      "latency": "0.025196914s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-30",
+      "time": "2026-09-29T15:39:30.285523Z",
+      "status": 429,
+      "latency": "0.029182424s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-31",
+      "time": "2026-09-29T15:39:31.300986Z",
+      "status": 429,
+      "latency": "0.027501684s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-32",
+      "time": "2026-09-29T15:39:31.861121Z",
+      "status": 429,
+      "latency": "0.026946724s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-33",
+      "time": "2026-09-29T15:39:32.832570Z",
+      "status": 429,
+      "latency": "0.025838824s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-34",
+      "time": "2026-09-29T15:39:34.106566Z",
+      "status": 429,
+      "latency": "0.033239575s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-35",
+      "time": "2026-09-29T15:40:21.766283Z",
+      "status": 429,
+      "latency": "0.023075727s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-36",
+      "time": "2026-09-29T15:40:22.188594Z",
+      "status": 429,
+      "latency": "0.023709598s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-37",
+      "time": "2026-09-29T15:40:22.653969Z",
+      "status": 429,
+      "latency": "0.027234782s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-38",
+      "time": "2026-09-29T15:40:22.922017Z",
+      "status": 429,
+      "latency": "0.025220862s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-39",
+      "time": "2026-09-29T15:40:23.225997Z",
+      "status": 429,
+      "latency": "0.027370291s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-40",
+      "time": "2026-09-29T15:40:23.335195Z",
+      "status": 429,
+      "latency": "0.024212672s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-41",
+      "time": "2026-09-29T15:40:24.121871Z",
+      "status": 429,
+      "latency": "0.032803722s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-42",
+      "time": "2026-09-29T15:40:24.885365Z",
+      "status": 429,
+      "latency": "0.033111295s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-43",
+      "time": "2026-09-29T15:40:25.160600Z",
+      "status": 429,
+      "latency": "0.024755446s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-44",
+      "time": "2026-09-29T15:40:26.136432Z",
+      "status": 429,
+      "latency": "0.029036225s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-45",
+      "time": "2026-09-29T15:40:26.392022Z",
+      "status": 429,
+      "latency": "0.025347125s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-46",
+      "time": "2026-09-29T15:40:26.570204Z",
+      "status": 429,
+      "latency": "0.026247825s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-47",
+      "time": "2026-09-29T15:40:28.244788Z",
+      "status": 429,
+      "latency": "0.031079589s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-48",
+      "time": "2026-09-29T15:40:28.443152Z",
+      "status": 429,
+      "latency": "0.026699009s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-49",
+      "time": "2026-09-29T15:40:28.726713Z",
+      "status": 429,
+      "latency": "0.030003458s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-50",
+      "time": "2026-09-29T15:40:28.740540Z",
+      "status": 429,
+      "latency": "0.040143388s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-51",
+      "time": "2026-09-29T15:40:28.807789Z",
+      "status": 429,
+      "latency": "0.026806909s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-52",
+      "time": "2026-09-29T15:40:29.238424Z",
+      "status": 429,
+      "latency": "0.023600389s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-53",
+      "time": "2026-09-29T15:40:29.288639Z",
+      "status": 429,
+      "latency": "0.026632619s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-54",
+      "time": "2026-09-29T15:40:30.113390Z",
+      "status": 429,
+      "latency": "0.027102718s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-55",
+      "time": "2026-09-29T15:40:30.552421Z",
+      "status": 429,
+      "latency": "0.024509159s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-56",
+      "time": "2026-09-29T15:40:31.951819Z",
+      "status": 429,
+      "latency": "0.022302159s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-57",
+      "time": "2026-09-29T15:40:32.962361Z",
+      "status": 429,
+      "latency": "0.023890517s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-58",
+      "time": "2026-09-29T15:40:33.927336Z",
+      "status": 429,
+      "latency": "0.025444398s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-59",
+      "time": "2026-09-29T15:40:35.989650Z",
+      "status": 429,
+      "latency": "0.030318587s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-60",
+      "time": "2026-09-29T15:40:36.311998Z",
+      "status": 429,
+      "latency": "0.028531077s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-61",
+      "time": "2026-09-29T15:40:37.510169Z",
+      "status": 429,
+      "latency": "0.027014047s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-62",
+      "time": "2026-09-29T15:40:37.586940Z",
+      "status": 429,
+      "latency": "0.024629588s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-63",
+      "time": "2026-09-29T15:40:37.769812Z",
+      "status": 429,
+      "latency": "0.023129287s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-64",
+      "time": "2026-09-29T15:40:37.873888Z",
+      "status": 429,
+      "latency": "0.038425906s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-65",
+      "time": "2026-09-29T15:40:38.415937Z",
+      "status": 429,
+      "latency": "0.027885117s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-66",
+      "time": "2026-09-29T15:40:38.970084Z",
+      "status": 429,
+      "latency": "0.025352247s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-67",
+      "time": "2026-09-29T15:40:39.077920Z",
+      "status": 429,
+      "latency": "0.023071938s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-68",
+      "time": "2026-09-29T15:40:39.429822Z",
+      "status": 429,
+      "latency": "0.031046144s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-69",
+      "time": "2026-09-29T15:40:40.073040Z",
+      "status": 429,
+      "latency": "0.030008975s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-70",
+      "time": "2026-09-29T15:40:40.581594Z",
+      "status": 429,
+      "latency": "0.026009677s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-71",
+      "time": "2026-09-29T15:40:41.217615Z",
+      "status": 429,
+      "latency": "0.027684245s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-72",
+      "time": "2026-09-29T15:40:41.940045Z",
+      "status": 429,
+      "latency": "0.024958634s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-73",
+      "time": "2026-09-29T15:40:41.952236Z",
+      "status": 429,
+      "latency": "0.037400260s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-74",
+      "time": "2026-09-29T15:40:42.473836Z",
+      "status": 429,
+      "latency": "0.035641270s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-75",
+      "time": "2026-09-29T15:40:42.702414Z",
+      "status": 429,
+      "latency": "0.024282583s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-76",
+      "time": "2026-09-29T15:40:43.066036Z",
+      "status": 429,
+      "latency": "0.028744332s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-77",
+      "time": "2026-09-29T15:40:43.629885Z",
+      "status": 429,
+      "latency": "0.037078760s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-78",
+      "time": "2026-09-29T15:40:43.638655Z",
+      "status": 429,
+      "latency": "0.031880500s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-79",
+      "time": "2026-09-29T15:40:44.159671Z",
+      "status": 429,
+      "latency": "0.028520940s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-80",
+      "time": "2026-09-29T15:40:44.650121Z",
+      "status": 429,
+      "latency": "0.028103070s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-81",
+      "time": "2026-09-29T15:40:44.687647Z",
+      "status": 429,
+      "latency": "0.038200321s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-82",
+      "time": "2026-09-29T15:40:45.450905Z",
+      "status": 429,
+      "latency": "0.024673421s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-83",
+      "time": "2026-09-29T15:40:45.921023Z",
+      "status": 429,
+      "latency": "0.029287351s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-84",
+      "time": "2026-09-29T15:40:47.553743Z",
+      "status": 429,
+      "latency": "0.027187250s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-85",
+      "time": "2026-09-29T15:40:47.649447Z",
+      "status": 429,
+      "latency": "0.025013520s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-86",
+      "time": "2026-09-29T15:40:47.822601Z",
+      "status": 429,
+      "latency": "0.029926351s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-87",
+      "time": "2026-09-29T15:40:47.945417Z",
+      "status": 429,
+      "latency": "0.024631530s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-88",
+      "time": "2026-09-29T15:40:48.032175Z",
+      "status": 429,
+      "latency": "0.030693300s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-89",
+      "time": "2026-09-29T15:40:48.569832Z",
+      "status": 429,
+      "latency": "0.532069721s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-90",
+      "time": "2026-09-29T15:40:49.381084Z",
+      "status": 429,
+      "latency": "0.028076800s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-91",
+      "time": "2026-09-29T15:40:50.275261Z",
+      "status": 429,
+      "latency": "0.028322483s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-92",
+      "time": "2026-09-29T15:40:50.821373Z",
+      "status": 429,
+      "latency": "0.029841003s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-93",
+      "time": "2026-09-29T15:40:51.336268Z",
+      "status": 429,
+      "latency": "0.024109843s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-94",
+      "time": "2026-09-29T15:40:55.528158Z",
+      "status": 429,
+      "latency": "0.027910450s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-95",
+      "time": "2026-09-29T15:40:58.450235Z",
+      "status": 429,
+      "latency": "0.028626869s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-96",
+      "time": "2026-09-29T15:40:58.622774Z",
+      "status": 429,
+      "latency": "0.030380450s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-97",
+      "time": "2026-09-29T15:40:58.640122Z",
+      "status": 429,
+      "latency": "0.036203849s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-98",
+      "time": "2026-09-29T15:40:59.207026Z",
+      "status": 429,
+      "latency": "0.024334190s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-99",
+      "time": "2026-09-29T15:40:59.840041Z",
+      "status": 429,
+      "latency": "0.036995229s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-100",
+      "time": "2026-09-29T15:41:00.050375Z",
+      "status": 429,
+      "latency": "0.025223040s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-101",
+      "time": "2026-09-29T15:41:00.324661Z",
+      "status": 429,
+      "latency": "0.026457040s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-102",
+      "time": "2026-09-29T15:41:01.212448Z",
+      "status": 429,
+      "latency": "0.025661720s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-103",
+      "time": "2026-09-29T15:41:01.261927Z",
+      "status": 429,
+      "latency": "0.026708899s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-104",
+      "time": "2026-09-29T15:41:53.533682Z",
+      "status": 429,
+      "latency": "0.026042536s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-105",
+      "time": "2026-09-29T15:41:54.068439Z",
+      "status": 429,
+      "latency": "0.024811466s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-106",
+      "time": "2026-09-29T15:41:54.241178Z",
+      "status": 429,
+      "latency": "0.027100835s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-107",
+      "time": "2026-09-29T15:41:56.555253Z",
+      "status": 429,
+      "latency": "0.023064099s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-108",
+      "time": "2026-09-29T15:41:57.847444Z",
+      "status": 429,
+      "latency": "0.026060375s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-109",
+      "time": "2026-09-29T15:42:01.523038Z",
+      "status": 429,
+      "latency": "0.033853382s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-110",
+      "time": "2026-09-29T15:42:02.424967Z",
+      "status": 429,
+      "latency": "0.027717262s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-111",
+      "time": "2026-09-29T15:42:02.731166Z",
+      "status": 429,
+      "latency": "0.024360361s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-112",
+      "time": "2026-09-29T15:42:03.153209Z",
+      "status": 429,
+      "latency": "0.027484741s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-113",
+      "time": "2026-09-29T15:42:03.494367Z",
+      "status": 429,
+      "latency": "0.028887781s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-114",
+      "time": "2026-09-29T15:42:08.547297Z",
+      "status": 429,
+      "latency": "0.028393470s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-115",
+      "time": "2026-09-29T15:42:10.258772Z",
+      "status": 429,
+      "latency": "0.024590968s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    },
+    {
+      "requestId": "window-429-116",
+      "time": "2026-09-29T15:42:11.010730Z",
+      "status": 429,
+      "latency": "0.031556969s",
+      "reachedVerifiedHandler": true,
+      "relatedSeverities": [
+        "DEBUG"
+      ],
+      "capacityMessageRecorded": false,
+      "infrastructureRejectionRecorded": false
+    }
+  ],
+  "caveat": "Request logs do not contain callable response bodies. Verified handler entry excludes rejection before handler, but does not prove capacity failure without body or application outcome log."
+}

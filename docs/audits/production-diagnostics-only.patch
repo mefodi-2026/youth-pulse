@@ -1,0 +1,280 @@
+From e1e92ac49293865f03a384be708e65ff54e50c7b Mon Sep 17 00:00:00 2001
+From: mefodi-2026 <mefodi-2026@users.noreply.github.com>
+Date: Mon, 5 Oct 2026 18:29:10 +0500
+Subject: [PATCH] chore: add privacy-safe start and participant diagnostics
+
+---
+ scripts/test-game-diagnostics.mjs | 23 +++++++++++++++++++++++
+ src/MobileParticipantFlow.tsx     | 20 ++++++++++++++------
+ src/lib/firebase.ts               | 23 +++++++++++++++--------
+ src/lib/gameDiagnostics.ts        | 19 +++++++++++++++++++
+ vite.config.js                    |  3 +++
+ vite.config.ts                    |  3 +++
+ 6 files changed, 77 insertions(+), 14 deletions(-)
+ create mode 100644 scripts/test-game-diagnostics.mjs
+ create mode 100644 src/lib/gameDiagnostics.ts
+
+diff --git a/scripts/test-game-diagnostics.mjs b/scripts/test-game-diagnostics.mjs
+new file mode 100644
+index 0000000..fbe16e8
+--- /dev/null
++++ b/scripts/test-game-diagnostics.mjs
+@@ -0,0 +1,23 @@
++import assert from 'node:assert/strict'
++import {readFileSync} from 'node:fs'
++import ts from 'typescript'
++const source=readFileSync('src/lib/gameDiagnostics.ts','utf8').replace("import.meta.env.VITE_BUILD_REVISION", "'test-build'")
++const js=ts.transpile(source,{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022})
++const {traceGameOperation,safeGameErrorCode}=await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`)
++const records=[],original=console.info
++console.info=(...args)=>records.push(args)
++try{
++  const value={confirmed:true};assert.equal(await traceGameOperation('start',async()=>value),value)
++  const error=Object.assign(Error('secret-token private-answer nickname'),{code:'functions/resource-exhausted',token:'secret-token'})
++  await assert.rejects(traceGameOperation('guest-callable',async()=>{throw error}),e=>e===error)
++  assert.equal(safeGameErrorCode({code:'PII-in-code'}),'unknown')
++  const parsed=records.map(r=>JSON.parse(r[1]))
++  assert.equal(parsed[0].requestId,parsed[1].requestId)
++  assert.equal(parsed[2].requestId,parsed[3].requestId)
++  assert.equal(parsed[3].code,'resource-exhausted')
++  for(const record of parsed)assert.deepEqual(Object.keys(record).sort(),['build','code','outcome','requestId','stage','time'])
++  assert.equal(JSON.stringify(records).includes('secret-token'),false)
++  console.info=()=>{throw Error('console unavailable')}
++  assert.equal(await traceGameOperation('start',async()=>value),value)
++}finally{console.info=original}
++console.log('Game diagnostics: preserves return/error; stable operation ID; allowlisted codes; no payload/PII; console failure is non-blocking.')
+diff --git a/src/MobileParticipantFlow.tsx b/src/MobileParticipantFlow.tsx
+index c0f783b..a359dc4 100644
+--- a/src/MobileParticipantFlow.tsx
++++ b/src/MobileParticipantFlow.tsx
+@@ -6,6 +6,7 @@ import { resolveLegacyParticipantRoomMode, resolveParticipantRoomMode } from './
+ import { downloadWishPng, printWish } from './lib/export'
+ import { type Answer, type Participant, type ParticipantQuestionSet, type ParticipantQuizResult, type PublicRoom, type Question, type ResponseValue, type RoomLobby, type RoomMode, type Scores, type Session } from './types'
+ import { isSessionExpired } from './core/sessionLifecycle'
++import { gameDiagnostic, traceGameOperation } from './lib/gameDiagnostics'
+ 
+ const demoKey = (room: string) => `atmosphere-demo-${room}`
+ const getDemo = (room: string) => JSON.parse(localStorage.getItem(demoKey(room)) || 'null') as Session | null
+@@ -62,7 +63,7 @@ function useParticipantSession(room: string, participantId: string | undefined,
+           }
+           setLobby(legacy); setRoomError('')
+         }, () => { if (active) { setLobby(null); setRoomError('Не удалось загрузить данные комнаты.') } })
+-      }, () => { if (active) { setPublicRoom(null); setRoomError('Не удалось загрузить данные комнаты.') } })
++      }, error => { gameDiagnostic('subscription', 'error', error); if (active) { setPublicRoom(null); setRoomError('Не удалось загрузить данные комнаты.') } })
+       stopQuestions = subscribeParticipantQuestionSet(room, value => {
+         if (!active) return
+         const resolution = value ? resolveParticipantRoomMode(value) : null
+@@ -72,13 +73,13 @@ function useParticipantSession(room: string, participantId: string | undefined,
+           return
+         }
+         setQuestionSet(value); setSyncError('')
+-      }, () => { if (active) { setQuestionSet(null); setSyncError('Не удалось загрузить материалы комнаты. Подключение будет восстановлено автоматически.') } })
++      }, error => { gameDiagnostic('subscription', 'error', error); if (active) { setQuestionSet(null); setSyncError('Не удалось загрузить материалы комнаты. Подключение будет восстановлено автоматически.') } })
+       if (participantId) {
+         stopParticipant = subscribeParticipantRecord(room, participantId, value => {
+           if (!active) return
+           setParticipantRecord(value)
+           if (value) setSyncError('')
+-        }, () => { if (active) setSyncError('Не удалось синхронизировать данные участника. Подключение будет восстановлено автоматически.') })
++        }, error => { gameDiagnostic('subscription', 'error', error); if (active) setSyncError('Не удалось синхронизировать данные участника. Подключение будет восстановлено автоматически.') })
+         stopQuizResult = subscribeParticipantQuizResult(room, participantId, value => { if (active) setQuizResult(value) }, () => { if (active) setQuizResult(null) })
+       }
+     }).catch(() => { if (active) setRoomError('Не удалось подтвердить подключение к комнате.') })
+@@ -230,5 +231,13 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
+   const isQuiz = mode === 'quiz'
+   const introQuestionCount = isQuiz ? (session ? activeQuestions.length : 15) : activeQuestions.length
++  const currentQuestionId = participant ? activeQuestions[participant.currentQuestionIndex]?.id || '' : ''
++  const firstQuestionTraceRef = useRef('')
++  useEffect(() => {
++    if (session?.phase === 'live' && participant?.currentQuestionIndex === 0 && currentQuestionId && firstQuestionTraceRef.current !== room) {
++      firstQuestionTraceRef.current = room
++      gameDiagnostic('first-question', 'confirmed')
++    }
++  }, [room, session?.phase, participant?.currentQuestionIndex, currentQuestionId])
+ 
+   useEffect(() => {
+     let active = true
+@@ -241,7 +249,7 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
+       setAuthUid(user?.uid || '')
+       setAuthReady(true)
+     }).catch(error => {
+-      console.error('participant auth persistence failed', { room, error })
++      gameDiagnostic('guest-auth', 'error', error)
+       if (active) { setNotice('Не удалось восстановить подключение. Обновите страницу.'); setAuthReady(true) }
+     })
+     return () => { active = false }
+@@ -279,7 +287,7 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
+       const user = firebaseReady ? await ensureAuth() : null
+       const next: Participant = { id: user?.uid || crypto.randomUUID(), nickname: name.trim().slice(0, 20), joinedAt: Date.now(), status: 'waiting', currentQuestionIndex: 0, answers: {} }
+       const restored = firebaseReady
+-        ? await joinSession(room, next)
++        ? await traceGameOperation('guest-join', () => joinSession(room, next))
+         : (() => { const demo = getDemo(room); if (!demo) throw new Error('Комната не найдена'); setDemo({ ...demo, participants: { ...demo.participants, [next.id]: next } }); return next })()
+       localStorage.setItem(`atmosphere-participant-${room}`, JSON.stringify(restored)); setParticipant(restored)
+     } catch (error) { setNotice(error instanceof Error ? error.message : 'Не удалось подключиться') }
+@@ -308,7 +316,7 @@ function QuestionParticipantFlow({ room, mode, modeManifest }: { room: string; m
+       localStorage.setItem(`atmosphere-participant-${room}`, JSON.stringify(next))
+       setParticipant(next)
+     } catch (error) {
+-      console.error('participant answer rejected', { room, participantId: participant.id, questionId: question.id, error })
++      gameDiagnostic('answer-write', 'error', error)
+       setRetryAnswer(error instanceof ParticipantAnswerError && !error.retryable ? null : value)
+       setNotice(error instanceof Error ? error.message : 'Не удалось отправить ответ. Проверьте соединение и повторите попытку.')
+     } finally { answerRequestRef.current = false; setSaving(false) }
+diff --git a/src/lib/firebase.ts b/src/lib/firebase.ts
+index 4f1506e..50ce17d 100644
+--- a/src/lib/firebase.ts
++++ b/src/lib/firebase.ts
+@@ -1,6 +1,7 @@
+ import { createUserWithEmailAndPassword, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
+ import { equalTo, get, onValue, orderByChild, push, query, ref, set, update } from 'firebase/database'
+ import { httpsCallable } from 'firebase/functions'
++import { gameDiagnostic, traceGameOperation } from './gameDiagnostics'
+ import { questions as builtInQuestions } from '../data/questions'
+ import { canUseFeature } from './access'
+ import { bibleQuizGameModule, diagnosticGameModule, getGameModule } from './gameRegistry'
+@@ -1256,7 +1257,8 @@ export const joinSession = async (roomId: string, participant: Participant): Pro
+     // The participant root is deliberately not writable by a browser. The
+     // callable verifies the anonymous identity and atomically creates (or
+     // restores) this exact record before returning its server-confirmed data.
+-    const result = await httpsCallable(functions, 'joinRoomAsGuest')({ roomId, nickname: participant.nickname })
++    const register = httpsCallable(functions, 'joinRoomAsGuest')
++    const result = await traceGameOperation('guest-callable', () => register({ roomId, nickname: participant.nickname }))
+     const registered = (result.data as { participant?: Participant }).participant
+     if (!registered || registered.id !== participant.id) throw new ParticipantJoinError('Сервер не подтвердил регистрацию участника.')
+     return registered
+@@ -1268,7 +1270,7 @@ export const joinSession = async (roomId: string, participant: Participant): Pro
+     if (reconciled?.exists()) return reconciled.val() as Participant
+     if (reason instanceof ParticipantJoinError) throw reason
+     const code = typeof reason === 'object' && reason && 'code' in reason ? String(reason.code) : ''
+-    console.error('participant join rejected', { roomId, participantId: participant.id, code, reason })
++    gameDiagnostic('guest-join', 'error', {code})
+     throw participantJoinFailure(reason)
+   }
+ }
+@@ -1285,7 +1287,7 @@ const assertCurrentUserIsRoomHost = async (roomId: string, expectedHostUid?: str
+   return { db: services.db, session }
+ }
+ 
+-export const updatePhase = async (roomId: string, phase: SessionPhase, expectedHostUid?: string) => {
++const updatePhaseConfirmed = async (roomId: string, phase: SessionPhase, expectedHostUid?: string) => {
+   const services = await assertCurrentUserIsRoomHost(roomId, expectedHostUid)
+   if (services.session.phase === 'closed') {
+     if (phase === 'closed') return
+@@ -1308,6 +1310,10 @@ export const updatePhase = async (roomId: string, phase: SessionPhase, expectedH
+   await update(ref(services.db), patch)
+ }
+ 
++export const updatePhase = (roomId: string, phase: SessionPhase, expectedHostUid?: string) => phase === 'live'
++  ? traceGameOperation('start', () => updatePhaseConfirmed(roomId, phase, expectedHostUid))
++  : updatePhaseConfirmed(roomId, phase, expectedHostUid)
++
+ /** A deliberate host operation extends a room. Passive page views never call this. */
+ export const touchSessionActivity = async (roomId: string, expectedHostUid?: string) => {
+   const services = await assertCurrentUserIsRoomHost(roomId, expectedHostUid)
+@@ -1421,7 +1427,8 @@ const saveQuizAnswer = async (roomId: string, participant: Participant, question
+     // A callable result is sent only after its multi-location write commits.
+     // Do not follow it with another client-side get(): that extra read can be
+     // stale or fail after a successful write and used to create a false error.
+-    const result = await httpsCallable(functions, 'submitQuizAnswer')({ roomId, questionId, answer })
++    const submit = httpsCallable(functions, 'submitQuizAnswer')
++    const result = await traceGameOperation('answer-callable', () => submit({ roomId, questionId, answer }))
+     const data = result.data as { questionId?: string; answer?: Exclude<ResponseValue, 'SKIP'>; nextIndex?: number; status?: Participant['status'] }
+     const resolvedNextIndex = Number(data.nextIndex)
+     const resolvedStatus = data.status === 'finished' ? 'finished' : data.status === 'answering' ? 'answering' : null
+@@ -1435,7 +1442,7 @@ const saveQuizAnswer = async (roomId: string, participant: Participant, question
+     // retry. This is also what makes a repeated tap idempotent.
+     const persisted = await readSavedAnswer(roomId, participant.id, questionId, answer)
+     if (persisted) return persisted
+-    console.error('quiz answer was not confirmed', { roomId, participantId: participant.id, questionId, reason })
++    gameDiagnostic('answer-callable', 'error', reason)
+     throw reason instanceof ParticipantAnswerError ? reason : answerFailure(reason)
+   }
+ }
+@@ -1447,17 +1454,17 @@ const saveDiagnosticAnswer = async (roomId: string, participant: Participant, qu
+   try {
+     // The Rules acknowledge this atomic write. Reading the room first added
+     // two round trips to every answer without strengthening server authority.
+-    await update(ref(services.db), {
++    await traceGameOperation('answer-write', () => update(ref(services.db), {
+       [`sessions/${roomId}/participants/${participant.id}/answers/${questionId}`]: answer,
+       [`sessions/${roomId}/participants/${participant.id}/currentQuestionIndex`]: next.currentQuestionIndex,
+       [`sessions/${roomId}/participants/${participant.id}/status`]: next.status,
+       ...(next.completedAt ? { [`sessions/${roomId}/participants/${participant.id}/completedAt`]: next.completedAt } : {}),
+       [`sessions/${roomId}/lastActivityAt`]: Date.now(),
+-    })
++    }))
+   } catch (reason) {
+     const persisted = await readSavedAnswer(roomId, participant.id, questionId, answer)
+     if (persisted) return persisted
+-    console.error('diagnostic answer was not confirmed', { roomId, participantId: participant.id, questionId, reason })
++    gameDiagnostic('answer-write', 'error', reason)
+     throw answerFailure(reason)
+   }
+   // Analytics is deliberately non-blocking: it must never delay the last
+diff --git a/src/lib/gameDiagnostics.ts b/src/lib/gameDiagnostics.ts
+new file mode 100644
+index 0000000..57e725e
+--- /dev/null
++++ b/src/lib/gameDiagnostics.ts
+@@ -0,0 +1,19 @@
++// A local console trace only: no payloads, identity, room codes or network sink.
++export type GameStage = 'guest-auth' | 'guest-join' | 'guest-callable' | 'answer-callable' | 'answer-write' | 'start' | 'subscription' | 'first-question'
++const codes = new Set(['aborted', 'already-exists', 'cancelled', 'data-loss', 'deadline-exceeded', 'failed-precondition', 'internal', 'invalid-argument', 'not-found', 'out-of-range', 'permission-denied', 'resource-exhausted', 'unauthenticated', 'unavailable', 'unimplemented', 'network-request-failed', 'timeout', 'permission_denied'])
++export function safeGameErrorCode(error: unknown): string {
++  const raw = typeof error === 'object' && error && 'code' in error ? String(error.code).toLowerCase().split('/').pop() || '' : ''
++  return codes.has(raw) ? raw : 'unknown'
++}
++export function gameDiagnostic(stage: GameStage, outcome: 'begin' | 'confirmed' | 'error', error?: unknown, requestId?: string) {
++  requestId ||= typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `local-${Date.now()}-${Math.random().toString(36).slice(2,10)}`
++  const record = {build:import.meta.env.VITE_BUILD_REVISION || 'local-unversioned', stage, outcome, code:outcome === 'error' ? safeGameErrorCode(error) : 'ok', time:new Date().toISOString(), requestId}
++  // Never pass error objects/messages: SDK errors can contain request payloads.
++  try { console.info('[game-diagnostic]', JSON.stringify(record)) } catch { /* telemetry cannot interrupt gameplay */ }
++  return requestId
++}
++export async function traceGameOperation<T>(stage: GameStage, action: () => Promise<T>): Promise<T> {
++  const requestId = gameDiagnostic(stage, 'begin')
++  try { const value = await action(); gameDiagnostic(stage, 'confirmed', undefined, requestId); return value }
++  catch(error) { gameDiagnostic(stage, 'error', error, requestId); throw error }
++}
+diff --git a/vite.config.js b/vite.config.js
+index 473657d..7763ba0 100644
+--- a/vite.config.js
++++ b/vite.config.js
+@@ -1,11 +1,14 @@
+ import { defineConfig, loadEnv } from 'vite';
+ import react from '@vitejs/plugin-react';
++import { execFileSync } from 'node:child_process';
+ export default defineConfig(function (_a) {
+     var mode = _a.mode;
+     var env = loadEnv(mode, process.cwd(), '');
+     var base = env.VITE_BASE_PATH || '/';
++    var buildRevision = env.VERCEL_GIT_COMMIT_SHA || env.GITHUB_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+     return {
+         plugins: [react()],
++        define: { 'import.meta.env.VITE_BUILD_REVISION': JSON.stringify(buildRevision) },
+         base: base.endsWith('/') ? base : "".concat(base, "/"),
+     };
+ });
+diff --git a/vite.config.ts b/vite.config.ts
+index 56a3bb1..373f7a2 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -1,12 +1,15 @@
+ import { defineConfig, loadEnv } from 'vite'
+ import react from '@vitejs/plugin-react'
++import { execFileSync } from 'node:child_process'
+ 
+ export default defineConfig(({ mode }) => {
+   const env = loadEnv(mode, process.cwd(), '')
+   const base = env.VITE_BASE_PATH || '/'
++  const buildRevision = env.VERCEL_GIT_COMMIT_SHA || env.GITHUB_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding:'utf8' }).trim()
+ 
+   return {
+     plugins: [react()],
++    define: { 'import.meta.env.VITE_BUILD_REVISION': JSON.stringify(buildRevision) },
+     base: base.endsWith('/') ? base : `${base}/`,
+   }
+ })
+-- 
+2.55.0.windows.3

@@ -1,0 +1,347 @@
+{
+  "environment": "published Pages host c56b6d2; two develop a3ff1ed browser guests; production smoke only",
+  "quiz": [
+    {
+      "question": 1,
+      "submittedAt": "2026-10-05T13:23:26.963Z"
+    },
+    {
+      "question": 2,
+      "submittedAt": "2026-10-05T13:24:11.473Z"
+    },
+    {
+      "question": 3,
+      "submittedAt": "2026-10-05T13:24:12.165Z"
+    },
+    {
+      "question": 4,
+      "submittedAt": "2026-10-05T13:24:12.626Z"
+    },
+    {
+      "question": 5,
+      "submittedAt": "2026-10-05T13:24:13.117Z"
+    },
+    {
+      "question": 6,
+      "submittedAt": "2026-10-05T13:24:13.653Z"
+    },
+    {
+      "question": 7,
+      "submittedAt": "2026-10-05T13:24:14.201Z"
+    },
+    {
+      "question": 8,
+      "submittedAt": "2026-10-05T13:24:14.692Z"
+    },
+    {
+      "question": 9,
+      "submittedAt": "2026-10-05T13:24:36.233Z"
+    },
+    {
+      "question": 10,
+      "submittedAt": "2026-10-05T13:24:37.004Z"
+    },
+    {
+      "question": 11,
+      "submittedAt": "2026-10-05T13:24:37.492Z"
+    },
+    {
+      "question": 12,
+      "submittedAt": "2026-10-05T13:24:37.935Z"
+    },
+    {
+      "question": 13,
+      "submittedAt": "2026-10-05T13:24:38.389Z"
+    },
+    {
+      "question": 14,
+      "submittedAt": "2026-10-05T13:24:38.890Z"
+    },
+    {
+      "question": 15,
+      "submittedAt": "2026-10-05T13:24:39.359Z"
+    }
+  ],
+  "diagnostic": [
+    {
+      "question": 1,
+      "submittedAt": "2026-10-05T13:32:26.517Z"
+    },
+    {
+      "question": 2,
+      "submittedAt": "2026-10-05T13:32:29.414Z"
+    },
+    {
+      "question": 3,
+      "submittedAt": "2026-10-05T13:32:29.842Z"
+    },
+    {
+      "question": 4,
+      "submittedAt": "2026-10-05T13:32:30.262Z"
+    },
+    {
+      "question": 5,
+      "submittedAt": "2026-10-05T13:32:30.704Z"
+    },
+    {
+      "question": 6,
+      "submittedAt": "2026-10-05T13:32:31.145Z"
+    },
+    {
+      "question": 7,
+      "submittedAt": "2026-10-05T13:32:31.619Z"
+    },
+    {
+      "question": 8,
+      "submittedAt": "2026-10-05T13:32:32.106Z"
+    },
+    {
+      "question": 9,
+      "submittedAt": "2026-10-05T13:32:32.592Z"
+    },
+    {
+      "question": 10,
+      "submittedAt": "2026-10-05T13:32:33.049Z"
+    },
+    {
+      "question": 11,
+      "submittedAt": "2026-10-05T13:32:33.551Z"
+    },
+    {
+      "question": 12,
+      "submittedAt": "2026-10-05T13:32:34.005Z"
+    },
+    {
+      "question": 13,
+      "submittedAt": "2026-10-05T13:32:34.449Z"
+    },
+    {
+      "question": 14,
+      "submittedAt": "2026-10-05T13:32:34.916Z"
+    },
+    {
+      "question": 15,
+      "submittedAt": "2026-10-05T13:32:35.374Z"
+    },
+    {
+      "question": 16,
+      "submittedAt": "2026-10-05T13:32:35.828Z"
+    },
+    {
+      "question": 17,
+      "submittedAt": "2026-10-05T13:32:36.268Z"
+    },
+    {
+      "question": 18,
+      "submittedAt": "2026-10-05T13:32:36.697Z"
+    },
+    {
+      "question": 19,
+      "submittedAt": "2026-10-05T13:32:37.160Z"
+    },
+    {
+      "question": 20,
+      "submittedAt": "2026-10-05T13:32:37.613Z"
+    },
+    {
+      "question": 21,
+      "submittedAt": "2026-10-05T13:33:01.520Z"
+    },
+    {
+      "question": 22,
+      "submittedAt": "2026-10-05T13:33:01.944Z"
+    },
+    {
+      "question": 23,
+      "submittedAt": "2026-10-05T13:33:02.433Z"
+    },
+    {
+      "question": 24,
+      "submittedAt": "2026-10-05T13:33:02.921Z"
+    },
+    {
+      "question": 25,
+      "submittedAt": "2026-10-05T13:33:03.377Z"
+    },
+    {
+      "question": 26,
+      "submittedAt": "2026-10-05T13:33:03.848Z"
+    },
+    {
+      "question": 27,
+      "submittedAt": "2026-10-05T13:33:04.349Z"
+    },
+    {
+      "question": 28,
+      "submittedAt": "2026-10-05T13:33:04.883Z"
+    },
+    {
+      "question": 29,
+      "submittedAt": "2026-10-05T13:33:05.319Z"
+    },
+    {
+      "question": 30,
+      "submittedAt": "2026-10-05T13:33:05.860Z"
+    },
+    {
+      "question": 31,
+      "submittedAt": "2026-10-05T13:33:06.289Z"
+    },
+    {
+      "question": 32,
+      "submittedAt": "2026-10-05T13:33:06.716Z"
+    },
+    {
+      "question": 33,
+      "submittedAt": "2026-10-05T13:33:07.172Z"
+    },
+    {
+      "question": 34,
+      "submittedAt": "2026-10-05T13:33:07.597Z"
+    },
+    {
+      "question": 35,
+      "submittedAt": "2026-10-05T13:33:08.083Z"
+    },
+    {
+      "question": 36,
+      "submittedAt": "2026-10-05T13:33:08.538Z"
+    },
+    {
+      "question": 37,
+      "submittedAt": "2026-10-05T13:33:08.947Z"
+    },
+    {
+      "question": 38,
+      "submittedAt": "2026-10-05T13:33:09.401Z"
+    },
+    {
+      "question": 39,
+      "submittedAt": "2026-10-05T13:33:09.871Z"
+    },
+    {
+      "question": 40,
+      "submittedAt": "2026-10-05T13:33:10.426Z"
+    },
+    {
+      "question": 41,
+      "submittedAt": "2026-10-05T13:33:27.429Z"
+    },
+    {
+      "question": 42,
+      "submittedAt": "2026-10-05T13:33:27.859Z"
+    },
+    {
+      "question": 43,
+      "submittedAt": "2026-10-05T13:33:28.426Z"
+    },
+    {
+      "question": 44,
+      "submittedAt": "2026-10-05T13:33:28.912Z"
+    },
+    {
+      "question": 45,
+      "submittedAt": "2026-10-05T13:33:29.347Z"
+    },
+    {
+      "question": 46,
+      "submittedAt": "2026-10-05T13:33:29.819Z"
+    },
+    {
+      "question": 47,
+      "submittedAt": "2026-10-05T13:33:30.395Z"
+    },
+    {
+      "question": 48,
+      "submittedAt": "2026-10-05T13:33:31.220Z"
+    },
+    {
+      "question": 49,
+      "submittedAt": "2026-10-05T13:33:31.660Z"
+    },
+    {
+      "question": 50,
+      "submittedAt": "2026-10-05T13:33:32.108Z"
+    },
+    {
+      "question": 51,
+      "submittedAt": "2026-10-05T13:33:32.578Z"
+    },
+    {
+      "question": 52,
+      "submittedAt": "2026-10-05T13:33:33.036Z"
+    },
+    {
+      "question": 53,
+      "submittedAt": "2026-10-05T13:33:33.460Z"
+    },
+    {
+      "question": 54,
+      "submittedAt": "2026-10-05T13:33:33.921Z"
+    },
+    {
+      "question": 55,
+      "submittedAt": "2026-10-05T13:33:34.341Z"
+    },
+    {
+      "question": 56,
+      "submittedAt": "2026-10-05T13:33:34.795Z"
+    },
+    {
+      "question": 57,
+      "submittedAt": "2026-10-05T13:33:35.229Z"
+    },
+    {
+      "question": 58,
+      "submittedAt": "2026-10-05T13:33:35.695Z"
+    },
+    {
+      "question": 59,
+      "submittedAt": "2026-10-05T13:33:36.150Z"
+    },
+    {
+      "question": 60,
+      "submittedAt": "2026-10-05T13:33:36.607Z"
+    },
+    {
+      "question": 61,
+      "submittedAt": "2026-10-05T13:34:11.958Z"
+    },
+    {
+      "question": 62,
+      "submittedAt": "2026-10-05T13:34:12.459Z"
+    },
+    {
+      "question": 63,
+      "submittedAt": "2026-10-05T13:34:12.915Z"
+    },
+    {
+      "question": 64,
+      "submittedAt": "2026-10-05T13:34:13.340Z"
+    },
+    {
+      "question": 65,
+      "submittedAt": "2026-10-05T13:34:13.797Z"
+    },
+    {
+      "question": 66,
+      "submittedAt": "2026-10-05T13:34:14.240Z"
+    },
+    {
+      "question": 67,
+      "submittedAt": "2026-10-05T13:34:14.788Z"
+    },
+    {
+      "question": 68,
+      "submittedAt": "2026-10-05T13:34:15.246Z"
+    },
+    {
+      "question": 69,
+      "submittedAt": "2026-10-05T13:34:15.860Z"
+    },
+    {
+      "question": 70,
+      "submittedAt": "2026-10-05T13:34:16.947Z"
+    }
+  ]
+}

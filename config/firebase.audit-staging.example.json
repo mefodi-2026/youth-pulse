@@ -1,0 +1,10 @@
+{
+  "database": {
+    "rules": "../firebase-rules.json"
+  },
+  "functions": [{
+    "source": "../functions-audit-staging-NOT-YET-PREPARED",
+    "codebase": "audit-old-modes-only",
+    "runtime": "nodejs20"
+  }]
+}
