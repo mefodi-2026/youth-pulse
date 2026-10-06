@@ -33,3 +33,4 @@ audit-results/browser-fixtures.json
 functions-audit-staging/
 .audit-main-source/
 audit-results/closure-command-*.json
+audit-results/approved-cloud-command-*.json

@@ -1,0 +1,61 @@
+{
+  "clients": [
+    {
+      "publication": "pages",
+      "checkedAt": "2026-10-06T02:52:53.210Z",
+      "base": "https://mefodi-2026.github.io/youth-pulse/",
+      "htmlStatus": 200,
+      "bundleUrl": "https://mefodi-2026.github.io/youth-pulse/assets/index-8g2PQk96.js",
+      "bundleStatus": 200,
+      "bundleSha256": "400b498b3977cd2eda4116b531e975a5545c400fb555046ed56b54c8da1ac674",
+      "bytes": 941651,
+      "firebaseProject": "molodeh-c523e",
+      "firebaseDatabase": "https://molodeh-c523e-default-rtdb.europe-west1.firebasedatabase.app",
+      "activityWriteSnippets": [
+        "ols/tasks/${o.uid}`]:_}),await Is(ue(s,`sessions/${t}/lastActivityAt`),h),g}async function dh(t){var o;const{db:e,auth:s}=_a();await gt;const r=await ",
+        "e}=await tj(t),s=ms();await Zs(ue(e),{[`sessions/${t}/lastActivityAt`]:s,[`publicRooms/${t}/lastActivityAt`]:s})}async function HM(t,e,s){var g,v;cons",
+        "ive\",[`sessions/${t}/startedAt`]:ms(),[`sessions/${t}/lastActivityAt`]:ms(),[`publicRooms/${t}/phase`]:\"live\",[`publicRooms/${t}/lastActivityAt`]:ms()",
+        "ms/${t}/wheel`,()=>ej(t,h)),await cp(e,`sessions/${t}/lastActivityAt`,()=>hh(t)),h}async function n0(t){const e=L1(ue(_a().db,`sessions/${t}/wheel/rou",
+        "}:null;await fh(t,r.session);const g={[`sessions/${t}/lastActivityAt`]:o,[`${yn(t)}/lastActivityAt`]:o},v=e===\"resultsIntro\"?{...g,[`sessions/${t}/pha",
+        "oomTitle`]:o,[`${yn(t)}/roomTitle`]:o,[`sessions/${t}/lastActivityAt`]:c,[`${yn(t)}/lastActivityAt`]:c})},y3=async t=>{const e=await Tc(t.roomId,t.hos",
+        "e.id}/completedAt`]:p.completedAt}:{},[`sessions/${t}/lastActivityAt`]:A2()})}catch(g){const v=await gj(t,e.id,s,r);if(v)return v;throw console.error("
+      ]
+    },
+    {
+      "publication": "develop",
+      "checkedAt": "2026-10-06T02:52:54.520Z",
+      "base": "https://youth-pulse-dev-git-develop-comanda1.vercel.app/",
+      "htmlStatus": 200,
+      "bundleUrl": "https://youth-pulse-dev-git-develop-comanda1.vercel.app/assets/index-yqKBjAKM.js",
+      "bundleStatus": 200,
+      "bundleSha256": "3a38a0f678ab2b87c2ba5fe2863b21533ea56503b1f81afdcce79913417f0121",
+      "bytes": 988673,
+      "firebaseProject": "molodeh-c523e",
+      "firebaseDatabase": "https://molodeh-c523e-default-rtdb.europe-west1.firebasedatabase.app",
+      "activityWriteSnippets": [
+        "ols/tasks/${o.uid}`]:_}),await qs(de(s,`sessions/${t}/lastActivityAt`),h),g}async function Eh(t){var o;const{db:e,auth:s}=Ra();await gt;const r=await ",
+        "e}=await _1(t),s=xs();await ai(de(e),{[`sessions/${t}/lastActivityAt`]:s,[`publicRooms/${t}/lastActivityAt`]:s})}async function lD(t,e,s){var g,y;cons",
+        "ive\",[`sessions/${t}/startedAt`]:xs(),[`sessions/${t}/lastActivityAt`]:xs(),[`publicRooms/${t}/phase`]:\"live\",[`publicRooms/${t}/lastActivityAt`]:xs()",
+        "ms/${t}/wheel`,()=>y1(t,h)),await bp(e,`sessions/${t}/lastActivityAt`,()=>Nh(t)),h}async function _0(t){const e=e1(de(Ra().db,`sessions/${t}/wheel/rou",
+        "}:null;await Ch(t,r.session);const g={[`sessions/${t}/lastActivityAt`]:o,[`${bn(t)}/lastActivityAt`]:o},y=e===\"resultsIntro\"?{...g,[`sessions/${t}/pha",
+        "oomTitle`]:o,[`${bn(t)}/roomTitle`]:o,[`sessions/${t}/lastActivityAt`]:c,[`${bn(t)}/lastActivityAt`]:c})},S4=async t=>{const e=await Lc(t.roomId,t.hos",
+        "e.id}/completedAt`]:p.completedAt}:{},[`sessions/${t}/lastActivityAt`]:YM()})}catch(g){const y=await B1(t,e.id,s,r);if(y)return y;throw console.error("
+      ]
+    }
+  ],
+  "pagesWorkflow": {
+    "httpStatus": 200,
+    "runs": [
+      {
+        "id": 37405140861,
+        "name": "Publish website",
+        "headSha": "be630ad93466bf3b94d5ecb6a6a63f7fe7d62839",
+        "status": "completed",
+        "conclusion": "success",
+        "createdAt": "2026-10-06T02:38:51Z",
+        "updatedAt": "2026-10-06T02:39:44Z",
+        "url": "https://github.com/mefodi-2026/youth-pulse/actions/runs/37405140861"
+      }
+    ]
+  }
+}

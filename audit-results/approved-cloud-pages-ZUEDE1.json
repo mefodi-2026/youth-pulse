@@ -1,0 +1,59 @@
+{
+  "environment": "Authorized production TEST room; 30 independent SDK anonymous sessions",
+  "publication": "pages",
+  "bundleUrl": "https://mefodi-2026.github.io/youth-pulse/assets/index-8g2PQk96.js",
+  "room": "ZUEDE1",
+  "strategy": "simultaneous",
+  "guestClockSkewMs": 0,
+  "serverActivity": true,
+  "registered": 30,
+  "firstQuestion": 30,
+  "firstAnswerConfirmed": 30,
+  "secondQuestion": 30,
+  "finished": 30,
+  "errors": [],
+  "checkpoints": [
+    {
+      "participant": 11,
+      "auth": "anonymous-confirmed",
+      "authMs": 2879,
+      "phaseBefore": "lobby",
+      "phaseAfter": "lobby",
+      "joinCode": "OK",
+      "joinAndConfirmMs": 1122,
+      "confirmedRegistrations": 11
+    },
+    {
+      "participant": 13,
+      "auth": "anonymous-confirmed",
+      "authMs": 2931,
+      "phaseBefore": "lobby",
+      "phaseAfter": "lobby",
+      "joinCode": "OK",
+      "joinAndConfirmMs": 1146,
+      "confirmedRegistrations": 11
+    },
+    {
+      "participant": 12,
+      "auth": "anonymous-confirmed",
+      "authMs": 3422,
+      "phaseBefore": "lobby",
+      "phaseAfter": "lobby",
+      "joinCode": "OK",
+      "joinAndConfirmMs": 1618,
+      "confirmedRegistrations": 30
+    }
+  ],
+  "phases": [
+    {
+      "at": "2026-10-06T02:44:40.388Z",
+      "phase": "lobby"
+    },
+    {
+      "at": "2026-10-06T02:44:51.539Z",
+      "phase": "live"
+    }
+  ],
+  "startedAt": "2026-10-06T02:44:37.236Z",
+  "endedAt": "2026-10-06T02:45:15.725Z"
+}

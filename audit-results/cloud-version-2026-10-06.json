@@ -1,0 +1,35 @@
+{
+  "capturedAt": "2026-10-06T02:43:45.025Z",
+  "functions": [
+    {
+      "name": "joinRoomAsGuest",
+      "state": "ACTIVE",
+      "updateTime": "2026-09-09T09:00:33.689106976Z",
+      "revision": "joinroomasguest-00010-kad",
+      "database": "https://molodeh-c523e-default-rtdb.europe-west1.firebasedatabase.app"
+    },
+    {
+      "name": "submitQuizAnswer",
+      "state": "ACTIVE",
+      "updateTime": "2026-09-09T09:00:33.969736552Z",
+      "revision": "submitquizanswer-00006-sav",
+      "database": "https://molodeh-c523e-default-rtdb.europe-west1.firebasedatabase.app"
+    },
+    {
+      "name": "createQuizRoom",
+      "state": "ACTIVE",
+      "updateTime": "2026-09-09T09:00:33.727980746Z",
+      "revision": "createquizroom-00004-qoy",
+      "database": "https://molodeh-c523e-default-rtdb.europe-west1.firebasedatabase.app"
+    }
+  ],
+  "window": "2026-10-06 02:32..02:35 UTC; project-wide service logs, not proof of per-room correlation",
+  "count": 64,
+  "hasMore": false,
+  "histogram": {
+    "joinroomasguest:DEBUG": 30,
+    "joinroomasguest:200": 30,
+    "joinroomasguest:INFO": 4
+  },
+  "failures": []
+}

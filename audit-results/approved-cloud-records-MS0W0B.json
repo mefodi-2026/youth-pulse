@@ -1,0 +1,315 @@
+{
+  "capturedAt": "2026-10-06T02:56:15.196Z",
+  "room": "MS0W0B",
+  "title": "AUDIT 2026-10-06 Pages diagnostic mixed-clock-30",
+  "mode": "diagnostic",
+  "phase": "closed",
+  "createdAt": 1791255025082,
+  "startedAt": 1791255073717,
+  "closedAt": 1791255333001,
+  "lastActivityAt": 1791255333001,
+  "uniqueRegistered": 30,
+  "finished": 30,
+  "rows": [
+    {
+      "ordinal": 1,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 70,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 2,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 140,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 3,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 210,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 4,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 0,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 5,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 140,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 6,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 210,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 7,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 70,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 8,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 210,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 9,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 0,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 10,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 0,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 11,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 70,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 12,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 140,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 13,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 140,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 14,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 70,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 15,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 0,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 16,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 210,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 17,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 0,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 18,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 0,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 19,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 210,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 20,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 0,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 21,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 140,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 22,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 210,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 23,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 70,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 24,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 210,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 25,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 140,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 26,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 140,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 27,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 210,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 28,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 70,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 29,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 70,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    },
+    {
+      "ordinal": 30,
+      "identityMatchesKey": true,
+      "status": "finished",
+      "index": 70,
+      "answers": 70,
+      "diagnosticPoints": 140,
+      "quizComputedCorrect": null,
+      "quizSavedCorrect": null
+    }
+  ]
+}

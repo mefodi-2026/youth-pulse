@@ -1,0 +1,57 @@
+{
+  "environment": "Authorized production TEST room; 30 independent SDK anonymous sessions",
+  "publication": "pages",
+  "bundleUrl": "https://mefodi-2026.github.io/youth-pulse/assets/index-CVc4NwXt.js",
+  "room": "5TC27Z",
+  "strategy": "sequential",
+  "registered": 30,
+  "firstQuestion": 30,
+  "firstAnswerConfirmed": 30,
+  "secondQuestion": 30,
+  "finished": 30,
+  "errors": [],
+  "checkpoints": [
+    {
+      "participant": 11,
+      "auth": "anonymous-confirmed",
+      "authMs": 2763,
+      "phaseBefore": "lobby",
+      "phaseAfter": "lobby",
+      "joinCode": "OK",
+      "joinAndConfirmMs": 1128,
+      "confirmedRegistrations": 11
+    },
+    {
+      "participant": 12,
+      "auth": "anonymous-confirmed",
+      "authMs": 2367,
+      "phaseBefore": "lobby",
+      "phaseAfter": "lobby",
+      "joinCode": "OK",
+      "joinAndConfirmMs": 639,
+      "confirmedRegistrations": 12
+    },
+    {
+      "participant": 13,
+      "auth": "anonymous-confirmed",
+      "authMs": 1934,
+      "phaseBefore": "lobby",
+      "phaseAfter": "lobby",
+      "joinCode": "OK",
+      "joinAndConfirmMs": 634,
+      "confirmedRegistrations": 13
+    }
+  ],
+  "phases": [
+    {
+      "at": "2026-10-06T02:32:15.385Z",
+      "phase": "lobby"
+    },
+    {
+      "at": "2026-10-06T02:33:38.246Z",
+      "phase": "live"
+    }
+  ],
+  "startedAt": "2026-10-06T02:32:08.959Z",
+  "endedAt": "2026-10-06T02:34:22.535Z"
+}
